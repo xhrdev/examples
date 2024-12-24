@@ -16,8 +16,6 @@ dotenv.config();
 const email = process.env.email;
 const password = process.env.password;
 
-console.log({ email, password });
-
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
 const proxyUrl = 'https://proxy.prod.engineering.xhr.dev';
 const jar = new CookieJar();
@@ -51,8 +49,6 @@ await axios.request({
 
 const csrf = getCsrfCookieFromJar({ cookieName: 'X-CSRF-TOKEN', jar })?.value;
 
-console.log({ csrf });
-
 const { data: result } = await axios.request({
   data: JSON.stringify({
     cacheKey,
@@ -61,11 +57,11 @@ const { data: result } = await axios.request({
     timezone_offset: timezoneOffset,
   }),
   headers: {
-    accept: '*/*',
     'content-type': 'application/json',
-    'x-csrf-token': csrf,
+    'X-Csrf-Token': csrf,
     'x-xhr-api-key': process.env.XHR_API_KEY,
   },
+  httpsAgent: httpsProxyCookieAgent,
   method: 'POST',
   url: 'https://app.apollo.io/api/v1/auth/login',
 });
