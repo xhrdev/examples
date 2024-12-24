@@ -2,6 +2,8 @@
 
 ## quickstart
 
+add variables to the `.env` file (use .env.example for reference)
+
 replace with your api key
 
 ```bash

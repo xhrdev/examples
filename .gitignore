@@ -1,0 +1,14 @@
+dist/
+cdk.out/
+target/
+coverage/
+result/
+
+.DS_Store
+
+!certs
+
+# sst
+.sst
+
+.env
