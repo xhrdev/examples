@@ -1,0 +1,44 @@
+version: 2
+
+registries:
+  npm-github:
+    type: npm-registry
+    url: https://npm.pkg.github.com
+    token: ${{ secrets.READ_ONLY_PAT }}
+
+updates:
+  - package-ecosystem: npm
+    registries:
+      - npm-github
+    directory: /
+    schedule:
+      interval: weekly
+    assignees:
+      - skilbjo
+    rebase-strategy: auto
+    ignore:
+      - dependency-name: aws-sdk
+      - dependency-name: '@aws-sdk/*'
+      - dependency-name: devtools-protocol
+      - dependency-name: '@commitlint/cli'
+      - dependency-name: '@commitlint/config-angular'
+
+      - dependency-name: eslint
+      - dependency-name: eslint-config-prettier
+      - dependency-name: eslint-config-typescript
+    versioning-strategy: increase
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: fix
+      include: scope
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    assignees:
+      - skilbjo
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: fix
+      include: scope

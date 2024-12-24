@@ -1,0 +1,46 @@
+name: release
+
+on:
+  push:
+    branches:
+      - master
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  pull-requests: write
+  contents: write
+  issues: write
+
+jobs:
+  make-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    outputs:
+      new_release_version:   ${{ steps.semantic.outputs.new_release_version }}
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }} # keep it as `secrets.GITHUB_TOKEN` as repo is public and this token has limited privs
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: sdk-example/.nvmrc
+          cache: npm
+          cache-dependency-path: sdk-example/package-lock.json
+
+      - uses: cycjimmy/semantic-release-action@v4.1.1
+        with:
+          working_directory: ./sdk-example
+          dry_run: true
+          semantic_version: 18
+          extra_plugins: |
+            @semantic-release/exec@6.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # keep it as `secrets.GITHUB_TOKEN` as repo is public and this token has limited privs

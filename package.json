@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/package",
+  "name": "@xhrdev/examples",
+  "version": "0.0.1",
+  "repository": "github:xhrdev/examples.git",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "eslint": "eslint .",
+    "exec": "tsx",
+    "build": "tspc -p tsconfig.json",
+    "lint": "npm run eslint",
+    "tsx": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "axios": "1.7.9",
+    "axios-cookiejar-support": "5.0.5",
+    "tough-cookie": "5.0.0",
+    "http-cookie-agent": "6.0.8",
+    "https-proxy-agent": "7.0.6"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "19.5.0",
+    "@commitlint/config-angular": "19.5.0",
+    "@skilbjo/config-rc": "1.0.20",
+    "@skilbjo/eslint-config-rc": "npm:@skilbjo/config-rc@1.0.20",
+    "@tsconfig/node22": "22.0.0",
+    "@types/node": "22.10.2",
+    "@typescript-eslint/eslint-plugin": "7.6.0",
+    "@typescript-eslint/parser": "7.6.0",
+    "cheerio": "1.0.0",
+    "eslint": "8.57.0",
+    "husky": "9.1.6",
+    "ts-patch": "3.3.0",
+    "tsx": "4.19.2",
+    "typescript": "5.7.2",
+    "typescript-transform-paths": "3.5.2"
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-angular"
+    ]
+  }
+}

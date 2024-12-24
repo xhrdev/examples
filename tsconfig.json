@@ -1,0 +1,31 @@
+{
+  "extends": "@skilbjo/config-rc/tsconfig.json",
+  "include": [
+    "src/**/*.ts",
+    ".eslintrc.cjs"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules"
+  ],
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ES2022",
+
+    "baseUrl": "./",
+    "paths": {
+      "@src/*": [
+        "./src/*"
+      ],
+      "@test/*": [
+        "./test/*"
+      ]
+    },
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
+    "types": [
+      "node"
+    ]
+  }
+}
