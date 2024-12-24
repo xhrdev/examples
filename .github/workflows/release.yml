@@ -35,8 +35,8 @@ jobs:
           cache: npm
 
       - uses: cycjimmy/semantic-release-action@v4.1.1
+        id: semantic # need an `id` for output variables
         with:
-          working_directory: ./sdk-example
           dry_run: true
           semantic_version: 18
           extra_plugins: |
