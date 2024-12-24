@@ -2,12 +2,13 @@
 
 ## quickstart
 
-add variables to the `.env` file (use .env.example for reference)
+add variables to the `.env` file (`.env.example` for reference), replace with
+your api key
 
-replace with your api key
+install the dependencies: `npm ci`
+
+run the relevant script:
 
 ```bash
-npm i
-
-XHR_API_KEY=xxx npm run tsx src/apollo.ts
+npm run tsx src/apollo.ts
 ```
