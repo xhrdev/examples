@@ -31,9 +31,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version-file: sdk-example/.nvmrc
+          node-version-file: .nvmrc
           cache: npm
-          cache-dependency-path: sdk-example/package-lock.json
 
       - uses: cycjimmy/semantic-release-action@v4.1.1
         with:
