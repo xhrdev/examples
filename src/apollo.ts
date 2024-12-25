@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * run this script:
 
@@ -70,4 +71,25 @@ const { data: result } = await axios.request({
   url: 'https://app.apollo.io/api/v1/auth/login',
 });
 
-console.log({ result });
+const { data: searchResults } = await axios.request({
+  data: JSON.stringify({
+    cacheKey,
+    num_fetch_result: 29,
+    query: 'founders',
+  }),
+  headers: {
+    'content-type': 'application/json',
+    'x-csrf-token': csrf,
+    'x-xhr-api-key': process.env.XHR_API_KEY,
+  },
+  httpsAgent: httpsProxyCookieAgent,
+  method: 'POST',
+  url: 'https://app.apollo.io/api/v1/omnisearch/search',
+});
+
+console.log({
+  contacts: searchResults.contacts,
+  oranizations: searchResults.organizations,
+  people: searchResults.people,
+  searchResults,
+});
