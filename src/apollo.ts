@@ -1,5 +1,8 @@
-/** run this script like:
-XHR_API_KEY=xxx npm run tsx src/apollo.ts
+/**
+ * run this script:
+
+npm run tsx src/apollo.ts
+
  */
 import axios from 'axios';
 import { CookieJar } from 'tough-cookie';
@@ -35,7 +38,7 @@ await axios.request({
   url: 'https://app.apollo.io/',
 });
 
-if (!jar.serializeSync()?.cookies.length) throw new Error('no cooks');
+if (!jar.serializeSync()?.cookies.length) throw new Error('no cookies');
 
 await axios.request({
   headers: {
@@ -48,6 +51,7 @@ await axios.request({
 });
 
 const csrf = getCsrfCookieFromJar({ cookieName: 'X-CSRF-TOKEN', jar })?.value;
+if (!csrf) throw new Error('no csrf');
 
 const { data: result } = await axios.request({
   data: JSON.stringify({
@@ -58,7 +62,7 @@ const { data: result } = await axios.request({
   }),
   headers: {
     'content-type': 'application/json',
-    'X-Csrf-Token': csrf,
+    'x-csrf-token': csrf,
     'x-xhr-api-key': process.env.XHR_API_KEY,
   },
   httpsAgent: httpsProxyCookieAgent,
