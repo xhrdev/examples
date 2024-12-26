@@ -1,0 +1,23 @@
+ignores: [
+  '@src/*',
+  'eslint-import-resolver-typescript',
+
+  '@tsconfig/node22',
+  '@typescript-eslint/eslint-plugin',
+  '@typescript-eslint/parser',
+  'typescript',
+  'typescript-transform-paths',
+
+  '@commitlint/cli',
+  '@commitlint/config-angular',
+  '@jest/globals',
+  '@skilbjo/config-rc',
+  '@skilbjo/logger',
+  'dpecheck',
+  'husky',
+  'extensionless',
+
+  'cheerio',
+
+  'nodemon',
+]

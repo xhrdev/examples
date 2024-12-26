@@ -26,7 +26,7 @@ endif
 lint: | install target/lint
 target/lint:
 	npm run lint
-	# npm run depcheck
+	npm run depcheck
 	mkdir -p $(@D) && touch $@
 .PHONY: lint
 
