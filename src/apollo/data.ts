@@ -2,7 +2,7 @@
 /**
  * run this script:
 
-npm run tsx src/apollo.ts
+npm run tsx src/apollo/data.ts
 
  */
 import axios from 'axios';
@@ -20,10 +20,10 @@ dotenv.config();
 const xhrApiKey = process.env.XHR_API_KEY;
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
 
-// paste from @src/apollo/auth script ---->
-const csrf = '';
-const cookies = '';
-// end past
+// paste from @src/apollo/auth script ====================== >
+const cookies = 'paste in from @src/apollo/auth script';
+const csrf = 'paste in from @src/apollo/auth script';
+// end paste <==============================================
 
 if (!csrf || !cookies)
   throw new Error('run auth script and set/paste appropriate var');

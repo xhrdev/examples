@@ -2,7 +2,7 @@
 /**
  * run this script:
 
-npm run tsx src/apollo.ts
+npm run tsx src/apollo/auth.ts
 
  */
 import axios from 'axios';
