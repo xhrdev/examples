@@ -12,18 +12,24 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import { createCookieAgent } from 'http-cookie-agent/http';
 import * as dotenv from 'dotenv';
 
-import { getCsrfCookieFromJar } from '@src/utils';
+import {
+  getCsrfCookieFromJar,
+  proxyUrl,
+  stringifyCookiesFromJar,
+} from '@src/utils';
 
 wrapper(axios);
 dotenv.config();
 
+const xhrApiKey = process.env.XHR_API_KEY;
+if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
+
 const email = process.env.email;
 const password = process.env.password;
+if (!email || !password) throw new Error('set email and password in .env file');
 
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
-const proxyUrl = 'https://proxy.prod.engineering.xhr.dev';
 const jar = new CookieJar();
-
 const httpsProxyCookieAgent = new HttpsProxyCookieAgent(proxyUrl, {
   cookies: { jar },
 });
@@ -33,7 +39,7 @@ const timezoneOffset = 480;
 
 await axios.request({
   headers: {
-    'x-xhr-api-key': process.env.XHR_API_KEY,
+    'x-xhr-api-key': xhrApiKey,
   },
   httpsAgent: httpsProxyCookieAgent,
   url: 'https://app.apollo.io/',
@@ -45,7 +51,7 @@ await axios.request({
   headers: {
     accept: '*/*',
     'content-type': 'application/json',
-    'x-xhr-api-key': process.env.XHR_API_KEY,
+    'x-xhr-api-key': xhrApiKey,
   },
   httpsAgent: httpsProxyCookieAgent,
   url: `https://app.apollo.io/api/v1/auth/check?timezone_offset=${timezoneOffset}&current_finder_view_id=&cacheKey=${cacheKey}`,
@@ -64,32 +70,11 @@ const { data: result } = await axios.request({
   headers: {
     'content-type': 'application/json',
     'x-csrf-token': csrf,
-    'x-xhr-api-key': process.env.XHR_API_KEY,
+    'x-xhr-api-key': xhrApiKey,
   },
   httpsAgent: httpsProxyCookieAgent,
   method: 'POST',
   url: 'https://app.apollo.io/api/v1/auth/login',
 });
 
-const { data: searchResults } = await axios.request({
-  data: JSON.stringify({
-    cacheKey,
-    num_fetch_result: 29,
-    query: 'founders',
-  }),
-  headers: {
-    'content-type': 'application/json',
-    'x-csrf-token': csrf,
-    'x-xhr-api-key': process.env.XHR_API_KEY,
-  },
-  httpsAgent: httpsProxyCookieAgent,
-  method: 'POST',
-  url: 'https://app.apollo.io/api/v1/omnisearch/search',
-});
-
-console.log({
-  contacts: searchResults.contacts,
-  oranizations: searchResults.organizations,
-  people: searchResults.people,
-  searchResults,
-});
+console.log({ cookies: stringifyCookiesFromJar({ jar }), csrf });

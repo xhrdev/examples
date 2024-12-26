@@ -19,7 +19,7 @@
     "dotenv": "16.4.7",
     "http-cookie-agent": "6.0.8",
     "https-proxy-agent": "7.0.6",
-    "tough-cookie": "5.0.0"
+    "tough-cookie": "4.1.4"
   },
   "devDependencies": {
     "@commitlint/cli": "19.5.0",
@@ -28,6 +28,7 @@
     "@skilbjo/eslint-config-rc": "npm:@skilbjo/config-rc@1.0.20",
     "@tsconfig/node22": "22.0.0",
     "@types/node": "22.10.2",
+    "@types/tough-cookie": "4.0.5",
     "@typescript-eslint/eslint-plugin": "7.6.0",
     "@typescript-eslint/parser": "7.6.0",
     "cheerio": "1.0.0",
