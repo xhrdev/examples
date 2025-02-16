@@ -30,8 +30,6 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      - run: make ci
-
       - uses: cycjimmy/semantic-release-action@v4.1.1
         id: semantic # need an `id` for output variables
         with:
