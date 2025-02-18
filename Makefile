@@ -17,6 +17,7 @@ install: | target/install
 target/install:
 ifeq ($(is_ci), true)
 	npm ci
+	# npx playwright install chromium
 else
 	npm install
 endif

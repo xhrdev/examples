@@ -9,17 +9,35 @@ defences.
 this is an open source repo of hitting some of those sites, normally protected
 by bot defences, but successfully accessed using xhr.dev.
 
+use whatever http client you'd like - `curl`, `fetch`, `playwright`, etc.
+
+```node
+const supportedHttpClients = [
+  'curl',
+  'fetch',
+  'axios',
+  'python requests',
+  'playwright',
+  ...etc,
+]
+```
+
 ## quickstart
 
 add variables to the `.env` file (`.env.example` for reference), replace with
 your api key
 
-install the dependencies: `npm ci`
+install the dependencies: `npm ci` + `npx playwright install`
 
 run the relevant script:
 
 ```bash
-npm run tsx src/apollo/auth.ts
+npx tsx src/apollo/auth.ts || npm run tsx src/apollo/auth.ts
+```
+
+or:
+```bash
+npx tsx src/playwright.ts || npm run playwright
 ```
 
 ## hot reload
