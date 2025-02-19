@@ -13,6 +13,7 @@
     "lint": "npm run eslint",
     "tsx": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx",
     "playwright": "tsx src/playwright.ts",
+    "puppeteer": "tsx src/puppeteer.ts",
     "p": "npm run playwright",
     "prepare": "husky"
   },
@@ -41,6 +42,7 @@
     "husky": "9.1.7",
     "nodemon": "3.1.9",
     "playwright": "1.50.1",
+    "puppeteer": "24.2.1",
     "ts-patch": "3.3.0",
     "tsx": "4.19.2",
     "typescript": "5.7.2",
