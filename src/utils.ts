@@ -4,7 +4,7 @@ import { Cookie, CookieJar } from 'tough-cookie';
 export type { Cookie } from 'tough-cookie';
 export type Cookies = Cookie.Serialized[];
 
-export const proxyUrl = 'https://proxy.prod.engineering.xhr.dev';
+export const proxyUrl = 'https://proxy.xhr.dev';
 
 export const getCsrfCookieFromJar = ({
   cookieName,
