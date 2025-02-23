@@ -53,5 +53,5 @@ const expected = Buffer.from([
 assert.deepStrictEqual(gif, expected);
 
 console.log(
-  "image loaded in `gif`, use `fs.writeFileSync('image.gif', 'binary')` to save it"
+  "image loaded in `gif`, use `fs.writeFileSync('image.gif')` to save it"
 );
