@@ -2,9 +2,11 @@
   "$schema": "https://json.schemastore.org/package",
   "name": "@xhrdev/examples",
   "version": "0.0.1",
-  "repository": "github:xhrdev/examples.git",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xhrdev/examples.git"
+  },
   "type": "module",
-  "private": true,
   "scripts": {
     "depcheck": "depcheck",
     "eslint": "eslint .",
@@ -17,6 +19,8 @@
     "p": "npm run playwright",
     "prepare": "husky"
   },
+  "private": true,
+  "author": "XHR Software Inc",
   "dependencies": {
     "axios": "1.7.9",
     "axios-cookiejar-support": "5.0.5",
@@ -28,8 +32,8 @@
   "devDependencies": {
     "@commitlint/cli": "19.5.0",
     "@commitlint/config-angular": "19.5.0",
-    "@skilbjo/config-rc": "1.0.20",
-    "@skilbjo/eslint-config-rc": "npm:@skilbjo/config-rc@1.0.20",
+    "@skilbjo/config-rc": "1.0.23",
+    "@skilbjo/eslint-config-rc": "npm:@skilbjo/config-rc@1.0.23",
     "@tsconfig/node22": "22.0.0",
     "@types/node": "22.10.2",
     "@types/tough-cookie": "4.0.5",
@@ -52,5 +56,8 @@
     "extends": [
       "@commitlint/config-angular"
     ]
+  },
+  "engines": {
+    "node": ">=22.0.0"
   }
 }
