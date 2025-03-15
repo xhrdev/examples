@@ -1,5 +1,8 @@
 # examples
 
+[![release](https://github.com/xhrdev/examples/actions/workflows/release.yml/badge.svg)](https://github.com/xhrdev/examples/actions/workflows/release.yml)
+[![CLA assistant](https://cla-assistant.io/readme/badge/xhrdev/examples)](https://cla-assistant.io/xhrdev/examples)
+
 ## intro
 
 xhr.dev is a magic proxy that allows you to bypass bot defences. this can be
