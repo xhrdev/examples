@@ -30,7 +30,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      - uses: cycjimmy/semantic-release-action@v4.1.1
+      - uses: cycjimmy/semantic-release-action@v4.2.0
         id: semantic # need an `id` for output variables
         with:
           dry_run: true
