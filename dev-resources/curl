@@ -7,5 +7,5 @@ project_dir="$(cd "${dir}/.." && pwd)" && cd "$project_dir"
 source .env
 
 curl -L -i -k -H "x-xhr-api-key: ${XHR_API_KEY}" \
-  --proxy https://proxy.dev.engineering.xhr.dev \
+  --proxy https://magic.xhr.dev \
   https://core.cro.ie
