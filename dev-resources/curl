@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )" && cd "$dir"
+project_dir="$(cd "${dir}/.." && pwd)" && cd "$project_dir"
+
+source .env
+
+curl -L -i -k -H "x-xhr-api-key: ${XHR_API_KEY}" \
+  --proxy https://proxy.dev.engineering.xhr.dev \
+  https://core.cro.ie

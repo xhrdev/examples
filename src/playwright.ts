@@ -8,11 +8,12 @@ import { chromium } from 'playwright';
 import type { Page } from 'playwright';
 import * as dotenv from 'dotenv';
 
+import { proxyUrl } from '@src/utils';
+
 dotenv.config();
 
 type PageGotoOptions = Parameters<Page['goto']>[1];
 
-const proxyUrl = 'http://proxy.xhr.dev';
 const xhrApiKey = process.env.XHR_API_KEY;
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
 
