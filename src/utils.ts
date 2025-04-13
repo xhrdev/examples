@@ -4,7 +4,8 @@ import { Cookie, CookieJar } from 'tough-cookie';
 export type { Cookie } from 'tough-cookie';
 export type Cookies = Cookie.Serialized[];
 
-export const proxyUrl = 'https://magic.xhr.dev';
+export const proxyUrl = 'https://proxy.xhr.dev';
+// export const proxyUrl = 'http://localhost:8001'; # for when @skilbjo is testing
 
 export const getCsrfCookieFromJar = ({
   cookieName,

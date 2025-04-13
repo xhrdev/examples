@@ -6,6 +6,9 @@ project_dir="$(cd "${dir}/.." && pwd)" && cd "$project_dir"
 
 source .env
 
-curl -L -i -k -H "x-xhr-api-key: ${XHR_API_KEY}" \
-  --proxy https://magic.xhr.dev \
-  https://core.cro.ie
+  # -k --proxy https://magic.xhr.dev
+  # -k --proxy http://localhost:8001 # for when @skilbjo is testing
+curl -i -L \
+  https://core.cro.ie/login \
+  -H "x-xhr-api-key: ${XHR_API_KEY}" \
+  -k --proxy https://proxy.xhr.dev
