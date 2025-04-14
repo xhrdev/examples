@@ -33,6 +33,12 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      - uses: getsentry/action-setup-venv@v2.1.1
+        with:
+          venv-dir: venv
+          cache-dependency-path: |
+            requirements.txt
+          install-cmd: pip install -r requirements.txt
 
       - uses: cycjimmy/semantic-release-action@v4.2.0
         id: semantic # need an `id` for output variables

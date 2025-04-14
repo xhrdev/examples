@@ -1,0 +1,43 @@
+indent-width = 2
+
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.pyc",
+    "*.egg-info",
+    ".eggs",
+    "venv/",
+    "src/cdk/",
+    "src/lambda/",
+    "node_modules/",
+]
+
+line-length = 80
+
+[lint]
+ignore = [
+  # line too long
+  "E741",
+  "E501",
+  "W505",
+  # key leteral repeated
+  "F601"
+]
+select = [
+    "C9",
+    "E",
+    "F",
+    "W",
+]
+
+[lint.mccabe]
+max-complexity = 100
+
+[format]
+indent-style = "space"
+# blank-lines-between-functions = 1
+
+[lint.pycodestyle]
+max-doc-length = 80

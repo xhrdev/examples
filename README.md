@@ -30,7 +30,8 @@ const supportedHttpClients = [
 add variables to the `.env` file (`.env.example` for reference), replace with
 your api key
 
-install the dependencies: `npm ci` + `npx playwright install`
+install the dependencies: `npm ci` + `npx playwright install` + (if using
+python) `python3 -m venv venv` + `pip install -r requirements.txt`
 
 run the relevant script:
 
