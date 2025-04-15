@@ -22,7 +22,7 @@
   "private": true,
   "author": "XHR Software Inc",
   "dependencies": {
-    "axios": "1.7.9",
+    "axios": "1.8.4",
     "axios-cookiejar-support": "5.0.5",
     "dotenv": "16.4.7",
     "fetch-cookie": "3.1.0",
