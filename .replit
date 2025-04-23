@@ -1,0 +1,15 @@
+modules = ["bash", "nodejs-22", "python-3.12"]
+compile = "npm install && python3 -m pip install -r requirements.txt"
+run = "npm run tsx src/openai/data.ts"
+
+[nix]
+channel = "stable-24_05"
+packages = [
+  "cacert",
+  "python312Full",
+  "python312Packages.pip"
+]
+
+[deployment]
+build = ["sh", "-c", "make ci"]
+run = ["sh", "-c", "npm run tsx src/openai/data.ts"]
