@@ -2,9 +2,11 @@
   "extends": "@skilbjo/config-rc/tsconfig.json",
   "include": [
     "src/**/*.ts",
+    "test/**/*.ts",
     ".eslintrc.cjs"
   ],
   "exclude": [
+    "dev-resources/repl.cjs",
     "dist",
     "node_modules"
   ],

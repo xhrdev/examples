@@ -11,6 +11,7 @@
     "depcheck": "depcheck",
     "eslint": "eslint .",
     "exec": "tsx",
+    "repl": "tsx test/repl.ts",
     "build": "tspc -p tsconfig.json",
     "lint": "npm run eslint",
     "tsx": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx",
