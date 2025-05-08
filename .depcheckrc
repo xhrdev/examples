@@ -1,5 +1,6 @@
 ignores: [
   '@src/*',
+  '@test/*',
   'eslint-import-resolver-typescript',
 
   '@tsconfig/node22',
