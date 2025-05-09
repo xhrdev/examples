@@ -26,8 +26,9 @@ updates:
       - dependency-name: eslint
       - dependency-name: eslint-config-prettier
       - dependency-name: eslint-config-typescript
+      - dependency-name: eslint-import-resolver-typescript
     versioning-strategy: increase
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 15
     commit-message:
       prefix: fix
       include: scope
