@@ -10,6 +10,7 @@ import { wrapper } from 'axios-cookiejar-support';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { createCookieAgent } from 'http-cookie-agent/http';
 import * as dotenv from 'dotenv';
+import * as cheerio from 'cheerio';
 
 import { proxyUrl } from '@src/utils';
 
