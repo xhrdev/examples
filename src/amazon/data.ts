@@ -61,6 +61,7 @@ const parseReviews = (html: string): Review[] => {
         date = match[2];
       }
 
+      /* eslint-disable @typescript-eslint/no-non-null-assertion */
       return {
         author: el
           .find('div.a-profile-content span.a-profile-name')
@@ -68,7 +69,7 @@ const parseReviews = (html: string): Review[] => {
           .text(),
         country,
         date,
-        id: el.attr('id'),
+        id: el.attr('id')!,
         rating: el.find('i[data-hook="review-star-rating"]').text().slice(0, 3),
         text: el
           .find(
@@ -77,6 +78,7 @@ const parseReviews = (html: string): Review[] => {
           .text(),
         title: el.find('a[data-hook="review-title"] span:nth-child(3)').text(),
       };
+      /* eslint-enable @typescript-eslint/no-non-null-assertion */
     });
 
   return reviews;
