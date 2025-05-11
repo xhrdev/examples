@@ -23,7 +23,7 @@ const pageGotoOptions: PageGotoOptions = {
   waitUntil: 'domcontentloaded',
 };
 
-const url = 'https://core.cro.ie/login';
+const url = 'https://www.grainger.com/';
 
 const browser = await chromium.launch({
   devtools: !!process.env.CI,
