@@ -33,54 +33,54 @@ const httpsProxyCookieAgent = new HttpsProxyCookieAgent(proxyUrl, {
 //   - signed in: success
 const amazonCookie = process.env.AMAZON_COOKIE;
 if (!amazonCookie) throw new Error('set AMAZON_COOKIE in .env file');
-const { data: product } = await axios.request({
-  headers: {
-    cookie: amazonCookie,
-    'x-xhr-api-key': xhrApiKey,
-    'x-xhr-managed-proxy': true.toString(),
-  },
-  httpsAgent: httpsProxyCookieAgent,
-  url: 'https://www.amazon.com/gp/aw/d/B0BRZXRBZL/',
-});
 
-const selector = '#cm-cr-dp-review-list li';
-const $ = cheerio.load(product);
-const reviews = $(selector)
-  .toArray()
-  .map((li) => {
-    const el = $(li);
+type Review = {
+  author: string;
+  country: string;
+  date: string;
+  id: string;
+  rating: string;
+  title: string;
+};
+const parseReviews = (html: string): Review[] => {
+  const selector = '#cm-cr-dp-review-list li';
+  const $ = cheerio.load(html);
+  const reviews = $(selector)
+    .toArray()
+    .map((li) => {
+      const el = $(li);
 
-    let country = '';
-    let date = '';
-    const match = el
-      .find('span[data-hook="review-date"]')
-      .text()
-      .match(/^Reviewed in the (.+?) on (.+)$/);
-    if (match) {
-      country = match[1];
-      date = match[2];
-    }
+      let country = '';
+      let date = '';
+      const match = el
+        .find('span[data-hook="review-date"]')
+        .text()
+        .match(/^Reviewed in the (.+?) on (.+)$/);
+      if (match) {
+        country = match[1];
+        date = match[2];
+      }
 
-    return {
-      author: el
-        .find('div.a-profile-content span.a-profile-name')
-        .first()
-        .text(),
-      country,
-      date,
-      id: el.attr('id'),
-      rating: el.find('i[data-hook="review-star-rating"]').text().slice(0, 3),
-      text: el
-        .find(
-          'span[data-hook="review-body"] div[data-hook="review-collapsed"] span'
-        )
-        .text(),
-      title: el.find('a[data-hook="review-title"] span:nth-child(3)').text(),
-    };
-  });
+      return {
+        author: el
+          .find('div.a-profile-content span.a-profile-name')
+          .first()
+          .text(),
+        country,
+        date,
+        id: el.attr('id'),
+        rating: el.find('i[data-hook="review-star-rating"]').text().slice(0, 3),
+        text: el
+          .find(
+            'span[data-hook="review-body"] div[data-hook="review-collapsed"] span'
+          )
+          .text(),
+        title: el.find('a[data-hook="review-title"] span:nth-child(3)').text(),
+      };
+    });
 
-console.log({ reviews });
-/* =>
+  return reviews;
+  /* =>
 {
   reviews: [
     {
@@ -104,3 +104,40 @@ console.log({ reviews });
   ]
 }
 */
+};
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const initialReviews = async (): Promise<string> => {
+  const { data: html } = await axios.request({
+    headers: {
+      cookie: amazonCookie,
+      'x-xhr-api-key': xhrApiKey,
+      'x-xhr-managed-proxy': true.toString(),
+    },
+    httpsAgent: httpsProxyCookieAgent,
+    url: 'https://www.amazon.com/gp/aw/d/B0BRZXRBZL/',
+  });
+  return html;
+};
+
+const reviewsPage = async (): Promise<string> => {
+  const { data: html } = await axios.request({
+    headers: {
+      cookie: amazonCookie,
+      'x-xhr-api-key': xhrApiKey,
+      'x-xhr-managed-proxy': true.toString(),
+    },
+    httpsAgent: httpsProxyCookieAgent,
+    url: 'https://www.amazon.com/product-reviews/B0BRZXRBZL/',
+  });
+  return html;
+};
+
+const main = async () => {
+  const reviewsHtml = await reviewsPage();
+
+  const reviews = parseReviews(reviewsHtml);
+  console.log(reviews);
+};
+
+await main();
