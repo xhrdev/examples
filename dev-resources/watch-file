@@ -3,6 +3,6 @@ set -euo pipefail
 
 dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )" && cd "$dir"
 
-file="src/openai/data.ts"
+file="src/amazon/data.ts"
 
 npx nodemon -e ts,mjs --delay 2.5 -w "${dir}/../src" -w "${dir}/../dev-resources"  -x "npm run tsx $file"
