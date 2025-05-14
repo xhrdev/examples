@@ -26,7 +26,7 @@ const pageGotoOptions: PageGotoOptions = {
 const url = 'https://www.grainger.com/';
 
 const browser = await chromium.launch({
-  devtools: !!process.env.CI,
+  devtools: !process.env.CI,
   headless: !!process.env.CI,
 });
 
