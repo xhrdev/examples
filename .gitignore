@@ -5,6 +5,7 @@ coverage/
 result/
 
 .DS_Store
+*.html
 
 !certs
 
