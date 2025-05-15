@@ -1,9 +1,10 @@
 /**
  * run this script:
 
-npm run tsx src/amazon/data.ts
+npm run tsx src/amazon/reviews.ts
 
  */
+/// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import * as fs from 'node:fs';
 import { stringify } from 'node:querystring';
 import axios from 'axios';
@@ -70,48 +71,7 @@ type Review = {
   title: string;
 };
 const parseReviews = (html: string): Review[] => {
-  const selector = '#cm-cr-dp-review-list li';
-  const $ = cheerio.load(html);
-  const reviews = $(selector)
-    .toArray()
-    .map((li) => {
-      const el = $(li);
-
-      let country = '';
-      let date = '';
-      const match = el
-        .find('span[data-hook="review-date"]')
-        .text()
-        .match(/^Reviewed in the (.+?) on (.+)$/);
-      if (match) {
-        country = match[1];
-        date = match[2];
-      }
-
-      /* eslint-disable @typescript-eslint/no-non-null-assertion */
-      return {
-        author: el
-          .find('div.a-profile-content span.a-profile-name')
-          .first()
-          .text(),
-        country,
-        date,
-        id: el.attr('id')!,
-        rating: el.find('i[data-hook="review-star-rating"]').text().slice(0, 3),
-        text: el
-          .find(
-            'span[data-hook="review-body"] div[data-hook="review-collapsed"] span'
-          )
-          .text(),
-        title: el.find('a[data-hook="review-title"] span:nth-child(3)').text(),
-      };
-      /* eslint-enable @typescript-eslint/no-non-null-assertion */
-    });
-
-  return reviews;
-};
-const parseReviews0 = (html: string): Review[] => {
-  const selector = '#cm-cr-dp-review-list li';
+  const selector = 'ul.a-unordered-list li';
   const $ = cheerio.load(html);
   const reviews = $(selector)
     .toArray()
@@ -142,7 +102,8 @@ const parseReviews0 = (html: string): Review[] => {
           .find('i[data-hook="review-star-rating"] span')
           .text()
           .slice(0, 3),
-        text: el.find('span[data-hook="review-body"] span').text().trim(),
+        text:
+          el.find('span[data-hook="review-body"] span').text().trim() || null,
         title: el.find('a[data-hook="review-title"] span:nth-child(3)').text(),
       };
       /* eslint-enable @typescript-eslint/no-non-null-assertion */
@@ -151,8 +112,7 @@ const parseReviews0 = (html: string): Review[] => {
   return reviews;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const productReviews = async (): Promise<string> => {
+const reviewsHtml = async (asin: string): Promise<string> => {
   const { data: html } = await axios.request({
     headers: {
       cookie: amazonCookie,
@@ -160,38 +120,21 @@ const productReviews = async (): Promise<string> => {
       'x-xhr-managed-proxy': true.toString(),
     },
     httpsAgent: httpsProxyCookieAgent,
-    url: 'https://www.amazon.com/gp/aw/d/B0BRZXRBZL/',
+    url: `https://www.amazon.com/product-reviews/${asin}/`,
   });
   return html;
 };
 
-/*
- no query params:
-  - https://www.amazon.com/product-reviews/B0BRZXRBZL/
-
-https://www.amazon.com/product-reviews/B07RCZL2F3/ref=cm_cr_arp_d_paging_btm_next_2?pageNumber=2&sortBy=recent
- */
-const reviewsPage = async (): Promise<string> => {
-  const { data: html } = await axios.request({
-    headers: {
-      cookie: amazonCookie,
-      'x-xhr-api-key': xhrApiKey,
-      'x-xhr-managed-proxy': true.toString(),
-    },
-    httpsAgent: httpsProxyCookieAgent,
-    url: 'https://www.amazon.com/product-reviews/B0BRZXRBZL/',
-  });
-  return html;
-};
-
-const reviewsAjax = async ({
+const ajaxReviews = async ({
+  asin,
   pageNum,
 }: {
+  asin: string;
   pageNum: number;
 }): Promise<string> => {
   const { data: amazonjsonui } = await axios.request<string>({
     data: stringify({
-      asin: 'B07RCZL2F3',
+      asin,
       canShowIntHeader: 'undefined',
       deviceType: 'desktop',
       filterByAge: '',
@@ -222,38 +165,40 @@ const reviewsAjax = async ({
   return JSON.parse(amazonjsonui.split('\n').filter((_) => _ !== '&&&')[6])[2];
 };
 
-const main0 = async () => {
-  const page1 = await reviewsPage();
+const main = async () => {
+  const asin = 'B0B318STJV'; // `https://www.amazon.com/gp/aw/d/B0BRZXRBZL/`: EMUST Dog Life Vests, Adjustable Dog Life Jacket with Rescue Handle, Puppy Flotation Vest for Small/Medium/Large Dogs, XS, NewOrange
 
-  const $ = cheerio.load(page1);
-  const totalReviews = $('div[data-hook=cr-filter-info-review-rating-count]')
+  const totalReviews = cheerio
+    .load(await reviewsHtml(asin))(
+      'div[data-hook=cr-filter-info-review-rating-count]'
+    )
     .text()
     .trim()
     .match(/(\d+)/)?.[1];
   if (!totalReviews) throw new Error('no reviews?');
-  const rounded = Math.ceil(parseInt(totalReviews, 10) / 10) * 10; // if `totalReviews` is `473`, this returns 480
-  const totalPages = Math.ceil(rounded / 10);
-  console.log({ rounded, totalPages });
 
+  const totalPages = Math.ceil(
+    (Math.ceil(parseInt(totalReviews, 10) / 10) * 10) / 10
+  ); // if `totalReviews` is `473`, this returns 480
+  console.log({ totalPages });
+
+  let pageNum = 1;
   let reviews: Review[] = [];
-  reviews = parseReviews0(page1);
-  let pageN = 2;
 
-  while (pageN <= totalPages) {
-    const page = await reviewsPage();
-    reviews = [...reviews, ...parseReviews0(page)];
-    pageN += 1;
-    console.log(reviews.length);
+  let page = await ajaxReviews({ asin, pageNum });
+  reviews = parseReviews(page);
+  pageNum += 1;
+
+  while (pageNum <= totalPages) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    page = await ajaxReviews({ asin, pageNum });
+    reviews = [...reviews, ...parseReviews(page)];
+    pageNum += 1;
   }
 
   console.log(reviews);
-};
-
-const main = async () => {
-  const page1 = await reviewsAjax({ pageNum: 1 });
-  console.log(page1);
-  const reviews = parseReviews0(page1);
-  console.log(reviews);
+  console.log(reviews.length);
 };
 
 await main();
