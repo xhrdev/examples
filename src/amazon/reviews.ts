@@ -60,6 +60,7 @@ if (!amazonCookie) throw new Error('set AMAZON_COOKIE in .env file');
   ]
 }
 */
+type AjaxHeaders = { 'anti-csrftoken-a2z': string };
 type Review = {
   author: string;
   country: string;
@@ -141,7 +142,7 @@ const ajaxReviews = async ({
   asin,
   pageNum,
 }: {
-  ajaxHeaders: { 'anti-csrftoken-a2z': string };
+  ajaxHeaders: AjaxHeaders;
   asin: string;
   pageNum: number;
 }): Promise<string> => {
@@ -160,7 +161,7 @@ const ajaxReviews = async ({
       pageSize: '10',
       reftag: `cm_cr_getr_d_paging_btm_next_${pageNum}`,
       reviewerType: '',
-      scope: 'reviewsAjax3',
+      scope: `reviewsAjax${pageNum + 1}`,
       shouldAppend: 'undefined',
       sortBy: 'recent',
     }),
@@ -181,15 +182,15 @@ const ajaxReviews = async ({
 const main = async () => {
   const asin = 'B0B318STJV'; // `https://www.amazon.com/gp/aw/d/B0BRZXRBZL/`: EMUST Dog Life Vests, Adjustable Dog Life Jacket with Rescue Handle, Puppy Flotation Vest for Small/Medium/Large Dogs, XS, NewOrange
 
-  const [product, reviewsHtmlRes] = await Promise.all([
-    productHtml(asin),
-    reviewsHtml(asin),
-  ]);
-  const ajaxHeaders = JSON.parse(
+  const reviewsHtmlRes = await reviewsHtml(asin);
+  const ajaxHeaders0: string = JSON.parse(
     cheerio // eslint-disable-line @typescript-eslint/no-non-null-assertion
-      .load(product)('span#nav-global-location-data-modal-action')
-      .attr('data-a-modal')!
-  ).ajaxHeaders;
+      .load(reviewsHtmlRes)('span#cr-state-object')
+      .attr('data-state')!
+  ).reviewsCsrfToken;
+  const ajaxHeaders: AjaxHeaders = {
+    'anti-csrftoken-a2z': encodeURIComponent(ajaxHeaders0),
+  };
   const totalReviews = cheerio
     .load(reviewsHtmlRes)('div[data-hook=cr-filter-info-review-rating-count]')
     .text()
@@ -198,12 +199,9 @@ const main = async () => {
     .replace(/,/g, '');
   if (!totalReviews) throw new Error('no reviews?');
 
-  console.log({ ajaxHeaders, totalReviews });
-
   const totalPages = Math.ceil(
     (Math.ceil(parseInt(totalReviews, 10) / 10) * 10) / 10
   ); // if `totalReviews` is `473`, this returns 480
-  console.log({ totalPages });
 
   let pageNum = 1;
   let reviews: Review[] = [];
@@ -213,7 +211,7 @@ const main = async () => {
   pageNum += 1;
 
   while (pageNum <= totalPages) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     page = await ajaxReviews({ ajaxHeaders, asin, pageNum });
     reviews = [...reviews, ...parseReviews(page)];
