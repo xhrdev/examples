@@ -93,4 +93,6 @@ console.log(totalReviews)
 // console.log(productReviews(productHtml))
 // console.log(reviewsHtmlFromAjax);
 // fs.writeFileSync('./ajax-reviews.html', reviewsHtmlFromAjax);
-console.log(ajaxReviews(reviewsHtmlFromAjax));
+// console.log(ajaxReviews(reviewsHtmlFromAjax));
+
+console.log(JSON.parse(cheerio.load(productHtml)('span#nav-global-location-data-modal-action').attr('data-a-modal')).ajaxHeaders)

@@ -35,8 +35,6 @@ const httpsProxyCookieAgent = new HttpsProxyCookieAgent(proxyUrl, {
 //   - signed in: success
 const amazonCookie = process.env.AMAZON_COOKIE;
 if (!amazonCookie) throw new Error('set AMAZON_COOKIE in .env file');
-const amazonCsrf = process.env.AMAZON_CSRF;
-if (!amazonCsrf) throw new Error('set AMAZON_COOKIE in .env file');
 
 /* =>
 {
@@ -112,6 +110,19 @@ const parseReviews = (html: string): Review[] => {
   return reviews;
 };
 
+const productHtml = async (asin: string): Promise<string> => {
+  const { data: html } = await axios.request({
+    headers: {
+      cookie: amazonCookie,
+      'x-xhr-api-key': xhrApiKey,
+      'x-xhr-managed-proxy': true.toString(),
+    },
+    httpsAgent: httpsProxyCookieAgent,
+    url: `https://www.amazon.com/gp/aw/d/${asin}/`,
+  });
+  return html;
+};
+
 const reviewsHtml = async (asin: string): Promise<string> => {
   const { data: html } = await axios.request({
     headers: {
@@ -126,9 +137,11 @@ const reviewsHtml = async (asin: string): Promise<string> => {
 };
 
 const ajaxReviews = async ({
+  ajaxHeaders,
   asin,
   pageNum,
 }: {
+  ajaxHeaders: { 'anti-csrftoken-a2z': string };
   asin: string;
   pageNum: number;
 }): Promise<string> => {
@@ -152,7 +165,7 @@ const ajaxReviews = async ({
       sortBy: 'recent',
     }),
     headers: {
-      'anti-csrftoken-a2z': amazonCsrf,
+      ...ajaxHeaders,
       cookie: amazonCookie,
       'x-xhr-api-key': xhrApiKey,
       'x-xhr-managed-proxy': true.toString(),
@@ -168,14 +181,24 @@ const ajaxReviews = async ({
 const main = async () => {
   const asin = 'B0B318STJV'; // `https://www.amazon.com/gp/aw/d/B0BRZXRBZL/`: EMUST Dog Life Vests, Adjustable Dog Life Jacket with Rescue Handle, Puppy Flotation Vest for Small/Medium/Large Dogs, XS, NewOrange
 
+  const [product, reviewsHtmlRes] = await Promise.all([
+    productHtml(asin),
+    reviewsHtml(asin),
+  ]);
+  const ajaxHeaders = JSON.parse(
+    cheerio // eslint-disable-line @typescript-eslint/no-non-null-assertion
+      .load(product)('span#nav-global-location-data-modal-action')
+      .attr('data-a-modal')!
+  ).ajaxHeaders;
   const totalReviews = cheerio
-    .load(await reviewsHtml(asin))(
-      'div[data-hook=cr-filter-info-review-rating-count]'
-    )
+    .load(reviewsHtmlRes)('div[data-hook=cr-filter-info-review-rating-count]')
     .text()
     .trim()
-    .match(/(\d+)/)?.[1];
+    .match(/(\d[\d,]*)\s+customer reviews/)?.[1]
+    .replace(/,/g, '');
   if (!totalReviews) throw new Error('no reviews?');
+
+  console.log({ ajaxHeaders, totalReviews });
 
   const totalPages = Math.ceil(
     (Math.ceil(parseInt(totalReviews, 10) / 10) * 10) / 10
@@ -185,14 +208,14 @@ const main = async () => {
   let pageNum = 1;
   let reviews: Review[] = [];
 
-  let page = await ajaxReviews({ asin, pageNum });
+  let page = await ajaxReviews({ ajaxHeaders, asin, pageNum });
   reviews = parseReviews(page);
   pageNum += 1;
 
   while (pageNum <= totalPages) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    page = await ajaxReviews({ asin, pageNum });
+    page = await ajaxReviews({ ajaxHeaders, asin, pageNum });
     reviews = [...reviews, ...parseReviews(page)];
     pageNum += 1;
   }

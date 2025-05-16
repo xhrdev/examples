@@ -28,5 +28,5 @@ jobs:
         with:
           path-to-signatures: signatures/version1/cla.json
           path-to-document: https://github.com/xhrdev/examples/blob/master/CLA.md
-          branch: master
+          branch: cla-signatures
           allowlist: skilbjo,dependabot[bot]
