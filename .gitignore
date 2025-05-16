@@ -13,3 +13,6 @@ result/
 .sst
 
 .env
+node_modules
+.venv
+venv
