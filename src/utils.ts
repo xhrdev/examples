@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { Cookie, CookieJar } from 'tough-cookie';
+import type { Request, Route } from 'playwright';
 
 export type { Cookie } from 'tough-cookie';
 export type Cookies = Cookie.Serialized[];
@@ -68,3 +69,49 @@ export const stringifyCookiesFromJar = ({ jar }: { jar: CookieJar }): string =>
   stringifyCookies({
     cookies: jar.serializeSync()!.cookies,
   });
+
+/**
+ * @example
+ *   const cookies = parseCookieString(cookieStr, 'google.com');
+ *   await context.addCookies(cookies);
+ *
+ * @param {string} cookieStr: 'AB1=G; AD1=B; bm_ss=ab8e18ef4e;'
+ *
+ * @returns playwright cookie array
+ */
+export const parseCookieString = ({
+  cookieStr,
+  domain,
+}: {
+  cookieStr: string;
+  domain: string;
+}) =>
+  cookieStr.split(';').map((cookie) => {
+    const [name, ...rest] = cookie.trim().split('=');
+    return {
+      domain, // must match the domain you want the cookie for
+      httpOnly: false,
+      name,
+      path: '/',
+      sameSite: 'Lax' as const,
+      secure: false,
+      value: rest.join('='),
+    };
+  });
+
+export const blockClientScripts = async (route: Route, request: Request) => {
+  const blockPatterns = ['captcha'];
+
+  // eslint-disable-next-line security/detect-non-literal-regexp
+  const blockRegex = new RegExp(blockPatterns.join('|'), 'i');
+
+  const url = request.url();
+  if (blockRegex.test(url)) {
+    await route.abort();
+  } else {
+    await route.continue();
+  }
+};
+
+export const sleep = async (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms));

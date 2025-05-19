@@ -8,7 +8,8 @@ source .env
 
   # -k --proxy https://magic.xhr.dev
   # -k --proxy http://localhost:8001 # for when @skilbjo is testing
+  # -H 'cookie: AB1=G; AD1=B; bm_ss=ab8e18ef4e;' \
 curl -i -L \
-  https://core.cro.ie/login \
+  https://www.grainger.com/category/lighting/light-bulbs-lamps/standard-decorative-light-bulbs-lamps \
   -H "x-xhr-api-key: ${XHR_API_KEY}" \
   -k --proxy https://proxy.xhr.dev

@@ -8,7 +8,7 @@ import { chromium } from 'playwright';
 import type { Page } from 'playwright';
 import * as dotenv from 'dotenv';
 
-import { proxyUrl } from '@src/utils';
+import { blockClientScripts, proxyUrl } from '@src/utils';
 
 dotenv.config();
 
@@ -23,7 +23,8 @@ const pageGotoOptions: PageGotoOptions = {
   waitUntil: 'domcontentloaded',
 };
 
-const url = 'https://www.grainger.com/';
+const url =
+  'https://www.grainger.com/product/FEIT-ELECTRIC-Compact-LED-Bulb-Candelabra-56JH27?cpnuser=false&searchBar=true&searchQuery=56JH27&suggestConfigId=6';
 
 const browser = await chromium.launch({
   devtools: !process.env.CI,
@@ -39,9 +40,12 @@ const context = await browser.newContext({
     server: proxyUrl,
   },
 });
+
 const page = await context.newPage();
 
 try {
+  await page.route('**/*', blockClientScripts);
+
   await page.goto(url, pageGotoOptions);
 
   const title = await page.title();
