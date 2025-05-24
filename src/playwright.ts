@@ -8,7 +8,7 @@ import { chromium } from 'playwright';
 import type { Page } from 'playwright';
 import * as dotenv from 'dotenv';
 
-import { blockClientScripts, proxyUrl } from '@src/utils';
+import { blockClientScripts, proxyUrl, sleep } from '@src/utils';
 
 dotenv.config();
 
@@ -39,13 +39,13 @@ const context = await browser.newContext({
   proxy: {
     server: proxyUrl,
   },
+  viewport: null,
 });
 
 const page = await context.newPage();
+// await page.setViewportSize({ height: 1080, width: 1920 }); // to set a particular page size
 
 try {
-  await page.route('**/*', blockClientScripts);
-
   await page.goto(url, pageGotoOptions);
 
   const title = await page.title();
