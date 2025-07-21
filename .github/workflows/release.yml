@@ -33,7 +33,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - uses: getsentry/action-setup-venv@v2.1.1
+      - uses: getsentry/action-setup-venv@v2.2.0
         with:
           venv-dir: venv
           cache-dependency-path: |
