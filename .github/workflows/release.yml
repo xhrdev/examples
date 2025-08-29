@@ -9,15 +9,18 @@ defaults:
   run:
     shell: bash
 
-permissions:
-  pull-requests: write
-  contents: write
-  issues: write
-
 jobs:
   make-ci:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      pull-requests: write
+      contents: write
+      issues: read
+      actions: none
+      id-token: none
+      packages: none
+    if: github.repository == 'xhrdev/examples' # Security: Only run on pushes to the main repository
 
     outputs:
       new_release_version:   ${{ steps.semantic.outputs.new_release_version }}
