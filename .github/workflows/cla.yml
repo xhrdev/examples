@@ -12,7 +12,7 @@ on:
 jobs:
   CLAAssistant:
     runs-on: ubuntu-latest
-    if: github.event_name == 'issue_comment' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) # Security: Only run on PRs from the same repository
+    if: github.event_name == 'issue_comment' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
     permissions:
       contents: read # only need read access for CLA signatures
       pull-requests: write # needed to comment on PRs
@@ -31,4 +31,4 @@ jobs:
           path-to-signatures: signatures/version1/cla.json
           path-to-document: https://github.com/xhrdev/examples/blob/master/CLA.md
           branch: cla-signatures
-          allowlist: skilbjo,dependabot[bot]
+          allowlist: skilbjo,dependabot,dependabot[bot]
