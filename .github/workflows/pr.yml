@@ -43,11 +43,11 @@ jobs:
             requirements.txt
           install-cmd: pip install -r requirements.txt
 
-      - uses: cycjimmy/semantic-release-action@v4.2.2
+      - uses: cycjimmy/semantic-release-action@v5
         id: semantic # need an `id` for output variables
         with:
           dry_run: true
-          semantic_version: 18
+          semantic_version: 24
           extra_plugins: |
             @semantic-release/exec@6.0.1
         env:
