@@ -59,9 +59,9 @@ jobs:
     timeout-minutes: 2
     permissions:
       pull-requests: write
-      contents: read
+      contents: write
 
-    if: ${{ github.actor == 'dependabot[bot]' }}
+    if: github.actor == 'dependabot[bot]'
 
     steps:
       - uses: dependabot/fetch-metadata@v2.4.0
