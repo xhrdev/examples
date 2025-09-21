@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { Cookie, CookieJar } from 'tough-cookie';
+import type { SerializedCookie } from 'tough-cookie/dist/cookie/constants';
 import type { Request, Route } from 'playwright';
 
 export type { Cookie } from 'tough-cookie';
-export type Cookies = Cookie.Serialized[];
+export type Cookies = SerializedCookie[];
 
 export const proxyUrl = 'https://magic.xhr.dev';
 // export const proxyUrl = 'http://localhost:8001'; // for when @skilbjo is testing
@@ -14,7 +15,7 @@ export const getCsrfCookieFromJar = ({
 }: {
   cookieName: 'CSRF_TOKEN' | 'X-CSRF-TOKEN' | 'XSRF-TOKEN';
   jar: CookieJar;
-}): Cookie.Serialized | undefined =>
+}): SerializedCookie | undefined =>
   jar
     .serializeSync()!
     .cookies // transform cookies from jar->puppeteer format, since data portion is implemented in pupppeteer
@@ -56,8 +57,8 @@ const stringifyCookies = ({ cookies }: { cookies: Cookies }) =>
   JSON.stringify(
     cookies.map((c) => ({
       ...c,
-      ...(c.expires
-        ? { expires: new Date(c['expires']).getTime() / 1000 }
+      ...(c.expires && typeof c.expires === 'string'
+        ? { expires: new Date(c.expires).getTime() / 1000 }
         : null),
       name: c['key'],
     }))
