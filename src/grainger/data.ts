@@ -10,7 +10,8 @@ import { wrapper } from 'axios-cookiejar-support';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { createCookieAgent } from 'http-cookie-agent/http';
 import * as dotenv from 'dotenv';
-import * as cheerio from 'cheerio';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import * as cheerio from 'cheerio'; // to parse html response
 
 import { proxyUrl } from '@src/utils';
 
@@ -26,8 +27,18 @@ const httpsProxyCookieAgent = new HttpsProxyCookieAgent(proxyUrl, {
   cookies: { jar },
 });
 
+// can make this request or omit it, your choice
+await axios.request({
+  headers: {
+    'x-xhr-api-key': xhrApiKey,
+  },
+  httpsAgent: httpsProxyCookieAgent,
+  url: 'https://www.grainger.com/',
+});
+
 const { data: product } = await axios.request({
   headers: {
+    accept: 'application/json', // for json response; use `text/html` for html
     'x-xhr-api-key': xhrApiKey,
   },
   httpsAgent: httpsProxyCookieAgent,
@@ -35,3 +46,5 @@ const { data: product } = await axios.request({
 });
 
 console.log(product);
+// has all clearance cookies, can be saved for future use
+console.log((jar.store as unknown as { idx: Record<string, string> }).idx);

@@ -52,6 +52,8 @@ try {
   const content = await page.content();
 
   console.log({ content, title });
+
+  await sleep(30000);
 } finally {
   await page.waitForTimeout(timeout);
   await browser.close();
