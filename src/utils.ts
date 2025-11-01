@@ -101,17 +101,14 @@ export const parseCookieString = ({
   });
 
 export const blockClientScripts = async (route: Route, request: Request) => {
-  const blockPatterns = ['captcha'];
+  const blockPatterns = ['captcha', 'tags'];
 
   // eslint-disable-next-line security/detect-non-literal-regexp
   const blockRegex = new RegExp(blockPatterns.join('|'), 'i');
 
   const url = request.url();
-  if (blockRegex.test(url)) {
-    await route.abort();
-  } else {
-    await route.continue();
-  }
+  if (blockRegex.test(url)) await route.abort();
+  else await route.continue();
 };
 
 export const sleep = async (ms: number) =>

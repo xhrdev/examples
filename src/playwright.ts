@@ -44,6 +44,7 @@ const context = await browser.newContext({
 
 const page = await context.newPage();
 // await page.setViewportSize({ height: 1080, width: 1920 }); // to set a particular page size
+await page.route('**/*', blockClientScripts);
 
 try {
   await page.goto(url, pageGotoOptions);
