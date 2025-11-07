@@ -54,7 +54,7 @@ try {
 
   console.log({ content, title });
 
-  await sleep(30000);
+  await sleep(90000);
 } finally {
   await page.waitForTimeout(timeout);
   await browser.close();
