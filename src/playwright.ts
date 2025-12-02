@@ -23,10 +23,10 @@ const pageGotoOptions: PageGotoOptions = {
   waitUntil: 'domcontentloaded',
 };
 
-const url =
-  'https://www.grainger.com/product/FEIT-ELECTRIC-Compact-LED-Bulb-Candelabra-56JH27?cpnuser=false&searchBar=true&searchQuery=56JH27&suggestConfigId=6';
+const url = 'https://supplierconnect.maersk.com/';
 
 const browser = await chromium.launch({
+  args: ['--disable-blink-features=AutomationControlled'],
   devtools: !process.env.CI,
   headless: !!process.env.CI,
 });
@@ -47,6 +47,7 @@ const page = await context.newPage();
 await page.route('**/*', blockClientScripts);
 
 try {
+  await sleep(3000); // to enable "preserve log" in devtools network tab
   await page.goto(url, pageGotoOptions);
 
   const title = await page.title();
@@ -54,7 +55,7 @@ try {
 
   console.log({ content, title });
 
-  await sleep(90000);
+  await sleep(30000);
 } finally {
   await page.waitForTimeout(timeout);
   await browser.close();
