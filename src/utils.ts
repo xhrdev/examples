@@ -101,7 +101,12 @@ export const parseCookieString = ({
   });
 
 export const blockClientScripts = async (route: Route, request: Request) => {
-  const blockPatterns = ['captcha', 'tags', 'techlab-cdn'];
+  const blockPatterns = [
+    'captcha',
+    'tags', // datadome
+    'techlab-cdn', // akamai
+    'N1N10', // akamai
+  ];
 
   // eslint-disable-next-line security/detect-non-literal-regexp
   const blockRegex = new RegExp(blockPatterns.join('|'), 'i');
