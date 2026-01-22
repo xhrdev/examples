@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { Cookie, CookieJar } from 'tough-cookie';
-import type { SerializedCookie } from 'tough-cookie/dist/cookie/constants';
+import { Cookie, CookieJar, type SerializedCookie } from 'tough-cookie';
 import type { Request, Route } from 'playwright';
 
 export type { Cookie } from 'tough-cookie';
