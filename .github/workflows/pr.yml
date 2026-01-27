@@ -26,7 +26,7 @@ jobs:
       - uses: step-security/harden-runner@v2
         with:
           egress-policy: audit
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }} # keep it as `secrets.GITHUB_TOKEN` as repo is public and this token has limited privs
           persist-credentials: false
