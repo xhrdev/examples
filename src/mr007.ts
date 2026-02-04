@@ -17,7 +17,8 @@ type Mr077Response = {
   cookies_dict: { [key: string]: string };
   cookies_list: {
     domain: string;
-    name: string;
+    key?: string;
+    name?: string;
     value: string;
   }[];
   datadome_value: null | string;
@@ -29,7 +30,7 @@ type Mr077Response = {
 };
 type Site = 'costco' | 'grainger' | 'instacart' | 'walmart';
 
-const url = 'https://www.walmart.com/';
+const url = 'https://www.grainger.com/';
 const jar = new CookieJar();
 
 const mr007 = async ({
@@ -71,18 +72,21 @@ if (cookies.length === 0) throw new Error('no cookies');
 console.log({ cookies: cookies.slice(0, 2) });
 
 cookies.forEach((c) => {
+  const name = c.name || c.key;
+  if (!name) return;
   const domainPart = c.domain.startsWith('.') ? c.domain.slice(1) : c.domain;
-  jar.setCookieSync(`${c.name}=${c.value}`, `https://${domainPart}/`);
+  jar.setCookieSync(`${name}=${c.value}`, `https://${domainPart}/`);
 });
 // console.log({ jar: (jar.store as any).idx });
 const playwrightCookies = cookies.map((c) => ({
   domain: c.domain,
-  name: c.name,
+  name: c.name || (c as any).key,
   path: '/',
-  sameSite: 'None' as const,
+  sameSite: 'Lax' as const,
   secure: true,
   value: c.value,
 }));
+console.log({ playwrightCookies });
 
 console.log('--- axios ---');
 const { data, status } = await axios.request({
