@@ -26,6 +26,9 @@ if (!email || !password) throw new Error('set email and password in .env file');
 
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
 const jar = new CookieJar();
+const httpsProxyCookieAgent = new HttpsProxyCookieAgent(proxyUrl, {
+  cookies: { jar },
+});
 httpsProxyCookieAgent.options.ca = xhrdevCa;
 
 await axios.request({

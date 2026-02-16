@@ -25,6 +25,9 @@ if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
 
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
 const jar = new CookieJar();
+const httpsProxyCookieAgent = new HttpsProxyCookieAgent(proxyUrl, {
+  cookies: { jar },
+});
 httpsProxyCookieAgent.options.ca = xhrdevCa;
 
 const { data: html } = await axios.request({

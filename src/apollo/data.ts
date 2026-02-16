@@ -31,6 +31,9 @@ if (!csrf || !cookies)
 const jar = createJar({ cookies: JSON.parse(cookies) });
 
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
+const httpsProxyCookieAgent = new HttpsProxyCookieAgent(proxyUrl, {
+  cookies: { jar },
+});
 httpsProxyCookieAgent.options.ca = xhrdevCa;
 
 const cacheKey = Date.now();

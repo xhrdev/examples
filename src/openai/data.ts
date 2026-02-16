@@ -21,6 +21,9 @@ dotenv.config();
 
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
 const jar = new CookieJar();
+const httpsProxyCookieAgent = new HttpsProxyCookieAgent(proxyUrl, {
+  cookies: { jar },
+});
 httpsProxyCookieAgent.options.ca = xhrdevCa;
 const xhrApiKey = process.env.XHR_API_KEY;
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
