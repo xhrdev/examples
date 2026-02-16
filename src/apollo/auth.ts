@@ -15,6 +15,7 @@ import * as dotenv from 'dotenv';
 import {
   getCsrfCookieFromJar,
   proxyUrl,
+  xhrdevCa,
   stringifyCookiesFromJar,
 } from '@src/utils';
 
@@ -30,9 +31,7 @@ if (!email || !password) throw new Error('set email and password in .env file');
 
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
 const jar = new CookieJar();
-const httpsProxyCookieAgent = new HttpsProxyCookieAgent(proxyUrl, {
-  cookies: { jar },
-});
+httpsProxyCookieAgent.options.ca = xhrdevCa;
 
 const cacheKey = Date.now();
 const timezoneOffset = 480;

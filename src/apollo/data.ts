@@ -12,7 +12,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import { createCookieAgent } from 'http-cookie-agent/http';
 import * as dotenv from 'dotenv';
 
-import { createJar, proxyUrl } from '@src/utils';
+import { createJar, proxyUrl, xhrdevCa } from '@src/utils';
 
 wrapper(axios);
 dotenv.config();
@@ -31,9 +31,7 @@ if (!csrf || !cookies)
 const jar = createJar({ cookies: JSON.parse(cookies) });
 
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
-const httpsProxyCookieAgent = new HttpsProxyCookieAgent(proxyUrl, {
-  cookies: { jar },
-});
+httpsProxyCookieAgent.options.ca = xhrdevCa;
 
 const cacheKey = Date.now();
 

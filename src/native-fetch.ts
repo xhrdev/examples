@@ -7,7 +7,7 @@ npm run tsx src/native-fetch.ts
 import * as dotenv from 'dotenv';
 import { fetch, ProxyAgent } from 'undici';
 
-import { proxyUrl } from '@src/utils';
+import { proxyUrl, xhrdevCa } from '@src/utils';
 
 dotenv.config();
 
@@ -15,7 +15,10 @@ const xhrApiKey = process.env.XHR_API_KEY;
 if (!xhrApiKey) throw new Error('Set XHR_API_KEY in .env file');
 
 const response = await fetch('https://core.cro.ie', {
-  dispatcher: new ProxyAgent(proxyUrl),
+  dispatcher: new ProxyAgent({
+    requestTls: { ca: xhrdevCa },
+    uri: proxyUrl,
+  }),
   headers: {
     'x-xhr-api-key': xhrApiKey,
   },

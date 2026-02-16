@@ -10,7 +10,7 @@ import { default as fetchCookie } from 'fetch-cookie';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import * as dotenv from 'dotenv';
 
-import { proxyUrl } from '@src/utils';
+import { proxyUrl, xhrdevCa } from '@src/utils';
 
 dotenv.config();
 
@@ -21,6 +21,7 @@ if (!xhrApiKey) throw new Error('Set XHR_API_KEY in .env file');
 const jar = new CookieJar();
 const fetchWithCookies = fetchCookie(fetch, jar);
 const agent = new HttpsProxyAgent(proxyUrl);
+agent.options.ca = xhrdevCa;
 
 // First Request
 const response = await fetchWithCookies('https://core.cro.ie', {

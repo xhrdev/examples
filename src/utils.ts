@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
+import { readFileSync } from 'node:fs';
 import { Cookie, CookieJar, type SerializedCookie } from 'tough-cookie';
 import type { Request, Route } from 'playwright';
 
@@ -7,6 +8,7 @@ export type Cookies = SerializedCookie[];
 
 export const proxyUrl = 'https://magic.xhr.dev';
 // export const proxyUrl = 'http://localhost:8001'; // for when @skilbjo is testing
+export const xhrdevCa = readFileSync(new URL('../xhrdev.pem', import.meta.url));
 
 export const getCsrfCookieFromJar = ({
   cookieName,

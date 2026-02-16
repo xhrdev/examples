@@ -14,7 +14,7 @@ dotenv.config();
 
 type PageGotoOptions = Parameters<Page['goto']>[1];
 
-const proxyUrl = 'http://proxy.xhr.dev';
+const proxyUrl = 'https://magic.xhr.dev';
 const xhrApiKey = process.env.XHR_API_KEY;
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
 
@@ -28,7 +28,7 @@ const url = 'https://news.ycombinator.com';
 
 const browser = await puppeteer.launch({
   acceptInsecureCerts: true,
-  args: [`--proxy-server=${proxyUrl}`], // Set up the proxy
+  args: [`--proxy-server=${proxyUrl}`],
   devtools: !process.env.CI,
   headless: !!process.env.CI,
 });

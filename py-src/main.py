@@ -8,14 +8,11 @@ from dotenv import load_dotenv
 import os
 import requests
 from http.cookiejar import CookieJar
-import urllib3
+from pathlib import Path
 import sys
 
 # Load environment variables from .env file
 load_dotenv()
-
-# Suppress only the specific InsecureRequestWarning
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Get API key from environment
 xhr_api_key = os.getenv("XHR_API_KEY")
@@ -34,6 +31,7 @@ proxies = {
   "http": proxy_url,
   "https": proxy_url,
 }
+ca_path = Path(__file__).resolve().parents[1] / "xhrdev.pem"
 
 
 def main():
@@ -42,7 +40,7 @@ def main():
       url="https://core.cro.ie/",
       headers=headers,
       proxies=proxies,
-      verify=False,
+      verify=str(ca_path),
     )
     response.raise_for_status()
 

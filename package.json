@@ -15,7 +15,7 @@
     "build": "tspc -p tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
-    "tsx": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx",
+    "tsx": "tsx",
     "playwright": "tsx src/playwright.ts",
     "puppeteer": "tsx src/puppeteer.ts",
     "p": "npm run playwright",

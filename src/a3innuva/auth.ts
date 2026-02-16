@@ -17,6 +17,7 @@ import * as dotenv from 'dotenv';
 import {
   getCsrfCookieFromJar,
   proxyUrl,
+  xhrdevCa,
   stringifyCookiesFromJar,
 } from '@src/utils';
 
@@ -34,9 +35,7 @@ if (!email || !password || !mfaSecret)
 
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
 const jar = new CookieJar();
-const httpsProxyCookieAgent = new HttpsProxyCookieAgent(proxyUrl, {
-  cookies: { jar },
-});
+httpsProxyCookieAgent.options.ca = xhrdevCa;
 
 const { data: signInGet, request: request0 } = await axios.request<string>({
   headers: {

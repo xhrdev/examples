@@ -6,10 +6,11 @@ project_dir="$(cd "${dir}/.." && pwd)" && cd "$project_dir"
 
 source .env
 
-  # -k --proxy https://magic.xhr.dev
-  # -k --proxy http://localhost:8001 # for when @skilbjo is testing
+  # --cacert ./xhrdev.pem --proxy https://magic.xhr.dev
+  # --cacert ./xhrdev.pem --proxy http://localhost:8001 # for when @skilbjo is testing
   # -H 'cookie: AB1=G; AD1=B; bm_ss=ab8e18ef4e;' \
 curl -i -L \
   https://www.grainger.com/category/lighting/light-bulbs-lamps/standard-decorative-light-bulbs-lamps \
   -H "x-xhr-api-key: ${XHR_API_KEY}" \
-  -k --proxy https://proxy.xhr.dev
+  --cacert ./xhrdev.pem \
+  --proxy https://magic.xhr.dev
