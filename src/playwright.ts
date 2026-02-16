@@ -1,7 +1,7 @@
 /**
  * run this script:
 
-npx tsx src/playwright.ts
+NODE_EXTRA_CA_CERTS=./xhrdev.pem npx tsx src/playwright.ts
 
 */
 import { chromium } from 'playwright';
@@ -35,7 +35,7 @@ const context = await browser.newContext({
   extraHTTPHeaders: {
     'x-xhr-api-key': xhrApiKey,
   },
-  ignoreHTTPSErrors: true,
+  ignoreHTTPSErrors: false,
   proxy: {
     server: proxyUrl,
   },

@@ -47,8 +47,14 @@ npx tsx src/apollo/auth.ts || npm run tsx src/apollo/auth.ts
 
 or:
 ```bash
-npx tsx src/playwright.ts || npm run playwright
+NODE_EXTRA_CA_CERTS=./xhrdev.pem npx tsx src/playwright.ts
+# or
+npm run playwright
 ```
+
+`npm run playwright` already sets `NODE_EXTRA_CA_CERTS=./xhrdev.pem`, so you do
+not need to install the cert system-wide for this flow. You can still install
+and trust the cert globally if you prefer.
 
 ## hot reload
 

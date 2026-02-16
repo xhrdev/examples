@@ -16,7 +16,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "tsx": "tsx",
-    "playwright": "tsx src/playwright.ts",
+    "playwright": "NODE_EXTRA_CA_CERTS=./xhrdev.pem tsx src/playwright.ts",
     "puppeteer": "tsx src/puppeteer.ts",
     "p": "npm run playwright",
     "prepare": "husky"
