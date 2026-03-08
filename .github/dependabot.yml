@@ -16,12 +16,6 @@ updates:
     assignees:
       - skilbjo
     rebase-strategy: auto
-    ignore:
-      - dependency-name: aws-sdk
-      - dependency-name: '@aws-sdk/*'
-      - dependency-name: devtools-protocol
-      - dependency-name: '@commitlint/cli'
-      - dependency-name: '@commitlint/config-angular'
     versioning-strategy: increase
     open-pull-requests-limit: 15
     commit-message:

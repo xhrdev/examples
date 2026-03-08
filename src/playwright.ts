@@ -27,6 +27,7 @@ const url = 'https://supplierconnect.maersk.com/';
 
 const browser = await chromium.launch({
   args: ['--disable-blink-features=AutomationControlled'],
+  // @ts-expect-error playwright version 1.58.2 has broken LaunchOptions types for devtools
   devtools: !process.env.CI,
   headless: !!process.env.CI,
 });
