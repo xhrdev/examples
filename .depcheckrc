@@ -21,4 +21,6 @@ ignores: [
   'cheerio',
 
   'nodemon',
+
+  'playwright-core',
 ]

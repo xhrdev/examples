@@ -13,7 +13,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const url = 'https://eddservices.edd.ca.gov/tap/secure/eservices';
-const solver = `ws://${process.env.host}:3000/akamai/session`;
+const solver = `ws://${process.env.host}:3000/akamai/session-headless`;
 const headed = true;
 const proxy = process.env.proxy;
 const eddUsername = process.env.username;
@@ -692,6 +692,7 @@ await Promise.race([
 // stops sending further submission messages (prevents in-flight
 // page.evaluate() from racing against browser.close()).
 closing = true;
+
 const wsSnapshot = ws as null | WebSocket;
 if (wsSnapshot && wsSnapshot.readyState === WebSocket.OPEN) {
   log('Acceptance received — closing solver WS session');
