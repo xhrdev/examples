@@ -3,8 +3,6 @@
 
 npx tsx src/ca-edd.ts
 
- * Usage:
- *   node scripts/akamai-pw-ws.js --url https://target.com --solver ws://localhost:3000/akamai/session [--headed] [--proxy=http://...]
 */
 import { chromium } from 'playwright-core';
 import type { BrowserContext, Page } from 'playwright-core';
