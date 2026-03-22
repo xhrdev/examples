@@ -499,35 +499,25 @@ try {
   process.exit(1);
 }
 
-try {
-  await sleep(1000);
-  await page.fill('#username', eddUsername);
-  await page.fill('#txtPassword', eddPassword);
-  await page.locator('div.btn.btn-primary', { hasText: 'Log In' }).click();
-  log('Clicked Log In');
-  await page.waitForLoadState('load');
-} catch (e) {
-  log(`RESULT: ERROR - Sign in failed: ${(e as Error).message}`);
-}
+await sleep(1000);
+await page.fill('#username', eddUsername);
+await page.fill('#txtPassword', eddPassword);
+await page.locator('div.btn.btn-primary', { hasText: 'Log In' }).click();
+log('Clicked Log In');
+await page.waitForLoadState('load');
 
-await sleep(5000);
+await sleep(3000);
 
-try {
-  const html = await page.content();
-  const currentUrl = page.url();
-  log(`Final URL: ${currentUrl}`);
+const html = await page.content();
+const currentUrl = page.url();
+log(`Final URL: ${currentUrl}`);
 
-  if (
-    /<H1>\s*Access Denied\s*<\/H1>/i.test(html) ||
-    html.includes('Access Denied')
-  ) {
-    log('RESULT: FAIL - Access Denied');
-  } else {
-    log('RESULT: SUCCESS - Login page accessible');
-  }
-} catch (e) {
-  log(`RESULT: ERROR - Failed to check page result: ${(e as Error).message}`);
-}
+if (
+  /<H1>\s*Access Denied\s*<\/H1>/i.test(html) ||
+  html.includes('Access Denied')
+)
+  log('RESULT: FAIL - Access Denied');
+else log('RESULT: SUCCESS - Login page accessible');
 
 await browser.close();
 process.exit(0);
