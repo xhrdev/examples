@@ -11,23 +11,34 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const url = 'https://eddservices.edd.ca.gov/tap/secure/eservices';
-const solver = `ws://${process.env.host}:3000/akamai/session-headless`;
-const headed = true;
+const solver = `ws://${process.env.host}:3000/akamai/session`;
 const proxy = process.env.proxy;
 const eddUsername = process.env.username;
 const eddPassword = process.env.password;
+let ws: null | WebSocket = null;
+const closing = false;
+let sessionPageUrl: null | string = null;
+let navigationInProgress = false;
+const capturedScripts = new Map<string, string>();
 
 if (!solver) throw new Error('set solver in .env file');
 if (!proxy) throw new Error('set proxy in .env file');
 if (!eddUsername) throw new Error('set username in .env file');
 if (!eddPassword) throw new Error('set password in .env file');
 
-// Chrome 144 macOS profile
+// Chrome 146 macOS profile
 const PROFILE = {
-  chromeFullVersion: '144.0.7559.97',
+  chromeFullVersion: '146.0.7680.81',
+  screen: {
+    devicePixelRatio: 2,
+    height: 982,
+    innerHeight: 761,
+    innerWidth: 1200,
+    width: 1512,
+  },
   timezone: 'America/New_York',
   userAgent:
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.7559.97 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
 };
 
 // ---------------------------------------------------------------------------
@@ -40,14 +51,6 @@ type PlaywrightProxy = {
   password?: string;
   server: string;
   username?: string;
-};
-
-type SessionData = {
-  cookies: CookieRecord;
-  html: string;
-  script: string;
-  scriptUrl: string;
-  url: string;
 };
 
 type SolverMessage = {
@@ -70,9 +73,7 @@ const cookiesToRecord = (
   cookies: Array<{ name: string; value: string }>
 ): CookieRecord => {
   const record: CookieRecord = {};
-  for (const c of cookies) {
-    record[c.name] = c.value;
-  }
+  for (const c of cookies) record[c.name] = c.value;
   return record;
 };
 
@@ -101,14 +102,20 @@ const extractAkamaiScriptUrl = (
   return null;
 };
 
+const isLikelyAkamaiScriptUrl = (url: string): boolean => {
+  const pathname = new URL(url).pathname;
+  if (/^(\/[a-zA-Z0-9\-_]+){5,}$/.test(pathname)) return true;
+  if (/\/(?:akam|_abck|bm-)/.test(pathname)) return true;
+  return false;
+};
+
 const getAbckStatus = (value: string | undefined): null | string => {
   if (!value) return null;
   return value.split('~')[1] ?? null;
 };
 
-const log = (msg: string, ...extra: unknown[]): void => {
+const log = (msg: string, ...extra: unknown[]): void =>
   console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
-};
 
 const parsePlaywrightProxy = (raw: string): null | PlaywrightProxy => {
   if (!raw) return null;
@@ -118,86 +125,28 @@ const parsePlaywrightProxy = (raw: string): null | PlaywrightProxy => {
   const candidateUrl = hasScheme ? trimmed : `http://${trimmed}`;
   const parsed = new URL(candidateUrl);
   const server = `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`;
+  const sessionId = Math.floor(Math.random() * 999) + 1;
+  const username =
+    decodeURIComponent(parsed.username || '').replace(
+      /-session-\d+-/,
+      `-session-${sessionId}-`
+    ) || undefined;
   return {
     password: decodeURIComponent(parsed.password || '') || undefined,
     server,
-    username: decodeURIComponent(parsed.username || '') || undefined,
+    username,
   };
 };
 
-const sanitizeHtml = (html: null | string): string => {
-  if (!html) return '<!DOCTYPE html><html><head></head><body></body></html>';
-  return html.replace(
+const removesScriptTagsFromHtml = (html: string): string =>
+  html.replace(
     // eslint-disable-next-line security/detect-unsafe-regex
     /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gim,
     ''
   );
-};
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
-
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-
-log('Launching browser...');
-
-const proxyConfig = parsePlaywrightProxy(proxy);
-
-const browser = await chromium.launch({
-  args: [
-    '--disable-blink-features=AutomationControlled',
-    '--no-first-run',
-    '--no-default-browser-check',
-  ],
-  channel: 'chrome',
-  headless: !headed,
-  proxy: proxyConfig || undefined,
-});
-
-const context: BrowserContext = await browser.newContext({
-  ignoreHTTPSErrors: true,
-  locale: 'en-US',
-  timezoneId: PROFILE.timezone,
-  userAgent: PROFILE.userAgent,
-  viewport: null,
-});
-
-const page: Page = await context.newPage();
-
-// CDP: Override UA + client hints for Chrome 144
-const cdpClient = await context.newCDPSession(page);
-await cdpClient.send('Emulation.setUserAgentOverride', {
-  acceptLanguage: 'en-US,en;q=0.9',
-  userAgent: PROFILE.userAgent,
-  userAgentMetadata: {
-    architecture: 'arm',
-    bitness: '64',
-    brands: [
-      { brand: 'Not(A:Brand', version: '8' },
-      { brand: 'Chromium', version: '144' },
-      { brand: 'Google Chrome', version: '144' },
-    ],
-    fullVersion: '144.0.7559.97',
-    fullVersionList: [
-      { brand: 'Not(A:Brand', version: '8.0.0.0' },
-      { brand: 'Chromium', version: '144.0.7559.97' },
-      { brand: 'Google Chrome', version: '144.0.7559.97' },
-    ],
-    mobile: false,
-    model: '',
-    platform: 'macOS',
-    platformVersion: '15.7.3',
-  },
-});
-
-let ws: null | WebSocket = null;
-let closing = false;
-let sessionPageUrl: null | string = null;
-let akamaiPostPath: null | string = null;
-let sandboxSubmissionInFlight = false;
-let navigationInProgress = false;
 
 // Promise that resolves when the solver reports acceptance
 let solverAcceptedResolve: () => void;
@@ -205,37 +154,130 @@ const solverAccepted = new Promise<void>((r) => {
   solverAcceptedResolve = r;
 });
 
-function cleanup(): void {
-  closing = true;
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.close(1000, 'Client shutting down');
-  }
-  browser.close().catch(() => {});
-}
+const addRouteInterceptor = async (page: Page) =>
+  await page.route('**/*', async (route) => {
+    const request = route.request();
+    const url = request.url();
 
-process.on('SIGINT', () => {
-  log('Caught SIGINT, shutting down...');
-  cleanup();
-  setTimeout(() => process.exit(0), 1000);
-});
-process.on('SIGTERM', () => {
-  log('Caught SIGTERM, shutting down...');
-  cleanup();
-  setTimeout(() => process.exit(0), 1000);
-});
+    if (request.resourceType() === 'script') {
+      try {
+        const response = await route.fetch();
+        const body = await response.text();
+        capturedScripts.set(url, body);
+        if (isLikelyAkamaiScriptUrl(url)) await route.abort();
+        else await route.fulfill({ body, response });
+
+        return;
+      } catch {
+        // fallthrough
+      }
+    }
+    try {
+      await route.continue();
+    } catch {
+      // route already handled
+    }
+  });
+
+const fetchAkamaiScriptSource = async (
+  akamaiScriptUrl: string,
+  page: Page
+): Promise<null | string> => {
+  log(`Detected Akamai script URL: ${akamaiScriptUrl}`);
+
+  for (const [url, source] of capturedScripts) {
+    if (
+      url === akamaiScriptUrl ||
+      url.startsWith(akamaiScriptUrl.split('?')[0])
+    )
+      return source;
+  }
+
+  log('Script not captured via route, fetching directly...');
+  try {
+    return await page.evaluate(async (url: string) => {
+      const res = await fetch(url);
+      return res.text();
+    }, akamaiScriptUrl);
+  } catch (e) {
+    log(`ERROR: Failed to fetch Akamai script: ${(e as Error).message}`);
+    return null;
+  }
+};
+
+const addNavigationListener = async (page: Page) => {
+  page.on('framenavigated', async (frame) => {
+    if (frame !== page.mainFrame()) return;
+    if (closing || navigationInProgress) return;
+
+    const newUrl = frame.url();
+    if (newUrl === 'about:blank' || newUrl === sessionPageUrl) return;
+
+    navigationInProgress = true;
+    log(`Navigation detected: ${newUrl}`);
+
+    try {
+      await page.waitForLoadState('domcontentloaded');
+
+      const html = await page.content();
+      const url = page.url();
+
+      const scriptUrl = extractAkamaiScriptUrl(html, url);
+      if (!scriptUrl) {
+        log(
+          'No Akamai script detected on navigated page, skipping solver session'
+        );
+        return;
+      }
+
+      log(`Detected Akamai script on new page: ${scriptUrl}`);
+
+      // Fetch script source (already loaded by the browser, likely cached)
+      let scriptSource: string;
+      try {
+        scriptSource = await page.evaluate(async (url: string) => {
+          const res = await fetch(url);
+          return res.text();
+        }, scriptUrl);
+      } catch (e) {
+        log(
+          `Failed to fetch Akamai script on navigation: ${(e as Error).message}`
+        );
+        return;
+      }
+
+      const cookies = cookiesToRecord(await context.cookies(url));
+
+      startSolverSession({
+        cookies,
+        html: removesScriptTagsFromHtml(html),
+        script: scriptSource,
+        scriptUrl,
+        url,
+      });
+    } catch (e) {
+      log(`Navigation handling error: ${(e as Error).message}`);
+    } finally {
+      navigationInProgress = false;
+    }
+  });
+};
 
 // ---------------------------------------------------------------------------
 // Solver session management
 // ---------------------------------------------------------------------------
 
-const startSolverSession = (sessionData: SessionData): void => {
+const startSolverSession = (sessionData: {
+  cookies: CookieRecord;
+  html: string;
+  script: string;
+  scriptUrl: string;
+  url: string;
+}): void => {
   // Close existing WS
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.close(1000, 'New session');
-  }
+  if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, 'New session');
 
   sessionPageUrl = sessionData.url;
-  akamaiPostPath = new URL(sessionData.scriptUrl).pathname;
 
   log(`Connecting to solver WS: ${solver}`);
   ws = new WebSocket(solver);
@@ -248,39 +290,7 @@ const startSolverSession = (sessionData: SessionData): void => {
       JSON.stringify({
         cookies: sessionData.cookies,
         html: sessionData.html,
-        profile: {
-          brands: [
-            { brand: 'Not(A:Brand', version: '8' },
-            { brand: 'Chromium', version: '144' },
-            { brand: 'Google Chrome', version: '144' },
-          ],
-          chromeFullVersion: PROFILE.chromeFullVersion,
-          chromeVersion: '144',
-          deviceMemory: 8,
-          hardwareConcurrency: 10,
-          languages: 'en-US,en',
-          os: 'macOS',
-          platformVersion: '15.7.3',
-          screen: {
-            availHeight: 944,
-            availLeft: 0,
-            availTop: 32,
-            availWidth: 1512,
-            colorDepth: 30,
-            devicePixelRatio: 2,
-            height: 982,
-            innerHeight: 761,
-            innerWidth: 1200,
-            outerHeight: 900,
-            outerWidth: 1200,
-            pixelDepth: 30,
-            screenX: 0,
-            screenY: 32,
-            width: 1512,
-          },
-          timezone: PROFILE.timezone,
-        },
-        proxy: proxy || 'none',
+        proxy,
         script: sessionData.script,
         scriptUrl: sessionData.scriptUrl,
         type: 'init',
@@ -291,60 +301,21 @@ const startSolverSession = (sessionData: SessionData): void => {
 
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   currentWs.addEventListener('message', async (event: MessageEvent) => {
-    // Ignore messages from superseded sessions
-    if (closing || currentWs !== ws) return;
+    if (closing || currentWs !== ws) return; // Ignore messages from superseded sessions
 
-    let msg: SolverMessage;
-    try {
-      msg = JSON.parse(event.data as string);
-    } catch {
-      log('WS: received invalid JSON');
-      return;
-    }
+    const msg = <SolverMessage>JSON.parse(event.data as string);
 
     switch (msg.type) {
-      case 'cookie_update': {
-        const { accepted, cookies, round, rval } = msg;
-        const abckValue = cookies?._abck || cookies?.['_abck'];
-        const status = getAbckStatus(abckValue);
-        log(
-          `Cookie update: round=${round} rval=${rval} accepted=${accepted} _abck=~${status}~`
-        );
-
-        if (cookies && typeof cookies === 'object') {
-          if (!sessionPageUrl) break;
-          const targetUrl = new URL(sessionPageUrl);
-          const cookiesToSet = Object.entries(cookies).map(([name, value]) => ({
-            domain: targetUrl.hostname,
-            name,
-            path: '/',
-            value: String(value),
-          }));
-          if (cookiesToSet.length > 0) {
-            await context.addCookies(cookiesToSet);
-          }
-        }
-
-        if (accepted) {
-          log('SUCCESS: Akamai challenge accepted!');
-          solverAcceptedResolve();
-        }
-        break;
-      }
-
       case 'error': {
         log(`Solver error: ${msg.message}`);
         break;
       }
 
       case 'status': {
-        log(`Status: state=${msg.state} round=${msg.round}`);
         if (msg.state === 'accepted') {
-          log('Solver reports acceptance. Browser cookies updated.');
+          log('[info] Solver reports cookie acceptance');
           solverAcceptedResolve();
-        } else if (msg.state === 'error') {
-          log('Solver reports error state.');
-        }
+        } else if (msg.state === 'error') log('Solver reports error state.');
         break;
       }
 
@@ -366,18 +337,14 @@ const startSolverSession = (sessionData: SessionData): void => {
         // Cache-Control/Pragma aren't auto-set by XHR — add them to match
         // real Chrome sensor POSTs.
         const xhrHeaders: Record<string, string> = {};
-        if (serverHeaders && typeof serverHeaders === 'object') {
+        if (serverHeaders && typeof serverHeaders === 'object')
           Object.assign(xhrHeaders, serverHeaders);
-        }
-        if (!xhrHeaders['Cache-Control'] && !xhrHeaders['cache-control']) {
+        if (!xhrHeaders['Cache-Control'] && !xhrHeaders['cache-control'])
           xhrHeaders['Cache-Control'] = 'no-cache';
-        }
-        if (!xhrHeaders['Pragma'] && !xhrHeaders['pragma']) {
+        if (!xhrHeaders['Pragma'] && !xhrHeaders['pragma'])
           xhrHeaders['Pragma'] = 'no-cache';
-        }
 
         try {
-          sandboxSubmissionInFlight = true;
           const result = await page.evaluate(
             ({
               body,
@@ -395,11 +362,9 @@ const startSolverSession = (sessionData: SessionData): void => {
                   const xhr = new XMLHttpRequest();
                   xhr.open(method, url, true);
                   xhr.withCredentials = true;
-                  if (headers) {
-                    for (const [name, value] of Object.entries(headers)) {
+                  if (headers)
+                    for (const [name, value] of Object.entries(headers))
                       xhr.setRequestHeader(name, value);
-                    }
-                  }
                   xhr.onload = () => {
                     resolve({ body: xhr.responseText, status: xhr.status });
                   };
@@ -418,8 +383,6 @@ const startSolverSession = (sessionData: SessionData): void => {
             }
           );
 
-          sandboxSubmissionInFlight = false;
-
           const postCookies = await context.cookies(cookieUrl);
           const postCookieRecord = cookiesToRecord(postCookies);
 
@@ -427,7 +390,7 @@ const startSolverSession = (sessionData: SessionData): void => {
             `Submission ${id}: response ${result.status} (${result.body.length} bytes)`
           );
 
-          if (currentWs.readyState === WebSocket.OPEN) {
+          if (currentWs.readyState === WebSocket.OPEN)
             currentWs.send(
               JSON.stringify({
                 body: result.body,
@@ -437,11 +400,9 @@ const startSolverSession = (sessionData: SessionData): void => {
                 type: 'submission_response',
               })
             );
-          }
         } catch (e) {
-          sandboxSubmissionInFlight = false;
           log(`ERROR: Submission ${id} failed: ${(e as Error).message}`);
-          if (currentWs.readyState === WebSocket.OPEN) {
+          if (currentWs.readyState === WebSocket.OPEN)
             currentWs.send(
               JSON.stringify({
                 body: `Client error: ${(e as Error).message}`,
@@ -450,7 +411,6 @@ const startSolverSession = (sessionData: SessionData): void => {
                 type: 'submission_response',
               })
             );
-          }
         }
         break;
       }
@@ -466,9 +426,8 @@ const startSolverSession = (sessionData: SessionData): void => {
       reason: string;
     };
     log(`WS closed: code=${code} reason=${reason || 'none'}`);
-    if (!closing && currentWs === ws) {
+    if (!closing && currentWs === ws)
       log('Solver session ended. Browser remains open for inspection.');
-    }
   });
 
   currentWs.addEventListener('error', (event: Event) => {
@@ -477,274 +436,98 @@ const startSolverSession = (sessionData: SessionData): void => {
 };
 
 // ---------------------------------------------------------------------------
-// Navigate and capture Akamai script (initial load)
+// Main
 // ---------------------------------------------------------------------------
 
-log(`Navigating to ${url}`);
-
-const capturedScripts = new Map<string, string>();
-await page.route('**/*', async (route) => {
-  const request = route.request();
-  const url = request.url();
-
-  if (request.resourceType() === 'script') {
-    try {
-      const response = await route.fetch();
-      const body = await response.text();
-      capturedScripts.set(url, body);
-      await route.fulfill({ body, response });
-      return;
-    } catch {
-      // fallthrough
-    }
-  }
-  try {
-    await route.continue();
-  } catch {
-    // route already handled
-  }
+const browser = await chromium.launch({
+  args: [
+    '--disable-blink-features=AutomationControlled',
+    '--no-first-run',
+    '--no-default-browser-check',
+  ],
+  channel: 'chrome',
+  headless: false,
+  proxy: parsePlaywrightProxy(proxy) ?? undefined,
 });
+const context: BrowserContext = await browser.newContext({});
+const page: Page = await context.newPage();
 
+await addRouteInterceptor(page);
 await page.goto(url, {
-  timeout: 30000,
   waitUntil: 'domcontentloaded',
 });
+const content = await page.content();
+await addNavigationListener(page);
 
-const pageHtml = await page.content();
-const pageUrl = page.url();
-
-let akamaiScriptUrl = extractAkamaiScriptUrl(pageHtml, pageUrl);
+const akamaiScriptUrl = extractAkamaiScriptUrl(content, url);
 let akamaiScriptSource: null | string = null;
 
-if (akamaiScriptUrl) {
-  log(`Detected Akamai script URL: ${akamaiScriptUrl}`);
-
-  for (const [url, source] of capturedScripts) {
-    if (
-      url === akamaiScriptUrl ||
-      url.startsWith(akamaiScriptUrl.split('?')[0])
-    ) {
-      akamaiScriptSource = source;
-      break;
-    }
-  }
-
-  if (!akamaiScriptSource) {
-    log('Script not captured via route, fetching directly...');
-    try {
-      akamaiScriptSource = await page.evaluate(async (url: string) => {
-        const res = await fetch(url);
-        return res.text();
-      }, akamaiScriptUrl);
-    } catch (e) {
-      log(`ERROR: Failed to fetch Akamai script: ${(e as Error).message}`);
-    }
-  }
-}
+if (akamaiScriptUrl)
+  akamaiScriptSource = await fetchAkamaiScriptSource(akamaiScriptUrl, page);
 
 if (!akamaiScriptSource) {
-  log(
-    'ERROR: Could not capture Akamai script source. Trying largest captured script...'
-  );
-  let largest: { source: string; url: string } | null = null;
-  for (const [url, source] of capturedScripts) {
-    if (!largest || source.length > largest.source.length) {
-      largest = { source, url };
-    }
-  }
-  if (largest && largest.source.length > 10000) {
-    akamaiScriptUrl = largest.url;
-    akamaiScriptSource = largest.source;
-    log(
-      `Using largest captured script: ${akamaiScriptUrl} (${akamaiScriptSource.length} bytes)`
-    );
-  } else {
-    log('FATAL: No suitable Akamai script found. Exiting.');
-    await browser.close();
-    process.exit(1);
-  }
+  log('FATAL: No suitable Akamai script found. Exiting.');
+  await browser.close();
+  process.exit(1);
 }
 
-// Replace capture route with persistent blocking route
-await page.unroute('**/*');
+await page.unroute('**/*'); // Remove capture route — Akamai script is already blocked, no POST interception needed
 
-await page.route('**/*', async (route) => {
-  const req = route.request();
-  const reqPath = new URL(req.url()).pathname;
-  if (
-    req.method() === 'POST' &&
-    akamaiPostPath &&
-    reqPath === akamaiPostPath &&
-    !sandboxSubmissionInFlight
-  ) {
-    log(`Blocked browser Akamai POST: ${req.url()}`);
-    try {
-      await route.abort();
-    } catch {
-      // route already handled
-    }
-    return;
-  }
-  try {
-    await route.continue();
-  } catch {
-    // route already handled
-  }
-});
-
-const browserCookies = await context.cookies(pageUrl);
+const browserCookies = await context.cookies(url);
 const cookieRecord = cookiesToRecord(browserCookies);
-const sanitizedHtml = sanitizeHtml(pageHtml);
 
-log(
-  `Captured: script=${akamaiScriptSource.length} bytes, html=${sanitizedHtml.length} bytes, cookies=${Object.keys(cookieRecord).length}`
-);
-
-// Start initial solver session
 startSolverSession({
   cookies: cookieRecord,
-  html: sanitizedHtml,
+  html: removesScriptTagsFromHtml(content),
   script: akamaiScriptSource,
   scriptUrl: akamaiScriptUrl!, // eslint-disable-line @typescript-eslint/no-non-null-assertion
-  url: pageUrl,
+  url,
 });
 
-// ---------------------------------------------------------------------------
-// Navigation listener — detect new page loads and start new solver sessions
-// ---------------------------------------------------------------------------
-
-page.on('framenavigated', async (frame) => {
-  if (frame !== page.mainFrame()) return;
-  if (closing || navigationInProgress) return;
-
-  const newUrl = frame.url();
-  if (newUrl === 'about:blank' || newUrl === sessionPageUrl) return;
-
-  navigationInProgress = true;
-  log(`Navigation detected: ${newUrl}`);
-
-  try {
-    await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
-
-    const html = await page.content();
-    const url = page.url();
-
-    const scriptUrl = extractAkamaiScriptUrl(html, url);
-    if (!scriptUrl) {
-      log(
-        'No Akamai script detected on navigated page, skipping solver session'
-      );
-      return;
-    }
-
-    log(`Detected Akamai script on new page: ${scriptUrl}`);
-
-    // Fetch script source (already loaded by the browser, likely cached)
-    let scriptSource: string;
-    try {
-      scriptSource = await page.evaluate(async (url: string) => {
-        const res = await fetch(url);
-        return res.text();
-      }, scriptUrl);
-    } catch (e) {
-      log(
-        `Failed to fetch Akamai script on navigation: ${(e as Error).message}`
-      );
-      return;
-    }
-
-    const cookies = cookiesToRecord(await context.cookies(url));
-    const sanitized = sanitizeHtml(html);
-
-    log(
-      `Captured on navigation: script=${scriptSource.length} bytes, html=${sanitized.length} bytes, cookies=${Object.keys(cookies).length}`
-    );
-
-    startSolverSession({
-      cookies,
-      html: sanitized,
-      script: scriptSource,
-      scriptUrl,
-      url,
-    });
-  } catch (e) {
-    log(`Navigation handling error: ${(e as Error).message}`);
-  } finally {
-    navigationInProgress = false;
-  }
-});
-
-// ---------------------------------------------------------------------------
 // Wait for solver acceptance, then sign in
-// ---------------------------------------------------------------------------
-
 log('Waiting for solver acceptance...');
-await Promise.race([
-  solverAccepted,
-  sleep(120000).then(() => {
-    throw new Error('Solver acceptance timeout (120s)');
-  }),
-]);
-
-// Cleanly close the solver WS so the server destroys the session and
-// stops sending further submission messages (prevents in-flight
-// page.evaluate() from racing against browser.close()).
-closing = true;
-
-const wsSnapshot = ws as null | WebSocket;
-if (wsSnapshot && wsSnapshot.readyState === WebSocket.OPEN) {
-  log('Acceptance received — closing solver WS session');
-  wsSnapshot.close(1000, 'Accepted');
-}
-await sleep(500);
-
-// Sign in
-let signInFailed = false;
 try {
-  await sleep(7000);
+  await Promise.race([
+    solverAccepted,
+    sleep(15000).then(() => {
+      throw new Error('Solver acceptance timeout');
+    }),
+  ]);
+} catch (e) {
+  log(`RESULT: ERROR - ${(e as Error).message}`);
+  await browser.close();
+  process.exit(1);
+}
+
+try {
+  await sleep(1000);
   await page.fill('#username', eddUsername);
   await page.fill('#txtPassword', eddPassword);
   await page.locator('div.btn.btn-primary', { hasText: 'Log In' }).click();
   log('Clicked Log In');
-  await page.waitForLoadState('load', { timeout: 30000 }).catch(() => {});
+  await page.waitForLoadState('load');
 } catch (e) {
-  log(`ERROR: Failed to fill/click sign in: ${(e as Error).message}`);
-  signInFailed = true;
+  log(`RESULT: ERROR - Sign in failed: ${(e as Error).message}`);
 }
 
-let exitCode: number;
-if (signInFailed) {
-  exitCode = 1;
-} else {
-  const postSignInWaitMs = 2000 + Math.random() * 3000;
-  log(
-    `Waiting ${Math.round(postSignInWaitMs)}ms after sign-in before checking result...`
-  );
-  await sleep(postSignInWaitMs);
+await sleep(5000);
 
-  exitCode = 0;
-  try {
-    const html = await page.content();
-    const currentUrl = page.url();
-    log(`Final URL: ${currentUrl}`);
+try {
+  const html = await page.content();
+  const currentUrl = page.url();
+  log(`Final URL: ${currentUrl}`);
 
-    if (
-      /<H1>\s*Access Denied\s*<\/H1>/i.test(html) ||
-      html.includes('Access Denied')
-    ) {
-      log('FAILURE: Access Denied page detected');
-      exitCode = 2;
-    } else {
-      log('SUCCESS: Page loaded without access denial');
-    }
-  } catch (e) {
-    log(`ERROR: Failed to check page result: ${(e as Error).message}`);
-    exitCode = 1;
+  if (
+    /<H1>\s*Access Denied\s*<\/H1>/i.test(html) ||
+    html.includes('Access Denied')
+  ) {
+    log('RESULT: FAIL - Access Denied');
+  } else {
+    log('RESULT: SUCCESS - Login page accessible');
   }
+} catch (e) {
+  log(`RESULT: ERROR - Failed to check page result: ${(e as Error).message}`);
 }
 
-log(`Exiting with code ${exitCode}`);
-const forceExit = setTimeout(() => process.exit(exitCode), 3000);
-forceExit.unref();
-await browser.close().catch(() => {});
-process.exit(exitCode);
+await browser.close();
+process.exit(0);

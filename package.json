@@ -8,6 +8,7 @@
   },
   "type": "module",
   "scripts": {
+    "postinstall": "npx playwright install chrome",
     "depcheck": "depcheck",
     "eslint": "eslint .",
     "exec": "tsx",
