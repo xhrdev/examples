@@ -205,7 +205,9 @@ const fetchAkamaiScriptSource = async (
   }
 };
 
-const addNavigationListener = async (page: Page) => {
+const initSession = async (page: Page) => {
+  await addRouteInterceptor(page);
+
   page.on('framenavigated', async (frame) => {
     if (frame !== page.mainFrame()) return;
     if (closing || navigationInProgress) return;
@@ -452,39 +454,9 @@ const browser = await chromium.launch({
 const context: BrowserContext = await browser.newContext({});
 const page: Page = await context.newPage();
 
-await addRouteInterceptor(page);
-await page.goto(url, {
-  waitUntil: 'domcontentloaded',
-});
-const content = await page.content();
-await addNavigationListener(page);
+await initSession(page);
+await page.goto(url);
 
-const akamaiScriptUrl = extractAkamaiScriptUrl(content, url);
-let akamaiScriptSource: null | string = null;
-
-if (akamaiScriptUrl)
-  akamaiScriptSource = await fetchAkamaiScriptSource(akamaiScriptUrl, page);
-
-if (!akamaiScriptSource) {
-  log('FATAL: No suitable Akamai script found. Exiting.');
-  await browser.close();
-  process.exit(1);
-}
-
-await page.unroute('**/*'); // Remove capture route — Akamai script is already blocked, no POST interception needed
-
-const browserCookies = await context.cookies(url);
-const cookieRecord = cookiesToRecord(browserCookies);
-
-startSolverSession({
-  cookies: cookieRecord,
-  html: removesScriptTagsFromHtml(content),
-  script: akamaiScriptSource,
-  scriptUrl: akamaiScriptUrl!, // eslint-disable-line @typescript-eslint/no-non-null-assertion
-  url,
-});
-
-// Wait for solver acceptance, then sign in
 log('Waiting for solver acceptance...');
 try {
   await Promise.race([
