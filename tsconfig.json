@@ -15,6 +15,7 @@
     "module": "ES2022",
 
     "lib": ["DOM"],
+    "ignoreDeprecations": "6.0",
     "baseUrl": "./",
     "paths": {
       "@src/*": [
