@@ -45,7 +45,7 @@
     "@typescript-eslint/parser": "8.58.0",
     "cheerio": "1.2.0",
     "depcheck": "1.4.7",
-    "eslint": "9.39.2",
+    "eslint": "9.39.4",
     "eslint-import-resolver-typescript": "4.4.4",
     "extensionless": "2.0.6",
     "husky": "9.1.7",
