@@ -54,7 +54,7 @@ const lastBracket = Math.max(
   jsonString.lastIndexOf('}')
 );
 jsonString = jsonString.slice(0, lastBracket + 1);
-const data = <(Record<string, unknown> | string)[]>JSON.parse(jsonString);
+const data = JSON.parse(jsonString) as (Record<string, unknown> | string)[];
 /*
 fs.writeFileSync('./openai.json', JSON.stringify(data, null, 2));
 const data = <(Record<string, unknown> | string)[]>(

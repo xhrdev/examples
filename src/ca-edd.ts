@@ -305,7 +305,7 @@ const startSolverSession = (sessionData: {
   currentWs.addEventListener('message', async (event: MessageEvent) => {
     if (closing || currentWs !== ws) return; // Ignore messages from superseded sessions
 
-    const msg = <SolverMessage>JSON.parse(event.data as string);
+    const msg = JSON.parse(event.data as string) as SolverMessage;
 
     switch (msg.type) {
       case 'error': {
