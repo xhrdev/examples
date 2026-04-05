@@ -37,7 +37,7 @@
   "devDependencies": {
     "@commitlint/cli": "20.5.0",
     "@commitlint/config-angular": "20.5.0",
-    "@skilbjo/config-rc": "1.0.42",
+    "@skilbjo/config-rc": "1.0.44",
     "@tsconfig/node22": "22.0.5",
     "@types/node": "25.5.0",
     "@types/tough-cookie": "4.0.5",
