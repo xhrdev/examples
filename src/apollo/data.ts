@@ -12,7 +12,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import { createCookieAgent } from 'http-cookie-agent/http';
 import * as dotenv from 'dotenv';
 
-import { createJar, proxyUrl, xhrdevCa } from '@src/utils';
+import { createJar, proxyUrl, xhrdevCa } from '#src/utils.js';
 
 wrapper(axios);
 dotenv.config();

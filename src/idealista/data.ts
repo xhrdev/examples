@@ -13,7 +13,7 @@ import { createCookieAgent } from 'http-cookie-agent/http';
 import * as dotenv from 'dotenv';
 import * as cheerio from 'cheerio';
 
-import { proxyUrl, xhrdevCa } from '@src/utils';
+import { proxyUrl, xhrdevCa } from '#src/utils.js';
 
 // Enable cookie support
 wrapper(axios);

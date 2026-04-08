@@ -17,7 +17,7 @@ import {
   proxyUrl,
   stringifyCookiesFromJar,
   xhrdevCa,
-} from '@src/utils';
+} from '#src/utils.js';
 
 wrapper(axios);
 dotenv.config();

@@ -15,7 +15,7 @@ import * as dotenv from 'dotenv';
 import * as cheerio from 'cheerio';
 /* eslint-enable @typescript-eslint/no-unused-vars */
 
-import { proxyUrl, xhrdevCa } from '@src/utils';
+import { proxyUrl, xhrdevCa } from '#src/utils.js';
 
 wrapper(axios);
 dotenv.config();

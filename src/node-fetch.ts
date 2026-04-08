@@ -10,7 +10,7 @@ import { default as fetchCookie } from 'fetch-cookie';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import * as dotenv from 'dotenv';
 
-import { proxyUrl, xhrdevCa } from '@src/utils';
+import { proxyUrl, xhrdevCa } from '#src/utils.js';
 
 dotenv.config();
 

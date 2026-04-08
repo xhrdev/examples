@@ -8,7 +8,7 @@ import { chromium } from 'playwright';
 import type { Page } from 'playwright';
 import * as dotenv from 'dotenv';
 
-import { blockClientScripts, proxyUrl, sleep } from '@src/utils';
+import { blockClientScripts, proxyUrl, sleep } from '#src/utils.js';
 
 dotenv.config();
 

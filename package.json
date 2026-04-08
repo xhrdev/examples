@@ -7,18 +7,28 @@
     "url": "git+https://github.com/xhrdev/examples.git"
   },
   "type": "module",
+  "imports": {
+    "#src/*.js": {
+      "node": "./src/*.ts",
+      "import": "./dist/*.js",
+      "types": "./src/*.ts"
+    },
+    "#test/*.js": {
+      "node": "./test/*.ts"
+    }
+  },
   "scripts": {
     "postinstall": "npx playwright install --with-deps chrome",
     "depcheck": "depcheck",
     "eslint": "eslint .",
-    "exec": "tsx",
-    "repl": "tsx test/repl.ts",
-    "build": "tspc -p tsconfig.json",
+    "exec": "node",
+    "repl": "node test/repl.manual.ts",
+    "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
-    "tsx": "tsx",
-    "playwright": "NODE_EXTRA_CA_CERTS=./xhrdev.pem tsx src/playwright.ts",
-    "puppeteer": "tsx src/puppeteer.ts",
+    "test": "node --test",
+    "playwright": "NODE_EXTRA_CA_CERTS=./xhrdev.pem node src/playwright.ts",
+    "puppeteer": "node src/puppeteer.ts",
     "p": "npm run playwright",
     "prepare": "husky"
   },
@@ -37,7 +47,7 @@
   "devDependencies": {
     "@commitlint/cli": "20.5.0",
     "@commitlint/config-angular": "20.5.0",
-    "@skilbjo/config-rc": "1.0.44",
+    "@skilbjo/config-rc": "1.0.46",
     "@tsconfig/node22": "22.0.5",
     "@types/node": "25.5.0",
     "@types/tough-cookie": "4.0.5",
@@ -52,10 +62,7 @@
     "nodemon": "3.1.14",
     "playwright": "1.59.1",
     "puppeteer": "24.40.0",
-    "ts-patch": "3.3.0",
-    "tsx": "4.21.0",
     "typescript": "6.0.2",
-    "typescript-transform-paths": "3.5.6",
     "undici": "7.24.7"
   },
   "commitlint": {
@@ -64,6 +71,6 @@
     ]
   },
   "engines": {
-    "node": ">=22.4.0"
+    "node": ">=22.22.0"
   }
 }

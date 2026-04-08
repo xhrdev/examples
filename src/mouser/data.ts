@@ -13,7 +13,7 @@ import * as dotenv from 'dotenv';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import * as cheerio from 'cheerio'; // to parse html response
 
-import { proxyUrl, xhrdevCa } from '@src/utils';
+import { proxyUrl, xhrdevCa } from '#src/utils.js';
 
 wrapper(axios);
 dotenv.config();

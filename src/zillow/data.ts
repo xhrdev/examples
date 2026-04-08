@@ -14,7 +14,7 @@ import * as dotenv from 'dotenv';
 
 import * as cheerio from 'cheerio'; // to parse html response
 
-import { proxyUrl, xhrdevCa } from '@src/utils';
+import { proxyUrl, xhrdevCa } from '#src/utils.js';
 
 wrapper(axios);
 dotenv.config();

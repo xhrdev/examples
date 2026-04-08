@@ -39,6 +39,16 @@ target/build:
 	mkdir -p $(@D) && touch $@
 .PHONY: build
 
+test: | install target/test
+target/test:
+ifeq ($(is_ci), true)
+	node --test --experimental-test-module-mocks --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=target/lcov.info test/**/*.test.ts
+else
+	npm test
+endif
+	mkdir -p $(@D) && touch $@
+.PHONY: test
+
 # --- ci
-ci: | install lint build
+ci: | install lint build test
 .PHONY: ci
