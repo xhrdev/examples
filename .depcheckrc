@@ -12,12 +12,8 @@ ignores: [
 
   '@commitlint/cli',
   '@commitlint/config-angular',
-  '@jest/globals',
   '@skilbjo/config-rc',
-  '@skilbjo/logger',
-  'dpecheck',
   'husky',
-  'extensionless',
 
   'cheerio',
 
