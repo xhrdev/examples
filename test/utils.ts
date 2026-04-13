@@ -19,4 +19,4 @@ const __filename = (meta: ImportMeta): string => fileURLToPath(meta.url);
  */
 const dirname = (meta: ImportMeta): string => pathDirname(__filename(meta));
 
-export const __dirname = dirname(import.meta);
+export const __dirname: string = dirname(import.meta);

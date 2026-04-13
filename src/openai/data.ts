@@ -47,7 +47,7 @@ const s = $('script').eq(5).html();
 if (!s) throw new Error('no script');
 const match = s.match(/enqueue\((["'`])(.+?)\1\)/s);
 if (!match) throw new Error('JSON string not found');
-let jsonString = match[2];
+let jsonString = match[2] ?? '';
 jsonString = jsonString.replace(/\\\\/g, '\\').replace(/\\"/g, '"');
 const lastBracket = Math.max(
   jsonString.lastIndexOf(']'),

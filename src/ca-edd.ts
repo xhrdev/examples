@@ -84,20 +84,20 @@ const extractAkamaiScriptUrl = (
   // Pattern 1: akam pixel tag
   const akamPixelRe = /akam\/13.*?top:\s?-999px.*?src="(.*?)"/gm;
   let match = akamPixelRe.exec(html);
-  if (match) return new URL(match[1], baseUrl).href;
+  if (match) return new URL(match[1] ?? '', baseUrl).href;
 
   // Pattern 2: Long random-looking path
   const longPathRe =
     // eslint-disable-next-line security/detect-unsafe-regex
     /<script[^>]+src=["']((?:\/[a-zA-Z0-9\-_]+){5,10}(?:\?v=[^"']*)?)["']/im;
   match = longPathRe.exec(html);
-  if (match) return new URL(match[1], baseUrl).href;
+  if (match) return new URL(match[1] ?? '', baseUrl).href;
 
   // Pattern 3: Known Akamai keywords
   const knownKeywordRe =
     /<script[^>]+src=["']([^"']*\/(?:akam|_abck|bm-)[^"']+)["']/im;
   match = knownKeywordRe.exec(html);
-  if (match) return new URL(match[1], baseUrl).href;
+  if (match) return new URL(match[1] ?? '', baseUrl).href;
 
   return null;
 };
@@ -131,10 +131,11 @@ const parsePlaywrightProxy = (raw: string): null | PlaywrightProxy => {
       /-session-\d+-/,
       `-session-${sessionId}-`
     ) || undefined;
+  const password = decodeURIComponent(parsed.password || '') || undefined;
   return {
-    password: decodeURIComponent(parsed.password || '') || undefined,
+    ...(password !== undefined ? { password } : {}),
     server,
-    username,
+    ...(username !== undefined ? { username } : {}),
   };
 };
 
@@ -188,7 +189,7 @@ const fetchAkamaiScriptSource = async (
   for (const [url, source] of capturedScripts) {
     if (
       url === akamaiScriptUrl ||
-      url.startsWith(akamaiScriptUrl.split('?')[0])
+      url.startsWith(akamaiScriptUrl.split('?')[0] ?? akamaiScriptUrl)
     )
       return source;
   }
@@ -441,6 +442,7 @@ const startSolverSession = (sessionData: {
 // Main
 // ---------------------------------------------------------------------------
 
+const parsedProxy = parsePlaywrightProxy(proxy);
 const browser = await chromium.launch({
   args: [
     '--disable-blink-features=AutomationControlled',
@@ -449,7 +451,7 @@ const browser = await chromium.launch({
   ],
   channel: 'chrome',
   headless: false,
-  proxy: parsePlaywrightProxy(proxy) ?? undefined,
+  ...(parsedProxy !== null ? { proxy: parsedProxy } : {}),
 });
 const context: BrowserContext = await browser.newContext({});
 const page: Page = await context.newPage();

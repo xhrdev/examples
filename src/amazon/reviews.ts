@@ -85,8 +85,8 @@ const parseReviews = (html: string): Review[] => {
         .text()
         .match(/^Reviewed in the (.+?) on (.+)$/);
       if (match) {
-        country = match[1];
-        date = match[2];
+        country = match[1] ?? '';
+        date = match[2] ?? '';
       }
 
       /* eslint-disable @typescript-eslint/no-non-null-assertion */
@@ -177,7 +177,9 @@ const ajaxReviews = async ({
     url: `https://www.amazon.com/hz/reviews-render/ajax/reviews/get/ref=cm_cr_getr_d_paging_btm_next_${pageNum}`,
   });
 
-  return JSON.parse(amazonjsonui.split('\n').filter((_) => _ !== '&&&')[6])[2];
+  return JSON.parse(
+    amazonjsonui.split('\n').filter((_) => _ !== '&&&')[6] ?? ''
+  )[2];
 };
 
 const main = async () => {
@@ -197,7 +199,7 @@ const main = async () => {
     .text()
     .trim()
     .match(/(\d[\d,]*)\s+customer reviews/)?.[1]
-    .replace(/,/g, '');
+    ?.replace(/,/g, '');
   if (!totalReviews) throw new Error('no reviews?');
 
   const totalPages = Math.ceil(

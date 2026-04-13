@@ -8,7 +8,9 @@ export type Cookies = SerializedCookie[];
 
 export const proxyUrl = 'https://magic.xhr.dev';
 // export const proxyUrl = 'http://localhost:8001'; // for when @skilbjo is testing
-export const xhrdevCa = readFileSync(new URL('../xhrdev.pem', import.meta.url));
+export const xhrdevCa: Buffer = readFileSync(
+  new URL('../xhrdev.pem', import.meta.url)
+);
 
 export const getCsrfCookieFromJar = ({
   cookieName,
@@ -18,8 +20,8 @@ export const getCsrfCookieFromJar = ({
   jar: CookieJar;
 }): SerializedCookie | undefined =>
   jar
-    .serializeSync()!
-    .cookies // transform cookies from jar->puppeteer format, since data portion is implemented in pupppeteer
+    .serializeSync()
+    ?.cookies // transform cookies from jar->puppeteer format, since data portion is implemented in pupppeteer
     .find(({ key }) => key === cookieName);
 
 const getJarFromCookies = ({ cookies }: { cookies: Cookies }): CookieJar => {
@@ -69,7 +71,7 @@ const stringifyCookies = ({ cookies }: { cookies: Cookies }) =>
 
 export const stringifyCookiesFromJar = ({ jar }: { jar: CookieJar }): string =>
   stringifyCookies({
-    cookies: jar.serializeSync()!.cookies,
+    cookies: jar.serializeSync()?.cookies ?? [],
   });
 
 /**
@@ -87,7 +89,15 @@ export const parseCookieString = ({
 }: {
   cookieStr: string;
   domain: string;
-}) =>
+}): {
+  domain: string;
+  httpOnly: boolean;
+  name: string | undefined;
+  path: string;
+  sameSite: 'Lax';
+  secure: boolean;
+  value: string;
+}[] =>
   cookieStr.split(';').map((cookie) => {
     const [name, ...rest] = cookie.trim().split('=');
     return {
@@ -101,7 +111,10 @@ export const parseCookieString = ({
     };
   });
 
-export const blockClientScripts = async (route: Route, request: Request) => {
+export const blockClientScripts = async (
+  route: Route,
+  request: Request
+): Promise<void> => {
   const blockPatterns = [
     'captcha',
     'tags', // datadome
@@ -117,5 +130,5 @@ export const blockClientScripts = async (route: Route, request: Request) => {
   else await route.continue();
 };
 
-export const sleep = async (ms: number) =>
+export const sleep = async (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));

@@ -8,8 +8,6 @@ if (!process.env['NODE_TEST_CONTEXT']) {
   const fixturesDir = `${__dirname}/fixtures`;
   const html = fs.readFileSync(`${fixturesDir}/example.html`, 'utf-8');
   const $ = cheerio.load(html);
-
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
   (async () => {
     const response = $('#cm-cr-dp-review-list li').text();
 

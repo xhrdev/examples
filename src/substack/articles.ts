@@ -81,7 +81,9 @@ const main = async () => {
   let data = null;
   if (dataMatch && dataMatch.length) {
     const [, dataStr] = dataMatch;
-    data = JSON.parse(dataStr.replace(/\\"/g, '"').replace(/\\\\/g, '\\')); // unescape it
+    data = JSON.parse(
+      (dataStr ?? '').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+    ); // unescape it
   }
 
   console.log({ data });
