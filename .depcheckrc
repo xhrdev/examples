@@ -3,7 +3,6 @@ ignores: [
   '#test/*',
   'eslint-import-resolver-typescript',
 
-  '@tsconfig/node22',
   '@tsconfig/node24',
   '@typescript-eslint/eslint-plugin',
   '@typescript-eslint/parser',

@@ -14,7 +14,7 @@
     "eslint": "eslint .",
     "exec": "node",
     "repl": "node test/repl.manual.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsgo -p tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "test": "node --test",
@@ -68,15 +68,5 @@
   },
   "engines": {
     "node": ">=24.14.1"
-  },
-  "depcheck": {
-    "ignores": [
-      "@typescript/native-preview",
-      "@commitlint/cli",
-      "@commitlint/config-angular",
-      "@tsconfig/node24",
-      "nodemon",
-      "playwright-core"
-    ]
   }
 }
