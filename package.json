@@ -48,8 +48,8 @@
     "nodemon": "3.1.14",
     "playwright": "1.59.1",
     "puppeteer": "24.40.0",
-    "typescript": "6.0.2",
-    "undici": "7.24.7"
+    "undici": "7.24.7",
+    "@typescript/native-preview": "7.0.0-dev.20260423.1"
   },
   "imports": {
     "#src/*.js": {
@@ -68,5 +68,15 @@
   },
   "engines": {
     "node": ">=24.14.1"
+  },
+  "depcheck": {
+    "ignores": [
+      "@typescript/native-preview",
+      "@commitlint/cli",
+      "@commitlint/config-angular",
+      "@tsconfig/node24",
+      "nodemon",
+      "playwright-core"
+    ]
   }
 }
