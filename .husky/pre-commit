@@ -1,2 +1,3 @@
+gitleaks protect --staged -v
 make clean
 make ci
