@@ -11,7 +11,8 @@ defaults:
 
 jobs:
   make-ci:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
+    # runs-on: ubuntu-24.04-arm # not until q2 2026: https://blog.chromium.org/2026/03/bringing-chrome-to-arm64-linux-devices.html
     timeout-minutes: 6
     permissions:
       pull-requests: write
