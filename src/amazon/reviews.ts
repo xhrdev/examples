@@ -207,10 +207,8 @@ const main = async () => {
   ); // if `totalReviews` is `473`, this returns 480
 
   let pageNum = 1;
-  let reviews: Review[] = [];
-
   let page = await ajaxReviews({ ajaxHeaders, asin, pageNum });
-  reviews = parseReviews(page);
+  let reviews: Review[] = parseReviews(page);
   pageNum += 1;
 
   while (pageNum <= totalPages) {
