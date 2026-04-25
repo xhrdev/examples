@@ -11,8 +11,8 @@ defaults:
 
 jobs:
   make-ci:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 6
     permissions:
       pull-requests: write
       contents: write

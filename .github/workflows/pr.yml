@@ -11,8 +11,8 @@ defaults:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 6
     permissions:
       pull-requests: write
       contents: read
@@ -54,13 +54,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # keep it as `secrets.GITHUB_TOKEN` as repo is public and this token has limited privs
 
   dependabot-approve-and-automerge:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     needs: build-and-test
     timeout-minutes: 2
     permissions:
       pull-requests: write
       contents: write
-
     if: github.actor == 'dependabot[bot]'
 
     steps:

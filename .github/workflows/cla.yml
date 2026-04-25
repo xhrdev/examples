@@ -11,7 +11,8 @@ on:
 
 jobs:
   CLAAssistant:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
+    timeout-minutes: 2
     if: github.event_name == 'issue_comment' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
     permissions:
       contents: read # only need read access for CLA signatures
