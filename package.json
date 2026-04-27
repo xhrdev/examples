@@ -42,7 +42,7 @@
     "@tsconfig/node24": "24.0.4",
     "@types/node": "25.6.0",
     "@types/tough-cookie": "4.0.5",
-    "@typescript/native-preview": "7.0.0-dev.20260426.1",
+    "typescript": "npm:@typescript/native-preview@7.0.0-dev.20260426.1",
     "cheerio": "1.2.0",
     "depcheck": "1.4.7",
     "eslint": "10.2.1",
