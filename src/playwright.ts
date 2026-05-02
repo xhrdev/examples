@@ -6,11 +6,7 @@ NODE_EXTRA_CA_CERTS=./xhrdev.pem npx tsx src/playwright.ts
 */
 import { chromium } from 'playwright';
 import type { Page } from 'playwright';
-import * as dotenv from 'dotenv';
-
 import { blockClientScripts, proxyUrl, sleep } from '#src/utils.js';
-
-dotenv.config();
 
 type PageGotoOptions = Parameters<Page['goto']>[1];
 

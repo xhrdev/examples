@@ -4,12 +4,9 @@
 npm run tsx src/native-fetch.ts
 
  */
-import * as dotenv from 'dotenv';
 import { fetch, ProxyAgent } from 'undici';
 
 import { proxyUrl, xhrdevCa } from '#src/utils.js';
-
-dotenv.config();
 
 const xhrApiKey = process.env.XHR_API_KEY;
 if (!xhrApiKey) throw new Error('Set XHR_API_KEY in .env file');

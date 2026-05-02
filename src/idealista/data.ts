@@ -10,14 +10,12 @@ import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { createCookieAgent } from 'http-cookie-agent/http';
-import * as dotenv from 'dotenv';
 import * as cheerio from 'cheerio';
 
 import { proxyUrl, xhrdevCa } from '#src/utils.js';
 
 // Enable cookie support
 wrapper(axios);
-dotenv.config();
 
 const xhrApiKey = process.env.XHR_API_KEY;
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');

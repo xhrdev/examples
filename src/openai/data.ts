@@ -11,13 +11,11 @@ import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { createCookieAgent } from 'http-cookie-agent/http';
-import * as dotenv from 'dotenv';
 import * as cheerio from 'cheerio';
 
 import { proxyUrl, xhrdevCa } from '#src/utils.js';
 
 wrapper(axios);
-dotenv.config();
 
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
 const jar = new CookieJar();

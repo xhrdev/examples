@@ -6,9 +6,6 @@ npx tsx src/ca-edd.ts
 */
 import { chromium } from 'playwright-core';
 import type { BrowserContext, Page } from 'playwright-core';
-import * as dotenv from 'dotenv';
-
-dotenv.config();
 
 const url = 'https://eddservices.edd.ca.gov/tap/secure/eservices';
 const solver = `ws://${process.env.host}:3000/akamai/session`;

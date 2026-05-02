@@ -6,10 +6,6 @@ npx tsx src/puppeteer.ts
 */
 import puppeteer from 'puppeteer';
 import type { Page } from 'puppeteer';
-import * as dotenv from 'dotenv';
-
-dotenv.config();
-
 // Usage
 
 type PageGotoOptions = Parameters<Page['goto']>[1];
