@@ -84,24 +84,24 @@ isolated.
 
 ```bash
 # build
-docker build -t xhrdev-examples .
+docker build -t examples .
 
 # run — ca-edd (requires username + password)
 docker run --rm \
-  --name xhrdev-examples \
+  --name examples \
   -e host=<solver-ip> \
   -e proxy=<proxy-url> \
   -e username=<edd-username> \
   -e password=<edd-password> \
-  xhrdev-examples \
+  examples \
   node src/maiaki/loop.ts --site=ca-edd --headless --iterations=200 --concurrency=20
 
 # run — comcast
 docker run --rm \
-  --name xhrdev-examples \
+  --name examples \
   -e host=<solver-ip> \
   -e proxy=<proxy-url> \
-  xhrdev-examples \
+  examples \
   node src/maiaki/loop.ts --site=comcast --headless --iterations=200 --concurrency=20
 ```
 
@@ -111,10 +111,10 @@ omit `--headless` to see the browser:
 
 ```bash
 docker run --rm \
-  --name xhrdev-examples \
+  --name examples \
   -e host=<solver-ip> \
   -e proxy=<proxy-url> \
-  xhrdev-examples \
+  examples \
   node src/maiaki/loop.ts --site=comcast --iterations=5 --concurrency=1
 ```
 

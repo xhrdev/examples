@@ -54,6 +54,28 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # keep it as `secrets.GITHUB_TOKEN` as repo is public and this token has limited privs
 
+  docker-build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 8
+    needs:
+      - build-and-test
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          tags: examples
+
   dependabot-approve-and-automerge:
     runs-on: ubuntu-slim
     needs: build-and-test
