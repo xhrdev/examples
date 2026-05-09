@@ -4,9 +4,11 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 
-RUN npm ci --ignore-scripts \
-    && npx playwright install --with-deps chromium \
-    && ln -s /root/.cache/ms-playwright/chromium-*/chrome-linux/chrome /usr/local/bin/playwright-chrome
+RUN npm ci --ignore-scripts
+
+RUN npx playwright install --with-deps chromium
+
+RUN ln -s /root/.cache/ms-playwright/chromium-*/chrome-linux/chrome /usr/local/bin/playwright-chrome
 
 COPY src/maiaki/ src/maiaki/
 
