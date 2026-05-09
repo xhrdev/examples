@@ -14,7 +14,7 @@ import { createJar, proxyUrl, xhrdevCa } from '#src/utils.js';
 
 wrapper(axios);
 
-const xhrApiKey = process.env.XHR_API_KEY;
+const xhrApiKey = process.env['XHR_API_KEY'];
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
 
 // paste from @src/apollo/auth script ====================== >

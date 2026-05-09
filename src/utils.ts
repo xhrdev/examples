@@ -33,7 +33,7 @@ const getJarFromCookies = ({ cookies }: { cookies: Cookies }): CookieJar => {
   cookies.forEach((cookie) =>
     jar.setCookieSync(
       Cookie.fromJSON(JSON.stringify(cookie))!,
-      `https://${cookie.domain}`
+      `https://${cookie['domain']}`
     )
   );
 
@@ -60,8 +60,8 @@ const stringifyCookies = ({ cookies }: { cookies: Cookies }) =>
   JSON.stringify(
     cookies.map((c) => ({
       ...c,
-      ...(c.expires && typeof c.expires === 'string'
-        ? { expires: new Date(c.expires).getTime() / 1000 }
+      ...(c['expires'] && typeof c['expires'] === 'string'
+        ? { expires: new Date(c['expires']).getTime() / 1000 }
         : null),
       name: c['key'],
     }))

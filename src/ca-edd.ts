@@ -8,10 +8,10 @@ import { chromium } from 'playwright-core';
 import type { BrowserContext, Page } from 'playwright-core';
 
 const url = 'https://eddservices.edd.ca.gov/tap/secure/eservices';
-const solver = `ws://${process.env.host}:3000/akamai/session`;
-const proxy = process.env.proxy;
-const eddUsername = process.env.username;
-const eddPassword = process.env.password;
+const solver = `ws://${process.env['host']}:3000/akamai/session`;
+const proxy = process.env['proxy'];
+const eddUsername = process.env['username'];
+const eddPassword = process.env['password'];
 let ws: null | WebSocket = null;
 const closing = false;
 let sessionPageUrl: null | string = null;
@@ -124,11 +124,11 @@ const parsePlaywrightProxy = (raw: string): null | PlaywrightProxy => {
   const server = `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`;
   const sessionId = Math.floor(Math.random() * 999) + 1;
   const username =
-    decodeURIComponent(parsed.username || '').replace(
+    decodeURIComponent(parsed['username'] || '').replace(
       /-session-\d+-/,
       `-session-${sessionId}-`
     ) || undefined;
-  const password = decodeURIComponent(parsed.password || '') || undefined;
+  const password = decodeURIComponent(parsed['password'] || '') || undefined;
   return {
     ...(password !== undefined ? { password } : {}),
     server,

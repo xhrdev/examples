@@ -19,11 +19,11 @@ import {
 
 wrapper(axios);
 
-const xhrApiKey = process.env.XHR_API_KEY;
+const xhrApiKey = process.env['XHR_API_KEY'];
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
 
-const email = process.env.APOLLO_EMAIL;
-const password = process.env.APOLLO_PASSWORD;
+const email = process.env['APOLLO_EMAIL'];
+const password = process.env['APOLLO_PASSWORD'];
 if (!email || !password) throw new Error('set email and password in .env file');
 
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);

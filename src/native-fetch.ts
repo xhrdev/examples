@@ -8,7 +8,7 @@ import { fetch, ProxyAgent } from 'undici';
 
 import { proxyUrl, xhrdevCa } from '#src/utils.js';
 
-const xhrApiKey = process.env.XHR_API_KEY;
+const xhrApiKey = process.env['XHR_API_KEY'];
 if (!xhrApiKey) throw new Error('Set XHR_API_KEY in .env file');
 
 const response = await fetch('https://core.cro.ie', {

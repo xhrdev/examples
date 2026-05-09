@@ -11,7 +11,7 @@ import type { Page } from 'puppeteer';
 type PageGotoOptions = Parameters<Page['goto']>[1];
 
 const proxyUrl = 'https://magic.xhr.dev';
-const xhrApiKey = process.env.XHR_API_KEY;
+const xhrApiKey = process.env['XHR_API_KEY'];
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
 
 const timeout = 10 * 1000;
@@ -25,8 +25,8 @@ const url = 'https://news.ycombinator.com';
 const browser = await puppeteer.launch({
   acceptInsecureCerts: true,
   args: [`--proxy-server=${proxyUrl}`],
-  devtools: !process.env.CI,
-  headless: !!process.env.CI,
+  devtools: !process.env['CI'],
+  headless: !!process.env['CI'],
 });
 
 const page = await browser.newPage();

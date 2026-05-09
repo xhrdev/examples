@@ -13,11 +13,11 @@ import { proxyUrl, xhrdevCa } from '#src/utils.js';
 
 wrapper(axios);
 
-const xhrApiKey = process.env.XHR_API_KEY;
+const xhrApiKey = process.env['XHR_API_KEY'];
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
 
-const email = process.env.AIRBNB_EMAIL;
-const password = process.env.AIRBNB_PASSWORD;
+const email = process.env['AIRBNB_EMAIL'];
+const password = process.env['AIRBNB_PASSWORD'];
 console.log({ email, password });
 if (!email || !password) throw new Error('set email and password in .env file');
 

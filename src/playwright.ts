@@ -10,7 +10,7 @@ import { blockClientScripts, proxyUrl, sleep } from '#src/utils.js';
 
 type PageGotoOptions = Parameters<Page['goto']>[1];
 
-const xhrApiKey = process.env.XHR_API_KEY;
+const xhrApiKey = process.env['XHR_API_KEY'];
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
 
 const timeout = 30 * 1000;
@@ -25,8 +25,8 @@ const browser = await chromium.launch({
   args: ['--disable-blink-features=AutomationControlled'],
   channel: 'chrome',
   // @ts-expect-error playwright version 1.58.2 has broken LaunchOptions types for devtools
-  devtools: !process.env.CI,
-  headless: !!process.env.CI,
+  devtools: !process.env['CI'],
+  headless: !!process.env['CI'],
 });
 
 const context = await browser.newContext({

@@ -21,12 +21,12 @@ import {
 
 wrapper(axios);
 
-const xhrApiKey = process.env.XHR_API_KEY;
+const xhrApiKey = process.env['XHR_API_KEY'];
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
 
-const email = process.env.A3INNUVA_EMAIL;
-const password = process.env.A3INNUVA_PASSWORD;
-const mfaSecret = process.env.A3INNUVA_MFA_SECRET;
+const email = process.env['A3INNUVA_EMAIL'];
+const password = process.env['A3INNUVA_PASSWORD'];
+const mfaSecret = process.env['A3INNUVA_MFA_SECRET'];
 if (!email || !password || !mfaSecret)
   throw new Error('set email and password in .env file');
 

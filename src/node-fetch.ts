@@ -10,7 +10,7 @@ import { default as fetchCookie } from 'fetch-cookie';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { proxyUrl, xhrdevCa } from '#src/utils.js';
 
-const xhrApiKey = process.env.XHR_API_KEY;
+const xhrApiKey = process.env['XHR_API_KEY'];
 if (!xhrApiKey) throw new Error('Set XHR_API_KEY in .env file');
 
 // Create Cookie Jar and Fetch with Cookies

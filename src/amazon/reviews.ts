@@ -18,7 +18,7 @@ import { proxyUrl, xhrdevCa } from '#src/utils.js';
 
 wrapper(axios);
 
-const xhrApiKey = process.env.XHR_API_KEY;
+const xhrApiKey = process.env['XHR_API_KEY'];
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
 
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
@@ -32,7 +32,7 @@ httpsProxyCookieAgent.options.ca = xhrdevCa;
 //  - no cookies sent -> captcha challenge (xhrdev to add the auto bypass) (we have it)
 //   - not signed in: no reviews
 //   - signed in: success
-const amazonCookie = process.env.AMAZON_COOKIE;
+const amazonCookie = process.env['AMAZON_COOKIE'];
 if (!amazonCookie) throw new Error('set AMAZON_COOKIE in .env file');
 
 /* =>
