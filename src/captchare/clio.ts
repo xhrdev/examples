@@ -1,7 +1,7 @@
 /**
  * run this script:
 
-npm run tsx src/captchare/clio.ts
+node src/captchare/clio.ts
 
  */
 import * as qs from 'node:querystring';

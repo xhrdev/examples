@@ -1,7 +1,7 @@
 /**
  * Run this script:
 
-npx tsx src/puppeteer.ts
+node src/puppeteer.ts
 
 */
 import { launch } from 'puppeteer';

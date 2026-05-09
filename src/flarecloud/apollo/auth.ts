@@ -1,7 +1,7 @@
 /**
  * run this script:
 
-npm run tsx src/flarecloud/apollo/auth.ts
+node src/flarecloud/apollo/auth.ts
 
  */
 import axios from 'axios';

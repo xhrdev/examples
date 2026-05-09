@@ -42,12 +42,12 @@ curl -s https://docs.xhr.dev/xhrdev.pem -o xhrdev.pem
 run the relevant script:
 
 ```bash
-npx tsx src/flarecloud/apollo/auth.ts || npm run tsx src/flarecloud/apollo/auth.ts
+node src/flarecloud/apollo/auth.ts
 ```
 
 or:
 ```bash
-NODE_EXTRA_CA_CERTS=./xhrdev.pem npx tsx src/playwright.ts
+NODE_EXTRA_CA_CERTS=./xhrdev.pem node src/playwright.ts
 # or
 npm run playwright
 ```
@@ -56,7 +56,7 @@ npm run playwright
 not need to install the cert system-wide for this flow. You can still install
 and trust the cert globally if you prefer.
 
-## hot reload
+### hot reload
 
 add the relevant file to run in `dev-resources/watch-file`
 
@@ -76,26 +76,52 @@ then run:
 $ dev-resources/watch-file
 ```
 
-## sites
+## akamai load test (docker)
 
-[x] apollo
-[ ] walmart
-[ ] doordash
-
-### apollo
-
-example run:
+`src/maiaki/loop.ts` runs a site script repeatedly and reports pass/fail/error
+rates. The easiest way to run it at scale is via Docker so Chromium is fully
+isolated.
 
 ```bash
-npm run tsx src/flarecloud/apollo/auth
+# build
+docker build -t xhrdev-examples .
 
+# run — ca-edd (requires username + password)
+docker run --rm \
+  --name xhrdev-examples \
+  -e host=<solver-ip> \
+  -e proxy=<proxy-url> \
+  -e username=<edd-username> \
+  -e password=<edd-password> \
+  xhrdev-examples \
+  node src/maiaki/loop.ts --site=ca-edd --headless --iterations=200 --concurrency=20
 
-> @xhrdev/examples@0.0.1 tsx
-> tsx src/flarecloud/apollo/auth.ts
-{
-  cookies: '[{"key":"GCLB","value":"CLHD5Jvhl_-_bRAD","expires":1735200986,"domain":"app.apollo.io","path":"/","httpOnly":true,"hostOnly":true,"creation":"2024-12-26T08:06:27.696Z","lastAccessed":"2024-12-26T08:06:28.822Z","name":"GCLB"}, ...]',
-  csrf: 'Wy_LtdInp2ShCkMjJlbaT992AuZFzjx18fZFTdAEhp0mF2hBre-HH_oOzUG45iEVwAdz1EbcznFRYy1tc61fIg'
-}
-
-@Mac:examples $
+# run — comcast
+docker run --rm \
+  --name xhrdev-examples \
+  -e host=<solver-ip> \
+  -e proxy=<proxy-url> \
+  xhrdev-examples \
+  node src/maiaki/loop.ts --site=comcast --headless --iterations=200 --concurrency=20
 ```
+
+### headed mode (watch what it's doing)
+
+omit `--headless` to see the browser:
+
+```bash
+docker run --rm \
+  --name xhrdev-examples \
+  -e host=<solver-ip> \
+  -e proxy=<proxy-url> \
+  xhrdev-examples \
+  node src/maiaki/loop.ts --site=comcast --iterations=5 --concurrency=1
+```
+
+| flag | default | description |
+|---|---|---|
+| `--site` | `ca-edd` | which script to run (`ca-edd`, `comcast`) |
+| `--iterations` | `100` | total attempts |
+| `--concurrency` | `1` | parallel workers |
+| `--headless` | off | run browser headless |
+| `--quiet` | off | suppress per-attempt output |

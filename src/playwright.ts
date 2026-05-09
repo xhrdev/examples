@@ -1,7 +1,7 @@
 /**
  * run this script:
 
-NODE_EXTRA_CA_CERTS=./xhrdev.pem npx tsx src/playwright.ts
+NODE_EXTRA_CA_CERTS=./xhrdev.pem node src/playwright.ts
 
 */
 import { chromium } from 'playwright';
