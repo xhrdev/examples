@@ -1,0 +1,15 @@
+.git
+.github
+.husky
+.ruff_cache
+.vim
+.DS_Store
+.env
+.env.*
+node_modules
+venv
+.venv
+target
+dist
+coverage
+*.html
