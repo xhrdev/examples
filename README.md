@@ -42,7 +42,7 @@ curl -s https://docs.xhr.dev/xhrdev.pem -o xhrdev.pem
 run the relevant script:
 
 ```bash
-npx tsx src/apollo/auth.ts || npm run tsx src/apollo/auth.ts
+npx tsx src/flarecloud/apollo/auth.ts || npm run tsx src/flarecloud/apollo/auth.ts
 ```
 
 or:
@@ -65,7 +65,7 @@ add the relevant file to run in `dev-resources/watch-file`
 ```typescript
 ...
 
-file="src/apollo/auth.ts"
+file="src/flarecloud/apollo/auth.ts"
 
 ...
 ```
@@ -87,11 +87,11 @@ $ dev-resources/watch-file
 example run:
 
 ```bash
-npm run tsx src/apollo/auth
+npm run tsx src/flarecloud/apollo/auth
 
 
 > @xhrdev/examples@0.0.1 tsx
-> tsx src/apollo/auth.ts
+> tsx src/flarecloud/apollo/auth.ts
 {
   cookies: '[{"key":"GCLB","value":"CLHD5Jvhl_-_bRAD","expires":1735200986,"domain":"app.apollo.io","path":"/","httpOnly":true,"hostOnly":true,"creation":"2024-12-26T08:06:27.696Z","lastAccessed":"2024-12-26T08:06:28.822Z","name":"GCLB"}, ...]',
   csrf: 'Wy_LtdInp2ShCkMjJlbaT992AuZFzjx18fZFTdAEhp0mF2hBre-HH_oOzUG45iEVwAdz1EbcznFRYy1tc61fIg'

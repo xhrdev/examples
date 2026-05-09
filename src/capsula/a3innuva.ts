@@ -1,23 +1,16 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * run this script:
 
-npm run tsx src/clio/auth.ts
+npm run tsx src/capsula/a3innuva.ts
 
  */
-import * as qs from 'node:querystring';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { createCookieAgent } from 'http-cookie-agent/http';
-import {
-  getCsrfCookieFromJar,
-  proxyUrl,
-  stringifyCookiesFromJar,
-  xhrdevCa,
-} from '#src/utils.js';
+import { proxyUrl, xhrdevCa } from '#src/utils.js';
 
 wrapper(axios);
 

@@ -1,7 +1,7 @@
 /**
  * run this script:
 
-npm run tsx src/apollo/auth.ts
+npm run tsx src/custom/airbnb.ts
 
  */
 import axios from 'axios';
@@ -16,8 +16,8 @@ wrapper(axios);
 const xhrApiKey = process.env['XHR_API_KEY'];
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
 
-const email = process.env['LINKEDIN_EMAIL'];
-const password = process.env['LINKEDIN_PASSWORD'];
+const email = process.env['AIRBNB_EMAIL'];
+const password = process.env['AIRBNB_PASSWORD'];
 console.log({ email, password });
 if (!email || !password) throw new Error('set email and password in .env file');
 
@@ -33,7 +33,7 @@ await axios.request({
     'x-xhr-api-key': xhrApiKey,
   },
   httpsAgent: httpsProxyCookieAgent,
-  url: 'https://www.linkedin.com/login',
+  url: 'https://www.airbnb.com/login',
 });
 
 if (!jar.serializeSync()?.cookies.length) throw new Error('no cookies');

@@ -1,12 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * run this script:
 
-npm run tsx src/apollo/data.ts
+npm run tsx src/flarecloud/apollo/data.ts
 
  */
 import axios from 'axios';
-import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { createCookieAgent } from 'http-cookie-agent/http';
@@ -17,9 +15,9 @@ wrapper(axios);
 const xhrApiKey = process.env['XHR_API_KEY'];
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
 
-// paste from @src/apollo/auth script ====================== >
-const cookies = 'paste in from @src/apollo/auth script';
-const csrf = 'paste in from @src/apollo/auth script';
+// paste from @src/flarecloud/apollo/auth script ====================== >
+const cookies = 'paste in from @src/flarecloud/apollo/auth script';
+const csrf = 'paste in from @src/flarecloud/apollo/auth script';
 // end paste <==============================================
 
 if (!csrf || !cookies)

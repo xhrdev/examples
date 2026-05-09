@@ -1,12 +1,9 @@
 /**
  * run this script:
 
-npm run tsx src/substack/articles.ts
+npm run tsx src/custom/substack.ts
 
  */
-/// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import * as fs from 'node:fs';
-import { stringify } from 'node:querystring';
 import axios from 'axios';
 import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';

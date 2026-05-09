@@ -4,7 +4,7 @@
 npx tsx src/puppeteer.ts
 
 */
-import puppeteer from 'puppeteer';
+import { launch } from 'puppeteer';
 import type { Page } from 'puppeteer';
 // Usage
 
@@ -22,7 +22,7 @@ const pageGotoOptions: PageGotoOptions = {
 
 const url = 'https://news.ycombinator.com';
 
-const browser = await puppeteer.launch({
+const browser = await launch({
   acceptInsecureCerts: true,
   args: [`--proxy-server=${proxyUrl}`],
   devtools: !process.env['CI'],

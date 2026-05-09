@@ -1,7 +1,7 @@
 /**
  * run this script:
 
-npx tsx src/ca-edd.ts
+npx tsx src/maiaki/ca-edd.ts
 
 */
 import { chromium } from 'playwright-core';
@@ -22,21 +22,6 @@ if (!solver) throw new Error('set solver in .env file');
 if (!proxy) throw new Error('set proxy in .env file');
 if (!eddUsername) throw new Error('set username in .env file');
 if (!eddPassword) throw new Error('set password in .env file');
-
-// Chrome 146 macOS profile
-const PROFILE = {
-  chromeFullVersion: '146.0.7680.81',
-  screen: {
-    devicePixelRatio: 2,
-    height: 982,
-    innerHeight: 761,
-    innerWidth: 1200,
-    width: 1512,
-  },
-  timezone: 'America/New_York',
-  userAgent:
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
-};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -101,14 +86,14 @@ const extractAkamaiScriptUrl = (
 
 const isLikelyAkamaiScriptUrl = (url: string): boolean => {
   const pathname = new URL(url).pathname;
-  if (/^(\/[a-zA-Z0-9\-_]+){5,}$/.test(pathname)) return true;
+  const segments = pathname.split('/').filter(Boolean);
+  if (
+    segments.length >= 5 &&
+    segments.every((segment) => /^[a-zA-Z0-9_-]+$/.test(segment))
+  )
+    return true;
   if (/\/(?:akam|_abck|bm-)/.test(pathname)) return true;
   return false;
-};
-
-const getAbckStatus = (value: string | undefined): null | string => {
-  if (!value) return null;
-  return value.split('~')[1] ?? null;
 };
 
 const log = (msg: string, ...extra: unknown[]): void =>
@@ -176,32 +161,6 @@ const addRouteInterceptor = async (page: Page) =>
       // route already handled
     }
   });
-
-const fetchAkamaiScriptSource = async (
-  akamaiScriptUrl: string,
-  page: Page
-): Promise<null | string> => {
-  log(`Detected Akamai script URL: ${akamaiScriptUrl}`);
-
-  for (const [url, source] of capturedScripts) {
-    if (
-      url === akamaiScriptUrl ||
-      url.startsWith(akamaiScriptUrl.split('?')[0] ?? akamaiScriptUrl)
-    )
-      return source;
-  }
-
-  log('Script not captured via route, fetching directly...');
-  try {
-    return await page.evaluate(async (url: string) => {
-      const res = await fetch(url);
-      return res.text();
-    }, akamaiScriptUrl);
-  } catch (e) {
-    log(`ERROR: Failed to fetch Akamai script: ${(e as Error).message}`);
-    return null;
-  }
-};
 
 const initSession = async (page: Page) => {
   await addRouteInterceptor(page);

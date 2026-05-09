@@ -1,11 +1,9 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * run this script:
 
 npm run tsx src/download-image.ts
 
  */
-import fs from 'node:fs';
 import assert from 'node:assert';
 import axios from 'axios';
 import { CookieJar } from 'tough-cookie';

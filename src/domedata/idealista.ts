@@ -1,10 +1,9 @@
 /**
  * run this script:
 
-npm run tsx src/idealista/data.ts
+npm run tsx src/domedata/idealista.ts
 
  */
-import * as fs from 'node:fs';
 import axios from 'axios';
 import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';

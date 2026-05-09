@@ -8,6 +8,7 @@ export type Cookies = SerializedCookie[];
 
 export const proxyUrl = 'https://magic.xhr.dev';
 // export const proxyUrl = 'http://localhost:8001'; // for when @skilbjo is testing
+// eslint-disable-next-line security/detect-non-literal-fs-filename
 export const xhrdevCa: Buffer = readFileSync(
   new URL('../xhrdev.pem', import.meta.url)
 );

@@ -1,8 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * run this script:
 
-npm run tsx src/apollo/auth.ts
+npm run tsx src/flarecloud/apollo/auth.ts
 
  */
 import axios from 'axios';
@@ -59,7 +58,7 @@ await axios.request({
 const csrf = getCsrfCookieFromJar({ cookieName: 'X-CSRF-TOKEN', jar })?.value;
 if (!csrf) throw new Error('no csrf');
 
-const { data: result } = await axios.request({
+await axios.request({
   data: JSON.stringify({
     cacheKey,
     email,

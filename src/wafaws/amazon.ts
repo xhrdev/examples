@@ -1,11 +1,9 @@
 /**
  * run this script:
 
-npm run tsx src/amazon/reviews.ts
+npm run tsx src/wafaws/amazon.ts
 
  */
-/// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import * as fs from 'node:fs';
 import { stringify } from 'node:querystring';
 import axios from 'axios';
 import { CookieJar } from 'tough-cookie';
@@ -108,19 +106,6 @@ const parseReviews = (html: string): Review[] => {
     });
 
   return reviews;
-};
-
-const productHtml = async (asin: string): Promise<string> => {
-  const { data: html } = await axios.request({
-    headers: {
-      cookie: amazonCookie,
-      'x-xhr-api-key': xhrApiKey,
-      'x-xhr-managed-proxy': true.toString(),
-    },
-    httpsAgent: httpsProxyCookieAgent,
-    url: `https://www.amazon.com/gp/aw/d/${asin}/`,
-  });
-  return html;
 };
 
 const reviewsHtml = async (asin: string): Promise<string> => {

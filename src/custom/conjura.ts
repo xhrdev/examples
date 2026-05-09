@@ -1,18 +1,14 @@
 /**
  * run this script:
 
-npm run tsx src/conjura/data.ts
+npm run tsx src/custom/conjura.ts
 
  */
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import * as fs from 'node:fs';
 import axios from 'axios';
 import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { createCookieAgent } from 'http-cookie-agent/http';
-import * as cheerio from 'cheerio';
-/* eslint-enable @typescript-eslint/no-unused-vars */
 
 import { proxyUrl, xhrdevCa } from '#src/utils.js';
 

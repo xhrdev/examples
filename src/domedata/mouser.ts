@@ -1,7 +1,7 @@
 /**
  * run this script:
 
-npm run tsx src/airbnb/auth.ts
+npm run tsx src/domedata/mouser.ts
 
  */
 import axios from 'axios';
@@ -9,17 +9,13 @@ import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { createCookieAgent } from 'http-cookie-agent/http';
+
 import { proxyUrl, xhrdevCa } from '#src/utils.js';
 
 wrapper(axios);
 
 const xhrApiKey = process.env['XHR_API_KEY'];
 if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
-
-const email = process.env['AIRBNB_EMAIL'];
-const password = process.env['AIRBNB_PASSWORD'];
-console.log({ email, password });
-if (!email || !password) throw new Error('set email and password in .env file');
 
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
 const jar = new CookieJar();
@@ -28,12 +24,15 @@ const httpsProxyCookieAgent = new HttpsProxyCookieAgent(proxyUrl, {
 });
 httpsProxyCookieAgent.options.ca = xhrdevCa;
 
-await axios.request({
+// can make this request or omit it, your choice
+const { data: html } = await axios.request({
   headers: {
     'x-xhr-api-key': xhrApiKey,
   },
   httpsAgent: httpsProxyCookieAgent,
-  url: 'https://www.airbnb.com/login',
+  url: 'https://www.mouser.com/',
 });
 
-if (!jar.serializeSync()?.cookies.length) throw new Error('no cookies');
+console.log(html);
+// has all clearance cookies, can be saved for future use
+console.log((jar.store as unknown as { idx: Record<string, string> }).idx);
