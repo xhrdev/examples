@@ -42,12 +42,12 @@ curl -s https://docs.xhr.dev/xhrdev.pem -o xhrdev.pem
 run the relevant script:
 
 ```bash
-node src/flarecloud/apollo/auth.ts
+node --env-file=.env src/flarecloud/apollo/auth.ts
 ```
 
 or:
 ```bash
-NODE_EXTRA_CA_CERTS=./xhrdev.pem node src/playwright.ts
+NODE_EXTRA_CA_CERTS=./xhrdev.pem node --env-file=.env src/playwright.ts
 # or
 npm run playwright
 ```
@@ -78,7 +78,7 @@ $ dev-resources/watch-file
 
 ## akamai load test (docker)
 
-`src/maiaki/loop.ts` runs a site script repeatedly and reports pass/fail/error
+`src/akmi/loop.ts` runs a site script repeatedly and reports pass/fail/error
 rates. The easiest way to run it at scale is via Docker so Chromium is fully
 isolated.
 
@@ -89,20 +89,16 @@ docker build -t examples .
 # run — ca-edd (requires username + password)
 docker run --rm \
   --name examples \
-  -e host=<solver-ip> \
-  -e proxy=<proxy-url> \
-  -e username=<edd-username> \
-  -e password=<edd-password> \
+  --env-file .env \
   examples \
-  node src/maiaki/loop.ts --site=ca-edd --headless --iterations=200 --concurrency=20
+  node --env-file=.env src/akmi/loop.ts --site=ca-edd --headless --iterations=200 --concurrency=20
 
 # run — comcast
 docker run --rm \
   --name examples \
-  -e host=<solver-ip> \
-  -e proxy=<proxy-url> \
+  --env-file .env \
   examples \
-  node src/maiaki/loop.ts --site=comcast --headless --iterations=200 --concurrency=20
+  node --env-file=.env src/akmi/loop.ts --site=comcast --headless --iterations=200 --concurrency=20
 ```
 
 ### headed mode (watch what it's doing)
@@ -112,10 +108,9 @@ omit `--headless` to see the browser:
 ```bash
 docker run --rm \
   --name examples \
-  -e host=<solver-ip> \
-  -e proxy=<proxy-url> \
+  --env-file .env \
   examples \
-  node src/maiaki/loop.ts --site=comcast --iterations=5 --concurrency=1
+  node src/akmi/loop.ts --site=comcast --iterations=5 --concurrency=1
 ```
 
 | flag | default | description |

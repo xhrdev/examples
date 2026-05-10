@@ -10,8 +10,8 @@ RUN npx playwright install --with-deps chromium
 
 RUN ln -s /root/.cache/ms-playwright/chromium-*/chrome-linux/chrome /usr/local/bin/playwright-chrome
 
-COPY src/maiaki/ src/maiaki/
+COPY src/akmi/ src/akmi/
 
 ENV CHROME_PATH=/usr/local/bin/playwright-chrome
 
-CMD ["node", "src/maiaki/loop.ts", "--headless", "--iterations=10"]
+CMD ["node", "src/akmi/loop.ts", "--headless", "--iterations=10"]
