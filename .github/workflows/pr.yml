@@ -20,9 +20,6 @@ jobs:
       actions: none
       id-token: none
       packages: none
-    env:
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-
     if: github.event.pull_request.head.repo.full_name == github.repository # Security: Only run on PRs from the same repository
 
     steps:

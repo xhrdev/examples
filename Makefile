@@ -16,8 +16,7 @@ clean:
 install: | target/install
 target/install:
 ifeq ($(is_ci), true)
-	npm ci
-	# npx playwright install chromium
+	npm ci --ignore-scripts
 else
 	npm install
 endif
