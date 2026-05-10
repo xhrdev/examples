@@ -75,6 +75,8 @@ jobs:
           context: .
           push: false
           tags: examples
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   dependabot-approve-and-automerge:
     runs-on: ubuntu-slim

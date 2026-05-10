@@ -6,12 +6,13 @@ COPY package.json package-lock.json ./
 
 RUN npm ci --ignore-scripts
 
-RUN npx playwright install --with-deps chromium
-
-RUN ln -s /root/.cache/ms-playwright/chromium-*/chrome-linux/chrome /usr/local/bin/playwright-chrome
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends chromium && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY src/akmi/ src/akmi/
 
-ENV CHROME_PATH=/usr/local/bin/playwright-chrome
+ENV CHROME_PATH=/usr/bin/chromium
 
 CMD ["node", "src/akmi/loop.ts", "--headless", "--iterations=10"]
