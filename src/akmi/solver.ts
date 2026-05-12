@@ -115,35 +115,10 @@ export async function solveAkamai(
 ): Promise<void> {
   const { proxy, solverUrl, timeout = 120000, url } = opts;
   const context: BrowserContext = page.context();
+  const capturedDocs = new Map<string, { html: string; url: string }>();
   const capturedScripts = new Map<string, string>();
-  const sessions = new Map<string, { frame: Frame; ws: WebSocket }>();
+  const sessions = new Map<string, { frame: Frame | null; ws: WebSocket }>();
   let closing = false;
-
-  const routeHandler = async (route: Route) => {
-    const req = route.request();
-    if (req.resourceType() === 'script') {
-      try {
-        const resp = await route.fetch();
-        const body = await resp.text();
-        capturedScripts.set(req.url(), body);
-        if (isLikelyAkamaiScriptUrl(req.url()))
-          return await route.fulfill({
-            body: '/* blocked */',
-            contentType: 'application/javascript',
-            status: 200,
-          });
-        return await route.fulfill({ body, response: resp });
-      } catch {
-        /* fallthrough */
-      }
-    }
-    try {
-      await route.continue();
-    } catch {
-      /* already handled */
-    }
-  };
-  await page.route('**/*', routeHandler);
 
   return new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -172,11 +147,14 @@ export async function solveAkamai(
         scriptUrl: string;
         url: string;
       },
-      frame: Frame
+      frame: Frame | null
     ) => {
       const existing = sessions.get(origin);
-      if (existing?.ws.readyState === WebSocket.OPEN)
-        existing.ws.close(1000, 'New session');
+      if (existing?.ws.readyState === WebSocket.OPEN) {
+        log(`[${origin}] Session already open, skipping duplicate start`);
+        return;
+      }
+      if (existing) existing.ws.close(1000, 'New session');
 
       const ws = new WebSocket(solverUrl);
       sessions.set(origin, { frame, ws });
@@ -230,6 +208,7 @@ export async function solveAkamai(
           case 'submission': {
             const { body, headers: hdrs, id, method, url: subUrl } = msg;
             const cookieUrl = data.url;
+            const scriptOrigin = new URL(data.url).origin;
             log(
               `[${origin}] Submission ${id}: ${method} ${subUrl} (${typeof body === 'string' ? body.length : 0} bytes)`
             );
@@ -237,49 +216,69 @@ export async function solveAkamai(
             if (hdrs && typeof hdrs === 'object')
               Object.assign(xhrHeaders, hdrs);
             try {
-              const result = await frame.evaluate(
-                ({
-                  body,
-                  headers,
-                  method,
-                  url,
-                }: {
-                  body: string;
-                  headers: Record<string, string>;
-                  method: string;
-                  url: string;
-                }) =>
-                  new Promise<{ body: string; status: number }>((resolve) => {
-                    const xhr = new XMLHttpRequest();
-                    xhr.open(method, url, true);
-                    xhr.withCredentials = true;
-                    if (headers)
-                      for (const [n, v] of Object.entries(headers))
-                        xhr.setRequestHeader(n, v);
-                    xhr.onload = () =>
-                      resolve({ body: xhr.responseText, status: xhr.status });
-                    xhr.send(body);
-                  }),
-                {
-                  body: body ?? '',
-                  headers: xhrHeaders,
-                  method: method ?? 'POST',
-                  url: subUrl ?? '',
-                }
-              );
+              let resultStatus: number;
+              let resultBody: string;
+              if (frame !== null) {
+                const result = await frame.evaluate(
+                  ({
+                    body,
+                    headers,
+                    method,
+                    url,
+                  }: {
+                    body: string;
+                    headers: Record<string, string>;
+                    method: string;
+                    url: string;
+                  }) =>
+                    new Promise<{ body: string; status: number }>((resolve) => {
+                      const xhr = new XMLHttpRequest();
+                      xhr.open(method, url, true);
+                      xhr.withCredentials = true;
+                      if (headers)
+                        for (const [n, v] of Object.entries(headers))
+                          xhr.setRequestHeader(n, v);
+                      xhr.onload = () =>
+                        resolve({ body: xhr.responseText, status: xhr.status });
+                      xhr.send(body);
+                    }),
+                  {
+                    body: body ?? '',
+                    headers: xhrHeaders,
+                    method: method ?? 'POST',
+                    url: subUrl ?? '',
+                  }
+                );
+                resultStatus = result.status;
+                resultBody = result.body;
+              } else {
+                const submitUrl = subUrl ?? '';
+                const submitMethod = method ?? 'POST';
+                const resp = await context.request.fetch(submitUrl, {
+                  data: body ?? '',
+                  headers: {
+                    ...xhrHeaders,
+                    Origin: scriptOrigin,
+                    Referer: data.url,
+                  },
+                  method: submitMethod,
+                });
+                resultStatus = resp.status();
+                resultBody = await resp.text();
+              }
               const postCookies = cookiesToRecord(
                 await context.cookies(cookieUrl)
               );
               log(
-                `[${origin}] Submission ${id}: response ${result.status} (${result.body.length} bytes)`
+                `[${origin}] Submission ${id}: response ${resultStatus} (${resultBody.length} bytes)`
               );
               if (ws.readyState === WebSocket.OPEN)
                 ws.send(
                   JSON.stringify({
-                    body: result.body,
+                    body: resultBody,
                     cookies: postCookies,
                     id,
-                    status: result.status,
+                    status: resultStatus,
                     type: 'submission_response',
                   })
                 );
@@ -314,6 +313,80 @@ export async function solveAkamai(
       });
     };
 
+    const prepAndStart = async (
+      origin: string,
+      cookieUrl: string,
+      scriptUrl: string,
+      script: string,
+      html: string,
+      frame: Frame | null
+    ): Promise<void> => {
+      const cookies = cookiesToRecord(await context.cookies(cookieUrl));
+      const sanitizedHtml = stripScripts(html);
+      log(
+        `[${origin}] Captured: script=${script.length}b html=${sanitizedHtml.length}b cookies=${Object.keys(cookies).length}`
+      );
+      startSession(
+        origin,
+        { cookies, html: sanitizedHtml, script, scriptUrl, url: cookieUrl },
+        frame
+      );
+    };
+
+    const routeHandler = async (route: Route) => {
+      const req = route.request();
+      if (req.resourceType() === 'document') {
+        try {
+          const resp = await route.fetch({ maxRedirects: 0 });
+          const ct = resp.headers()['content-type'] ?? '';
+          if (resp.ok() && ct.includes('text/html')) {
+            const html = await resp.text();
+            capturedDocs.set(new URL(req.url()).origin, {
+              html,
+              url: req.url(),
+            });
+            return await route.fulfill({ body: html, response: resp });
+          }
+          return await route.fulfill({ response: resp });
+        } catch {
+          /* fallthrough */
+        }
+      }
+      if (req.resourceType() === 'script') {
+        try {
+          const resp = await route.fetch({ maxRedirects: 0 });
+          const body = await resp.text();
+          capturedScripts.set(req.url(), body);
+          if (isLikelyAkamaiScriptUrl(req.url())) {
+            const scriptOrigin = new URL(req.url()).origin;
+            const doc = capturedDocs.get(scriptOrigin);
+            if (doc && !sessions.has(scriptOrigin))
+              await prepAndStart(
+                scriptOrigin,
+                doc.url,
+                req.url(),
+                body,
+                doc.html,
+                null
+              );
+            return await route.fulfill({
+              body: '/* blocked */',
+              contentType: 'application/javascript',
+              status: 200,
+            });
+          }
+          return await route.fulfill({ body, response: resp });
+        } catch {
+          /* fallthrough */
+        }
+      }
+      try {
+        await route.continue();
+      } catch {
+        /* already handled */
+      }
+    };
+
     const processFrame = async (frame: Frame) => {
       let html: string;
       let frameUrl: string;
@@ -345,21 +418,12 @@ export async function solveAkamai(
         return;
       }
 
-      const cookies = cookiesToRecord(await context.cookies(frameUrl));
-      const sanitizedHtml = stripScripts(html);
-      log(
-        `[${origin}] Captured: script=${scriptSource.length}b html=${sanitizedHtml.length}b cookies=${Object.keys(cookies).length}`
-      );
-
-      startSession(
+      await prepAndStart(
         origin,
-        {
-          cookies,
-          html: sanitizedHtml,
-          script: scriptSource,
-          scriptUrl,
-          url: frameUrl,
-        },
+        frameUrl,
+        scriptUrl,
+        scriptSource,
+        html,
         frame
       );
     };
@@ -371,9 +435,11 @@ export async function solveAkamai(
       const origin = new URL(newUrl).origin;
 
       const existing = sessions.get(origin);
-      if (existing?.ws.readyState === WebSocket.OPEN)
-        existing.ws.close(1000, 'Navigation');
-      sessions.delete(origin);
+      if (existing && existing.frame !== null) {
+        if (existing.ws.readyState === WebSocket.OPEN)
+          existing.ws.close(1000, 'Navigation');
+        sessions.delete(origin);
+      }
 
       try {
         await frame.waitForLoadState('domcontentloaded', { timeout: 15000 });
@@ -382,11 +448,15 @@ export async function solveAkamai(
         log(`Navigation handling error: ${(e as Error).message}`);
       }
     };
-
-    page.on('framenavigated', navHandler);
-
     page
-      .goto(url, { timeout: 30000, waitUntil: 'domcontentloaded' })
+      .route('**/*', routeHandler)
+      .then(() => {
+        page.on('framenavigated', navHandler);
+        return page.goto(url, {
+          timeout: 30000,
+          waitUntil: 'domcontentloaded',
+        });
+      })
       .then(() => processFrame(page.mainFrame()))
       .catch((e) => {
         clearTimeout(timer);
