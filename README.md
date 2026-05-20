@@ -76,47 +76,57 @@ then run:
 $ dev-resources/watch-file
 ```
 
-## akamai load test (docker)
+## load test (docker)
 
-`src/akmi/loop.ts` runs a site script repeatedly and reports pass/fail/error
-rates. The easiest way to run it at scale is via Docker so Chromium is fully
-isolated.
+`src/loadtest.ts` runs any script repeatedly with rotating proxy sessions and
+reports pass/fail/error rates. The `--script` flag takes a path relative to the
+project root (e.g. `src/xperimeter/zillow`, `src/akmi/ca-edd`). The easiest
+way to run it at scale is via Docker so Chromium is fully isolated.
 
 ```bash
 # build
 docker build -t examples .
 
-# run — ca-edd (requires username + password)
+# run — xperimeter/zillow
 docker run --rm \
   --name examples \
   --env-file .env \
   examples \
-  node --env-file=.env src/akmi/loop.ts --site=ca-edd --headless --iterations=200 --concurrency=20
+  node --env-file=.env src/loadtest.ts --script=src/xperimeter/zillow --iterations=50 --concurrency=5
 
-# run — comcast
+# run — akmi/ca-edd (requires username + password)
 docker run --rm \
   --name examples \
   --env-file .env \
   examples \
-  node --env-file=.env src/akmi/loop.ts --site=comcast --headless --iterations=200 --concurrency=20
+  node --env-file=.env src/loadtest.ts --script=src/akmi/ca-edd --headless --iterations=200 --concurrency=20
+
+# run — akmi/comcast
+docker run --rm \
+  --name examples \
+  --env-file .env \
+  examples \
+  node --env-file=.env src/loadtest.ts --script=src/akmi/comcast --headless --iterations=200 --concurrency=20
 ```
 
 ### headed mode (watch what it's doing)
 
-omit `--headless` to see the browser:
+omit `--headless` to see the browser (browser-based scripts only):
 
 ```bash
 docker run --rm \
   --name examples \
   --env-file .env \
   examples \
-  node src/akmi/loop.ts --site=comcast --iterations=5 --concurrency=1
+  node --env-file=.env src/loadtest.ts --script=src/akmi/comcast --iterations=5 --concurrency=1
 ```
 
 | flag | default | description |
 |---|---|---|
-| `--site` | `ca-edd` | which script to run (`ca-edd`, `comcast`) |
+| `--script` | `src/akmi/ca-edd` | script to run, as a path relative to project root |
 | `--iterations` | `100` | total attempts |
 | `--concurrency` | `1` | parallel workers |
-| `--headless` | off | run browser headless |
+| `--headless` | off | pass `--headless` through to the child script |
+| `--proxy` | `$proxy` | proxy URL with optional session rotation |
+| `--host` | `$host` | host/IP forwarded to child as `host` env var |
 | `--quiet` | off | suppress per-attempt output |

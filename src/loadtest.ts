@@ -1,10 +1,11 @@
 /**
- * Load-test runner: spawns ca-edd.ts or comcast.ts repeatedly with rotating
+ * Load-test runner: spawns any src/ script repeatedly with rotating
  * proxy sessions and reports pass/fail/error rates.
  *
  * run this script:
 
-node --env-file=.env src/akmi/loop.ts --site=ca-edd --headless --iterations=50 --concurrency=5
+node --env-file=.env src/loadtest.ts --script=src/akmi/ca-edd --headless --iterations=50 --concurrency=5
+node --env-file=.env src/loadtest.ts --script=src/xperimeter/zillow --iterations=20 --concurrency=3
 
 */
 import { spawn } from 'node:child_process';
@@ -15,7 +16,7 @@ const args = process.argv.slice(2);
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log(
-    'Usage: node --env-file=.env src/akmi/loop.ts [--site=ca-edd|comcast] [--iterations=N] [--concurrency=N] [--headless] [--proxy=<url>] [--host=<ip>] [--quiet]'
+    'Usage: node --env-file=.env src/loadtest.ts [--script=src/<dir>/<script>] [--iterations=N] [--concurrency=N] [--headless] [--proxy=<url>] [--host=<ip>] [--quiet]'
   );
   process.exit(0);
 }
@@ -32,7 +33,7 @@ const HOST = readFlag('--host');
 const HEADLESS = args.includes('--headless');
 const QUIET = args.includes('--quiet');
 const PROXY_RAW = readFlag('--proxy') || process.env['proxy'] || '';
-const SITE = readFlag('--site') || 'ca-edd';
+const SCRIPT = readFlag('--script') || 'src/akmi/ca-edd';
 
 // ---------------------------------------------------------------------------
 // Session rotation — replaces "-session-<N>-" in the proxy username
@@ -65,8 +66,11 @@ function buildProxyWithSession(rawProxy: string, sessionId: number): string {
 // Runner
 // ---------------------------------------------------------------------------
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SCRIPT_PATH = path.join(__dirname, `${SITE}.ts`);
+const PROJECT_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..'
+);
+const SCRIPT_PATH = path.join(PROJECT_ROOT, `${SCRIPT}.ts`);
 
 function runIteration(i: number): Promise<{ code: number; elapsed: string }> {
   return new Promise((resolve) => {
@@ -136,15 +140,13 @@ function runIteration(i: number): Promise<{ code: number; elapsed: string }> {
 // Main
 // ---------------------------------------------------------------------------
 
-const solverHost = HOST || process.env['host'] || '(not set)';
-
-console.log(`\n=== Akamai Load Test ===`);
-console.log(`Site:        ${SITE}`);
+console.log(`\n=== Load Test ===`);
+console.log(`Script:      ${SCRIPT}`);
 console.log(`Iterations:  ${ITERATIONS}`);
 console.log(`Concurrency: ${CONCURRENCY}`);
 console.log(`Headless:    ${HEADLESS}`);
 console.log(`Quiet:       ${QUIET}`);
-console.log(`Solver:      ${solverHost ? 'set' : 'NOT SET'}`);
+console.log(`Host:        ${HOST || process.env['host'] || '(not set)'}`);
 console.log(`Proxy:       ${PROXY_RAW ? 'set' : 'NOT SET'}`);
 console.log(
   `Credentials: ${process.env['username'] ? 'set' : 'NOT SET'} / ${process.env['password'] ? 'set' : 'NOT SET'}`
