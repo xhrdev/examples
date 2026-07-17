@@ -1,47 +1,98 @@
 /**
- * run this script:
-
-npm run tsx src/domedata/grainger.ts
-
+ * Run with:
+ *
+ * node --env-file=.env src/domedata/grainger.ts
+ * node --env-file=.env src/domedata/grainger.ts --headless
  */
-import axios from 'axios';
-import { CookieJar } from 'tough-cookie';
-import { wrapper } from 'axios-cookiejar-support';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import { createCookieAgent } from 'http-cookie-agent/http';
+import fs from 'node:fs';
 
-import { proxyUrl, xhrdevCa } from '#src/utils.js';
+import { chromium, type LaunchOptions } from 'playwright-core';
 
-wrapper(axios);
+import { solveDataDome } from '#src/domedata/solver.js';
 
-const xhrApiKey = process.env['XHR_API_KEY'];
-if (!xhrApiKey) throw new Error('set XHR_API_KEY in .env file');
+const url = 'https://www.grainger.com/';
+const solverHost = process.env['host'];
+const proxy = process.env['proxy'];
+const chromePath = process.env['CHROME_PATH'] || '';
 
-const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
-const jar = new CookieJar();
-const httpsProxyCookieAgent = new HttpsProxyCookieAgent(proxyUrl, {
-  cookies: { jar },
+if (!solverHost) throw new Error('set host= in .env');
+if (!proxy) throw new Error('set proxy= in .env');
+
+const solverUrl = `http://${solverHost}:3000`;
+const log = (msg: string, ...extra: unknown[]): void =>
+  console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
+
+const parseProxy = (raw: string) => {
+  const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw);
+  const parsed = new URL(hasScheme ? raw : `http://${raw}`);
+  const password = decodeURIComponent(parsed.password || '');
+  const server = `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`;
+  const username = decodeURIComponent(parsed.username || '');
+  return {
+    ...(password ? { password } : {}),
+    server,
+    ...(username ? { username } : {}),
+  };
+};
+
+const launchOptions: LaunchOptions = {
+  args: [
+    '--window-size=1200,904',
+    '--disable-blink-features=AutomationControlled',
+    '--no-first-run',
+    '--no-default-browser-check',
+  ],
+  headless: process.argv.includes('--headless'),
+  ignoreDefaultArgs: ['--enable-automation', '--force-color-profile=srgb'],
+  proxy: parseProxy(proxy),
+};
+
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+if (chromePath && fs.existsSync(chromePath)) {
+  launchOptions.executablePath = chromePath;
+} else {
+  launchOptions.channel = 'chrome';
+}
+
+const browser = await chromium.launch(launchOptions);
+let closing = false;
+
+const cleanup = async (): Promise<void> => {
+  if (closing) return;
+  closing = true;
+  await browser.close().catch(() => undefined);
+};
+
+process.once('SIGINT', () => {
+  log('Caught SIGINT');
+  void cleanup();
 });
-httpsProxyCookieAgent.options.ca = xhrdevCa;
-
-// can make this request or omit it, your choice
-await axios.request({
-  headers: {
-    'x-xhr-api-key': xhrApiKey,
-  },
-  httpsAgent: httpsProxyCookieAgent,
-  url: 'https://www.grainger.com/',
+process.once('SIGTERM', () => {
+  log('Caught SIGTERM');
+  void cleanup();
 });
 
-const { data: product } = await axios.request({
-  headers: {
-    accept: 'application/json', // for json response; use `text/html` for html
-    'x-xhr-api-key': xhrApiKey,
-  },
-  httpsAgent: httpsProxyCookieAgent,
-  url: 'https://www.grainger.com/product/FEIT-ELECTRIC-Compact-LED-Bulb-Candelabra-56JH27?cpnuser=false&searchBar=true&searchQuery=56JH27&suggestConfigId=6',
-});
-
-console.log(product);
-// has all clearance cookies, can be saved for future use
-console.log((jar.store as unknown as { idx: Record<string, string> }).idx);
+try {
+  const context = await browser.newContext({
+    colorScheme: 'light',
+    ignoreHTTPSErrors: true,
+    timezoneId: 'America/New_York',
+    // Do not set locale here. Chromium's native Accept-Language ordering is
+    // part of the DataDome request identity.
+    viewport: null,
+  });
+  const page = await context.newPage();
+  const result = await solveDataDome(page, {
+    proxy,
+    solverUrl,
+    url,
+  });
+  log(
+    `RESULT: SUCCESS - ${new URL(result.url).hostname} returned HTTP ${result.responseStatus}`
+  );
+} catch (error) {
+  process.exitCode = 1;
+  log(`RESULT: FAIL - ${(error as Error).message}`);
+} finally {
+  await cleanup();
+}
