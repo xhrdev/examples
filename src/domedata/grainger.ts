@@ -4,6 +4,7 @@
  * node --env-file=.env src/domedata/grainger.ts
  * node --env-file=.env src/domedata/grainger.ts --headless
  */
+import { randomInt } from 'node:crypto';
 import fs from 'node:fs';
 
 import { chromium, type LaunchOptions } from 'playwright-core';
@@ -11,12 +12,18 @@ import { chromium, type LaunchOptions } from 'playwright-core';
 import { solveDataDome } from '#src/domedata/solver.js';
 
 const url = 'https://www.grainger.com/';
+const productUrl =
+  'https://www.grainger.com/product/FEIT-ELECTRIC-Compact-LED-Bulb-Candelabra-56JH27?cpnuser=false&searchBar=true&searchQuery=56JH27&suggestConfigId=6';
 const solverHost = process.env['host'];
-const proxy = process.env['proxy'];
+const configuredProxy = process.env['proxy'];
 const chromePath = process.env['CHROME_PATH'] || '';
+const browserHoldMs = Number(process.env['BROWSER_HOLD_MS'] ?? 30_000);
 
 if (!solverHost) throw new Error('set host= in .env');
-if (!proxy) throw new Error('set proxy= in .env');
+if (!configuredProxy) throw new Error('set proxy= in .env');
+if (!Number.isSafeInteger(browserHoldMs) || browserHoldMs < 0) {
+  throw new Error('BROWSER_HOLD_MS must be a non-negative integer');
+}
 
 const solverUrl = `http://${solverHost}:3000`;
 const log = (msg: string, ...extra: unknown[]): void =>
@@ -34,6 +41,18 @@ const parseProxy = (raw: string) => {
     ...(username ? { username } : {}),
   };
 };
+
+const sessionProxy = (raw: string): string => {
+  const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw);
+  const parsed = new URL(hasScheme ? raw : `http://${raw}`);
+  const password = decodeURIComponent(parsed.password || '');
+  if (password && !/-hardsession-\d+$/.test(password)) {
+    parsed.password = `${password}-hardsession-${randomInt(100_000, 1_000_000_000)}`;
+  }
+  return parsed.href;
+};
+
+const proxy = sessionProxy(configuredProxy);
 
 const launchOptions: LaunchOptions = {
   args: [
@@ -63,6 +82,21 @@ const cleanup = async (): Promise<void> => {
   await browser.close().catch(() => undefined);
 };
 
+const holdBrowser = async (): Promise<void> => {
+  if (closing || !browser.isConnected() || browserHoldMs === 0) return;
+  log(`Keeping browser open for ${browserHoldMs}ms (Ctrl+C to close now)`);
+  await new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      browser.off('disconnected', done);
+      resolve();
+    };
+    const timer = setTimeout(done, browserHoldMs);
+    browser.once('disconnected', done);
+    if (!browser.isConnected()) done();
+  });
+};
+
 process.once('SIGINT', () => {
   log('Caught SIGINT');
   void cleanup();
@@ -74,7 +108,6 @@ process.once('SIGTERM', () => {
 
 try {
   const context = await browser.newContext({
-    colorScheme: 'light',
     ignoreHTTPSErrors: true,
     timezoneId: 'America/New_York',
     // Do not set locale here. Chromium's native Accept-Language ordering is
@@ -87,12 +120,22 @@ try {
     solverUrl,
     url,
   });
+
+  const productResponse = await page.goto(productUrl, {
+    waitUntil: 'domcontentloaded',
+  });
+  if (!productResponse?.ok()) {
+    throw new Error(
+      `Grainger product page returned HTTP ${productResponse?.status() ?? 'unknown'}`
+    );
+  }
   log(
-    `RESULT: SUCCESS - ${new URL(result.url).hostname} returned HTTP ${result.responseStatus}`
+    `RESULT: SUCCESS - DataDome returned HTTP ${result.responseStatus}; product returned HTTP ${productResponse.status()}`
   );
 } catch (error) {
   process.exitCode = 1;
   log(`RESULT: FAIL - ${(error as Error).message}`);
 } finally {
+  await holdBrowser();
   await cleanup();
 }
