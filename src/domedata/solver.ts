@@ -578,6 +578,7 @@ function requestHeader(
 }
 
 const CHALLENGE_ROUTE = 'https://geo.captcha-delivery.com/**';
+const DD_TAGS_ROUTE = '*://dd.*/**/tags.js*';
 const PROFILE_ID = 'chrome-149-macos';
 const QUIET_WINDOW_MS = 5000;
 const TIMEOUT = 120000;
@@ -1005,6 +1006,15 @@ export async function solveDataDome(
       await route.abort('blockedbyclient').catch(() => undefined);
     }
   };
+  const blockDdTags = (route: Route, request: Request): Promise<void> => {
+    const url = new URL(request.url());
+    const isDdTags =
+      request.resourceType() === 'script' &&
+      url.hostname.startsWith('dd.') &&
+      url.pathname.endsWith('/tags.js');
+    return isDdTags ? route.abort('blockedbyclient') : route.fallback();
+  };
+
   browser.on('disconnected', onBrowserDisconnected);
   page.on('close', onPageClosed);
   page.on('crash', onPageCrashed);
@@ -1015,9 +1025,12 @@ export async function solveDataDome(
   let closeIdentityBridge: (() => void) | undefined;
   let pageSession: CDPSession | undefined;
   let routeInstalled = false;
+  let tagsRouteInstalled = false;
   try {
     await context.route(CHALLENGE_ROUTE, routeHandler);
     routeInstalled = true;
+    await context.route(DD_TAGS_ROUTE, blockDdTags);
+    tagsRouteInstalled = true;
     browserSession = await browser.newBrowserCDPSession();
     pageSession = await context.newCDPSession(page);
     await pageSession.send('Emulation.setUserAgentOverride', UA_OVERRIDE);
@@ -1153,6 +1166,9 @@ export async function solveDataDome(
       await context
         .unroute(CHALLENGE_ROUTE, routeHandler)
         .catch(() => undefined);
+    }
+    if (tagsRouteInstalled) {
+      await context.unroute(DD_TAGS_ROUTE, blockDdTags).catch(() => undefined);
     }
     closeIdentityBridge?.();
     if (pageSession) await pageSession.detach().catch(() => undefined);
@@ -1700,7 +1716,9 @@ function solverResponseErrorDetail(text: string): string {
     ) {
       detail = parsed['error'].trim();
     }
-  } catch {}
+  } catch {
+    // The response body itself is the fallback diagnostic.
+  }
   return detail.slice(0, MAX_SOLVER_ERROR_DETAIL_LENGTH);
 }
 
