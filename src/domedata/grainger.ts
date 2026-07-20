@@ -121,7 +121,7 @@ try {
   });
 
   log(
-    `RESULT: SUCCESS - DataDome returned HTTP ${result.responseStatus}; product returned HTTP ${productResponse.status()}`
+    `RESULT: SUCCESS - DataDome returned HTTP ${result.responseStatus}`
   );
 } catch (error) {
   process.exitCode = 1;
