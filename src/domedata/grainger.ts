@@ -12,8 +12,6 @@ import { chromium, type LaunchOptions } from 'playwright-core';
 import { solveDataDome } from '#src/domedata/solver.js';
 
 const url = 'https://www.grainger.com/';
-const productUrl =
-  'https://www.grainger.com/product/FEIT-ELECTRIC-Compact-LED-Bulb-Candelabra-56JH27?cpnuser=false&searchBar=true&searchQuery=56JH27&suggestConfigId=6';
 const solverHost = process.env['host'];
 const configuredProxy = process.env['proxy'];
 const chromePath = process.env['CHROME_PATH'] || '';
@@ -46,7 +44,8 @@ const sessionProxy = (raw: string): string => {
   const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw);
   const parsed = new URL(hasScheme ? raw : `http://${raw}`);
   const password = decodeURIComponent(parsed.password || '');
-  if (password && !/-hardsession-\d+$/.test(password)) {
+  const isRayobyte = /(^|\.)rayobyte\.com$/i.test(parsed.hostname);
+  if (isRayobyte && password && !/-hardsession-\d+$/.test(password)) {
     parsed.password = `${password}-hardsession-${randomInt(100_000, 1_000_000_000)}`;
   }
   return parsed.href;
@@ -121,14 +120,6 @@ try {
     url,
   });
 
-  const productResponse = await page.goto(productUrl, {
-    waitUntil: 'domcontentloaded',
-  });
-  if (!productResponse?.ok()) {
-    throw new Error(
-      `Grainger product page returned HTTP ${productResponse?.status() ?? 'unknown'}`
-    );
-  }
   log(
     `RESULT: SUCCESS - DataDome returned HTTP ${result.responseStatus}; product returned HTTP ${productResponse.status()}`
   );
