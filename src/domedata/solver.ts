@@ -73,6 +73,7 @@ const MAX_SOLVER_ERROR_DETAIL_LENGTH = 1000;
 
 export type SolveDataDomeOptions = {
   proxy?: string;
+  solverApiKey?: string;
   solverUrl: string;
   timeout?: number;
   url: string;
@@ -653,12 +654,12 @@ export async function solveDataDome(
   page: Page,
   options: SolveDataDomeOptions
 ): Promise<SolveDataDomeResult> {
-  const { proxy, solverUrl, timeout = TIMEOUT, url } = options;
+  const { proxy, solverApiKey, solverUrl, timeout = TIMEOUT, url } = options;
   const targetUrl = httpUrl(url, 'target');
   const solverBaseUrl = httpUrl(solverUrl, 'solver');
   const browser = requiredBrowser(page);
   const context = page.context();
-  await checkHealth(solverBaseUrl, timeout);
+  await checkHealth(solverBaseUrl, timeout, solverApiKey);
 
   const fatal = deferred<never>();
   void fatal.promise.catch(() => undefined);
@@ -725,7 +726,8 @@ export async function solveDataDome(
       challengeData,
       documentData,
       proxy,
-      timeout
+      timeout,
+      solverApiKey
     ).catch((error: unknown) => {
       fail(error);
       throw error;
@@ -1218,7 +1220,8 @@ async function callSolver(
   challenge: ChallengeData,
   document: ChallengeDocumentData,
   proxy: string | undefined,
-  timeout: number
+  timeout: number,
+  solverApiKey: string | undefined
 ): Promise<SolverResult> {
   const connection = document.surfaces.connection;
   const raw = await fetchJson(
@@ -1274,7 +1277,10 @@ async function callSolver(
         timeout,
         url: challenge.pageUrl,
       }),
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(solverApiKey ? { 'x-api-key': solverApiKey } : {}),
+      },
       method: 'POST',
     },
     timeout
@@ -1342,8 +1348,16 @@ function challengeDocumentType(
   return null;
 }
 
-async function checkHealth(baseUrl: URL, timeout: number): Promise<void> {
-  await fetchJson(new URL('/hc', baseUrl), undefined, timeout);
+async function checkHealth(
+  baseUrl: URL,
+  timeout: number,
+  solverApiKey: string | undefined
+): Promise<void> {
+  await fetchJson(
+    new URL('/hc', baseUrl),
+    solverApiKey ? { headers: { 'x-api-key': solverApiKey } } : undefined,
+    timeout
+  );
 }
 
 function cookieDomainMatches(domain: string, hostname: string): boolean {

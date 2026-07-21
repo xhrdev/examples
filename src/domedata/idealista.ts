@@ -120,9 +120,7 @@ try {
     url,
   });
 
-  log(
-    `RESULT: SUCCESS - DataDome returned HTTP ${result.responseStatus}`
-  );
+  log(`RESULT: SUCCESS - DataDome returned HTTP ${result.responseStatus}`);
 } catch (error) {
   process.exitCode = 1;
   log(`RESULT: FAIL - ${(error as Error).message}`);

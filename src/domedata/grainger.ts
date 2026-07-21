@@ -14,6 +14,7 @@ import { solveDataDome } from '#src/domedata/solver.js';
 const url = 'https://www.grainger.com/';
 const solverHost = process.env['host'];
 const configuredProxy = process.env['proxy'];
+const solverApiKey = process.env['solver_api_key'];
 const chromePath = process.env['CHROME_PATH'] || '';
 const browserHoldMs = Number(process.env['BROWSER_HOLD_MS'] ?? 30_000);
 
@@ -116,13 +117,12 @@ try {
   const page = await context.newPage();
   const result = await solveDataDome(page, {
     proxy,
+    ...(solverApiKey ? { solverApiKey } : {}),
     solverUrl,
     url,
   });
 
-  log(
-    `RESULT: SUCCESS - DataDome returned HTTP ${result.responseStatus}`
-  );
+  log(`RESULT: SUCCESS - DataDome returned HTTP ${result.responseStatus}`);
 } catch (error) {
   process.exitCode = 1;
   log(`RESULT: FAIL - ${(error as Error).message}`);
