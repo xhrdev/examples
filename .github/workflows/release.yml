@@ -36,7 +36,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }} # keep it as `secrets.GITHUB_TOKEN` as repo is public and this token has limited privs
           persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
