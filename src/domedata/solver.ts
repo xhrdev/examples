@@ -1112,9 +1112,6 @@ export async function solveDataDome(
     };
 
     const firstRound = createRound();
-    log(
-      `Chrome ${browser.version()} started for ${targetUrl.hostname}; presenting ${PROFILE_ID} (${PROFILE.chromeFullVersion})`
-    );
     const initialNavigation = page
       .goto(targetUrl.href, { timeout, waitUntil: 'domcontentloaded' })
       .catch((error: unknown) => {
@@ -1295,7 +1292,6 @@ async function callSolver(
   ) {
     throw new Error('Solver returned an unexpected DataDome Referer');
   }
-  log(`Sandbox ${result.type} sensors ready (round ${challenge.dd.rt})`);
   return result;
 }
 
