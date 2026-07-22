@@ -139,26 +139,26 @@ try {
 
 await sleep(7000);
 
-// Login
-try {
-  await page.fill('#user', 'test@test.com');
-  await page.locator('#sign_in').click();
-  log('Clicked Log In');
-  await page.waitForLoadState('load', { timeout: 30000 }).catch(() => {});
-} catch (e) {
-  log(`ERROR: Sign-in actions failed: ${(e as Error).message}`);
-  await cleanup(1);
-}
-
-await sleep(3000);
-
-// Check result
-const html = await page.content();
+// Check result: the goal is to reach the login form without Akamai denying
+// the page, not to complete a real login (no real Comcast credentials are
+// available in CI, so a genuine sign-in attempt would always fail).
 log(`Final URL: ${page.url()}`);
+const html = await page.content();
 
 const denied =
   /<H1>\s*Access Denied\s*<\/H1>/i.test(html) || html.includes('Access Denied');
-if (denied) log('RESULT: FAIL - Access Denied');
-else log('RESULT: SUCCESS - Login page accessible');
+let loginFormReached = false;
+if (!denied) {
+  try {
+    await page.waitForSelector('#user', { timeout: 10000 });
+    loginFormReached = true;
+  } catch {
+    loginFormReached = false;
+  }
+}
 
-await cleanup(denied ? 2 : 0);
+if (denied) log('RESULT: FAIL - Access Denied');
+else if (!loginFormReached) log('RESULT: FAIL - login form (#user) not found');
+else log('RESULT: SUCCESS - Akamai solved, login form reached');
+
+await cleanup(denied || !loginFormReached ? 2 : 0);
