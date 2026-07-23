@@ -333,11 +333,31 @@ export async function solveAkamai(
       );
     };
 
+    // route.fetch() goes through the same proxy as everything else and can
+    // hit transient errors; a single failure here used to be swallowed
+    // silently, leaving the Akamai script uncaptured and the solve session
+    // never started (hanging until the caller's outer timeout). Retry once
+    // and log any failure so it's visible instead of a silent 120s hang.
+    const fetchWithRetry = async (
+      route: Route,
+      attempts = 2
+    ): Promise<Awaited<ReturnType<Route['fetch']>>> => {
+      let lastErr: unknown;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          return await route.fetch({ maxRedirects: 0 });
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr;
+    };
+
     const routeHandler = async (route: Route) => {
       const req = route.request();
       if (req.resourceType() === 'document') {
         try {
-          const resp = await route.fetch({ maxRedirects: 0 });
+          const resp = await fetchWithRetry(route);
           const ct = resp.headers()['content-type'] ?? '';
           if (resp.ok() && ct.includes('text/html')) {
             const html = await resp.text();
@@ -348,13 +368,15 @@ export async function solveAkamai(
             return await route.fulfill({ body: html, response: resp });
           }
           return await route.fulfill({ response: resp });
-        } catch {
-          /* fallthrough */
+        } catch (e) {
+          log(
+            `Document fetch failed for ${req.url()}: ${(e as Error).message}`
+          );
         }
       }
       if (req.resourceType() === 'script') {
         try {
-          const resp = await route.fetch({ maxRedirects: 0 });
+          const resp = await fetchWithRetry(route);
           const body = await resp.text();
           capturedScripts.set(req.url(), body);
           if (isLikelyAkamaiScriptUrl(req.url())) {
@@ -376,8 +398,8 @@ export async function solveAkamai(
             });
           }
           return await route.fulfill({ body, response: resp });
-        } catch {
-          /* fallthrough */
+        } catch (e) {
+          log(`Script fetch failed for ${req.url()}: ${(e as Error).message}`);
         }
       }
       try {
