@@ -26,30 +26,30 @@
   },
   "author": "XHR Software Inc",
   "dependencies": {
-    "axios": "1.15.2",
-    "axios-cookiejar-support": "6.0.5",
+    "axios": "1.19.0",
+    "axios-cookiejar-support": "7.0.0",
     "fetch-cookie": "3.2.0",
-    "http-cookie-agent": "7.0.3",
-    "https-proxy-agent": "9.0.0",
+    "http-cookie-agent": "8.0.0",
+    "https-proxy-agent": "9.1.0",
     "node-fetch": "3.3.2",
-    "tough-cookie": "6.0.1"
+    "tough-cookie": "6.0.2"
   },
   "devDependencies": {
-    "@commitlint/cli": "20.5.2",
-    "@commitlint/config-angular": "20.5.0",
+    "@commitlint/cli": "21.2.1",
+    "@commitlint/config-angular": "21.2.0",
     "@skilbjo/config-rc": "1.0.56",
     "@tsconfig/node24": "24.0.4",
-    "@types/node": "25.6.0",
+    "@types/node": "26.1.2",
     "@types/tough-cookie": "4.0.5",
-    "@typescript/native-preview": "7.0.0-dev.20260426.1",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "cheerio": "1.2.0",
     "depcheck": "1.4.7",
-    "eslint": "10.2.1",
+    "eslint": "10.8.0",
     "husky": "9.1.7",
     "nodemon": "3.1.14",
-    "playwright": "1.61.1",
-    "puppeteer": "24.42.0",
-    "undici": "7.25.0"
+    "playwright": "1.62.1",
+    "puppeteer": "25.4.0",
+    "undici": "8.9.0"
   },
   "imports": {
     "#src/*.js": {
