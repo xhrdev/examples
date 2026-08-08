@@ -4,16 +4,17 @@
  * node --env-file=.env src/datadome/idealista.ts
  * node --env-file=.env src/datadome/idealista.ts --headless
  */
-import { randomInt } from 'node:crypto';
 import fs from 'node:fs';
 
 import { chromium, type LaunchOptions } from 'playwright-core';
 
+import { pinSession, toLaunchProxy } from '#src/proxy.js';
 import { solve } from '#src/datadome/solver.js';
 
 const url = 'https://www.idealista.com/';
 const solverHost = process.env['host'];
 const configuredProxy = process.env['proxy'];
+const solverApiKey = process.env['solver_api_key'];
 const chromePath = process.env['CHROME_PATH'] || '';
 const browserHoldMs = Number(process.env['BROWSER_HOLD_MS'] ?? 30_000);
 
@@ -27,31 +28,7 @@ const solverUrl = `http://${solverHost}:3000`;
 const log = (msg: string, ...extra: unknown[]): void =>
   console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
 
-const parseProxy = (raw: string) => {
-  const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw);
-  const parsed = new URL(hasScheme ? raw : `http://${raw}`);
-  const password = decodeURIComponent(parsed.password || '');
-  const server = `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`;
-  const username = decodeURIComponent(parsed.username || '');
-  return {
-    ...(password ? { password } : {}),
-    server,
-    ...(username ? { username } : {}),
-  };
-};
-
-const sessionProxy = (raw: string): string => {
-  const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw);
-  const parsed = new URL(hasScheme ? raw : `http://${raw}`);
-  const password = decodeURIComponent(parsed.password || '');
-  const isRayobyte = /(^|\.)rayobyte\.com$/i.test(parsed.hostname);
-  if (isRayobyte && password && !/-hardsession-\d+$/.test(password)) {
-    parsed.password = `${password}-hardsession-${randomInt(100_000, 1_000_000_000)}`;
-  }
-  return parsed.href;
-};
-
-const proxy = sessionProxy(configuredProxy);
+const { url: proxy } = pinSession(configuredProxy);
 
 const launchOptions: LaunchOptions = {
   args: [
@@ -62,7 +39,7 @@ const launchOptions: LaunchOptions = {
   ],
   headless: process.argv.includes('--headless'),
   ignoreDefaultArgs: ['--enable-automation', '--force-color-profile=srgb'],
-  proxy: parseProxy(proxy),
+  proxy: toLaunchProxy(proxy),
 };
 
 // eslint-disable-next-line security/detect-non-literal-fs-filename
@@ -116,6 +93,7 @@ try {
   const page = await context.newPage();
   const result = await solve(page, {
     proxy,
+    ...(solverApiKey ? { solverApiKey } : {}),
     solverUrl,
     url,
   });

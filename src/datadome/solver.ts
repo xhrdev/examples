@@ -1,9 +1,43 @@
 /**
  * DataDome browser bridge.
  *
- * The remote solver generates sensor values. Chrome keeps ownership of the
- * native interstitial POST or captcha callback GET, receives DataDome's
- * response, applies the cookie, and performs the organic target navigation.
+ * This file is long, but it only does one thing: it lets a Playwright page
+ * walk through a DataDome challenge. The division of labour is the key idea —
+ *
+ *   the solver  computes the sensor values (the hard, proprietary part)
+ *   Chrome      makes every request (so the TLS fingerprint, headers and
+ *               cookie jar are genuinely a browser's, not ours)
+ *
+ * We never forge the submission ourselves. We hand Chrome a payload and let
+ * it send the native interstitial POST or captcha callback GET, take
+ * DataDome's response, apply the cookie, and navigate to the target.
+ *
+ * ## The flow
+ *
+ *   1. Watch for a challenge document (`geo.captcha-delivery.com`).
+ *   2. Read the challenge parameters out of the page.
+ *   3. POST them to `/dd/solve?submit=false`; get a prepared submission back.
+ *   4. Splice that payload into the request Chrome is already making.
+ *   5. Repeat if DataDome escalates: an interstitial (`i`) frequently turns
+ *      into a captcha (`c`), so the round loop handles an `i -> c` sequence.
+ *   6. Resolve once a navigation succeeds with the accepted cookie.
+ *
+ * ## Reading this file
+ *
+ * Everything below `solve` is a helper, in alphabetical order. The parts
+ * worth knowing:
+ *
+ *   solve()                     the entry point and the round loop
+ *   callSolver()                the one HTTP call to xhr.dev
+ *   parseChallenge()            challenge params out of a document URL
+ *   buildCaptchaRelayUrl()      splices the solved payload into a captcha GET
+ *   buildInterstitialRelayBody() the same for an interstitial POST
+ *   sampleChallengeFrame()      reads the live browser surfaces (screen,
+ *                               languages, connection) that go to the solver
+ *
+ * The rest is validation. It is deliberately strict: a challenge that half
+ * matches expectations means the protocol moved, and failing loudly there is
+ * much easier to debug than a silently wrong payload.
  */
 import type {
   Browser,

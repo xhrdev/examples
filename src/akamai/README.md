@@ -60,9 +60,14 @@ response within 30 seconds.
 import { solve } from '#src/akamai/solver.js';
 
 const solverUrl = `ws://${process.env['host']}:3000/akamai/session`;
-await solve(page, { proxy, solverUrl, url });
+await solve(page, { proxy, solverApiKey, solverUrl, url });
 // resolves when _abck is accepted; rejects on timeout (default 120s)
 ```
+
+`solverApiKey` is sent as `x-api-key` on the upgrade request. If your solver
+sits behind an API-key gate you need it here — a gate matches the header on
+the WebSocket upgrade like any other request, so leaving it out fails the
+handshake with a 401 rather than anything that looks Akamai-related.
 
 Note the `ws://` scheme and the `/akamai/session` path — unlike the DataDome
 client, this one takes the full socket URL, not a base URL.

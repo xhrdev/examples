@@ -1,7 +1,32 @@
 /**
- * Akamai bot-detection solver. Intercepts the Akamai script, streams page
- * state to a remote solver service over WebSocket, then executes XHR
- * submissions as directed until the solver reports cookie acceptance.
+ * Akamai Bot Manager browser bridge.
+ *
+ * Akamai scores you on telemetry produced by an obfuscated sensor script. The
+ * solver computes that telemetry; **your browser sends it**, so the requests
+ * carry a real TLS fingerprint and the page's own cookie jar.
+ *
+ * Unlike DataDome this is stateful, so it runs over a WebSocket
+ * (`ws://<host>:3000/akamai/session`) rather than one request:
+ *
+ *   ->  init                 page URL, sensor script, HTML, cookies, profile
+ *   <-  submission           a request to make: method, url, body, headers
+ *   ->  submission_response  what your browser got back, including cookies
+ *   <-  cookie_update        the new `_abck`, round number, accepted flag
+ *   <-  status               `running`, then `accepted`
+ *
+ * Acceptance takes several rounds. `_abck` ending in `~-1~` means "keep
+ * going"; `~0~` means you are through. Early rounds reporting `~-1~` are the
+ * protocol working, not a failure.
+ *
+ * ## Reading this file
+ *
+ *   solve()                  the entry point; owns the session map and timeout
+ *   startSession()           opens one WebSocket per origin
+ *   extractAkamaiScriptUrl() finds the sensor script in the page HTML
+ *
+ * Sessions are keyed by origin because a single login flow often spans two
+ * properties (e.g. business.comcast.com and login.xfinity.com), each with its
+ * own independent `_abck` to satisfy.
  *
  * run this script:
 
@@ -10,9 +35,16 @@ node --env-file=.env src/akamai/comcast.ts
 
 */
 import type { BrowserContext, Frame, Page, Route } from 'playwright-core';
+import { WebSocket } from 'undici';
 
 export type SolveOptions = {
   proxy?: string;
+  /**
+   * Sent as `x-api-key` on the WebSocket upgrade. Required when the solver
+   * sits behind an API-key gate — the gate matches the header on the upgrade
+   * request like any other, so omitting it fails the handshake with a 401.
+   */
+  solverApiKey?: string;
   solverUrl: string;
   timeout?: number;
   url: string;
@@ -110,7 +142,7 @@ const PROFILE = {
 };
 
 export async function solve(page: Page, opts: SolveOptions): Promise<void> {
-  const { proxy, solverUrl, timeout = 120000, url } = opts;
+  const { proxy, solverApiKey, solverUrl, timeout = 120000, url } = opts;
   const context: BrowserContext = page.context();
   const capturedDocs = new Map<string, { html: string; url: string }>();
   const capturedScripts = new Map<string, string>();
@@ -153,7 +185,9 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
       }
       if (existing) existing.ws.close(1000, 'New session');
 
-      const ws = new WebSocket(solverUrl);
+      const ws = new WebSocket(solverUrl, {
+        ...(solverApiKey ? { headers: { 'x-api-key': solverApiKey } } : {}),
+      });
       sessions.set(origin, { frame, ws });
 
       ws.addEventListener('open', () => {
@@ -169,8 +203,10 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
         );
       });
 
+      // Let the event type come from undici's WebSocket rather than annotating
+      // it: the DOM's MessageEvent is a different, incompatible declaration.
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
-      ws.addEventListener('message', async (event: MessageEvent) => {
+      ws.addEventListener('message', async (event) => {
         if (closing || sessions.get(origin)?.ws !== ws) return;
         const msg = JSON.parse(event.data as string) as SolverMessage;
 

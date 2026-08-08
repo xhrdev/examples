@@ -32,11 +32,11 @@
  *   node --env-file=.env src/datadome/grainger-http.ts
  *   node --env-file=.env src/datadome/grainger-http.ts --url=https://www.grainger.com/category/pumps
  */
-import { randomInt } from 'node:crypto';
-
 // undici's `fetch` is the same implementation Node exposes globally, but its
 // types expose `dispatcher`, which is how a per-request proxy is set.
 import { fetch, ProxyAgent } from 'undici';
+
+import { pinSession } from '#src/proxy.js';
 
 const GEO_ORIGIN = 'https://geo.captcha-delivery.com';
 const DEFAULT_URL = 'https://www.grainger.com/';
@@ -117,42 +117,6 @@ type PreparedSubmission = {
 
 const log = (message: string, ...extra: unknown[]): void =>
   console.log(`[${new Date().toISOString()}] ${message}`, ...extra);
-
-/**
- * Most proxy pools rotate the exit IP on every request. A DataDome cookie
- * earned on one IP is worthless on another, so pin a session for the whole
- * flow. Each provider spells that differently:
- *
- *   rayobyte  password + `-hardsession-<n>`
- *   oxylabs   username + `-sessid-<n>`
- *
- * Anything else is passed through untouched — if your provider pins by
- * default, or pins some other way, there is nothing to do here.
- */
-const withPinnedSession = (raw: string): string => {
-  const url = new URL(
-    /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `http://${raw}`
-  );
-  const session = randomInt(100_000, 1_000_000_000);
-  const password = decodeURIComponent(url.password);
-  const username = decodeURIComponent(url.username);
-
-  if (
-    /(^|\.)rayobyte\.com$/i.test(url.hostname) &&
-    password &&
-    !/-hardsession-\d+$/.test(password)
-  ) {
-    url.password = `${password}-hardsession-${session}`;
-  }
-  if (
-    /(^|\.)oxylabs\.io$/i.test(url.hostname) &&
-    username &&
-    !/-sessid-\w+$/.test(username)
-  ) {
-    url.username = `${username}-sessid-${session}`;
-  }
-  return url.href;
-};
 
 const navigationHeaders = (): Record<string, string> => ({
   accept:
@@ -379,7 +343,7 @@ const isTransport = (error: unknown): boolean =>
 let lastError: unknown;
 for (let attempt = 1; attempt <= attempts; attempt += 1) {
   // A fresh session per attempt: a new IP, and a clean slate with DataDome.
-  const proxy = withPinnedSession(configuredProxy);
+  const { url: proxy } = pinSession(configuredProxy);
   try {
     const result = await getClearance({
       proxy,

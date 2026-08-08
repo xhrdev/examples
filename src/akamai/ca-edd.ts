@@ -7,11 +7,13 @@ node --env-file=.env src/akamai/ca-edd.ts --headless
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';
 
+import { toLaunchProxy } from '#src/proxy.js';
 import { solve } from '#src/akamai/solver.js';
 
 const url = 'https://eddservices.edd.ca.gov/tap/secure/eservices';
 const solverHost = process.env['host'];
 const proxy = process.env['proxy'];
+const solverApiKey = process.env['solver_api_key'];
 const username = process.env['username'];
 const password = process.env['password'];
 let closing = false;
@@ -29,17 +31,6 @@ const solverUrl = `ws://${solverHost}:3000/akamai/session`;
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-const parseProxy = (raw: string) => {
-  const hasScheme = /^[a-z][a-z0-9+\-.]*:\/\//i.test(raw);
-  const parsed = new URL(hasScheme ? raw : `http://${raw}`);
-  const server = `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`;
-  return {
-    password: decodeURIComponent(parsed.password || '') || undefined,
-    server,
-    username: decodeURIComponent(parsed.username || '') || undefined,
-  };
-};
-
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36';
 
@@ -51,7 +42,7 @@ const launchOpts: Record<string, unknown> = {
     '--no-default-browser-check',
   ],
   headless: process.argv.includes('--headless'),
-  proxy: parseProxy(proxy),
+  proxy: toLaunchProxy(proxy),
 };
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 if (CHROME_PATH && fs.existsSync(CHROME_PATH))
@@ -136,7 +127,12 @@ await cdp.send('Emulation.setDeviceMetricsOverride', {
 
 // Solve Akamai
 try {
-  await solve(page, { proxy, solverUrl, url });
+  await solve(page, {
+    proxy,
+    ...(solverApiKey ? { solverApiKey } : {}),
+    solverUrl,
+    url,
+  });
 } catch (e) {
   log(`ERROR: Solver failed: ${(e as Error).message}`);
   await cleanup(1);

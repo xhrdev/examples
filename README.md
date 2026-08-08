@@ -103,9 +103,21 @@ Start with plain HTTP. Reach for the browser bridge when the site forces you to.
 Clearance cookies are bound to the IP that earned them. Two things follow:
 
 1. **Pin a session.** If your proxy pool rotates mid-flow, the cookie you get
-   back is already void. The examples pin automatically for oxylabs
-   (`-sessid-`) and rayobyte (`-hardsession-`); for other providers, make sure
-   the pool holds an IP for the duration.
+   back is already void. `src/proxy.ts` handles this for every provider we
+   know of — it rewrites an existing session token wherever it appears
+   (oxylabs `-sessid-`, rayobyte `-hardsession-`, bright data / smartproxy /
+   joinmassive `-session-`), in the username or the password, and grafts one
+   on when a known provider's string has none.
+
+   Using something else? Put a `{session}` placeholder in the credentials
+   where the rotating value belongs and it will be filled in:
+
+   ```
+   proxy=http://myuser-{session}:mypass@proxy.example.com:8000
+   ```
+
+   If a proxy offers nothing to pin, the load-test runner says so rather than
+   quietly sending every iteration through one IP.
 2. **Submit from your own IP.** `/dd/solve` defaults to `submit=true`, where
    the solver sends the payload itself — which binds the cookie to the
    *solver's* IP. Pass `?submit=false` and make the final request yourself.
