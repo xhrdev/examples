@@ -5,13 +5,13 @@
  *
  * run this script:
 
-node --env-file=.env src/akmi/ca-edd.ts
-node --env-file=.env src/akmi/comcast.ts
+node --env-file=.env src/akamai/ca-edd.ts
+node --env-file=.env src/akamai/comcast.ts
 
 */
 import type { BrowserContext, Frame, Page, Route } from 'playwright-core';
 
-export type SolveAkamaiOptions = {
+export type SolveOptions = {
   proxy?: string;
   solverUrl: string;
   timeout?: number;
@@ -109,10 +109,7 @@ const PROFILE = {
   timezone: 'America/New_York',
 };
 
-export async function solveAkamai(
-  page: Page,
-  opts: SolveAkamaiOptions
-): Promise<void> {
+export async function solve(page: Page, opts: SolveOptions): Promise<void> {
   const { proxy, solverUrl, timeout = 120000, url } = opts;
   const context: BrowserContext = page.context();
   const capturedDocs = new Map<string, { html: string; url: string }>();

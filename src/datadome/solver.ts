@@ -17,18 +17,24 @@ import type {
   Route,
 } from 'playwright-core';
 
-export type CaptchaSolverResult = {
+type CaptchaRelayContext = {
+  headers: Readonly<Record<string, string | undefined>>;
+  solved: CaptchaSolverResult;
+  url: string;
+};
+
+type CaptchaSolverResult = {
   origin: string;
   referer: string;
   type: 'captcha';
   url: string;
 };
 
-export type ChallengeIr = number | string;
+type ChallengeIr = number | string;
 
-export type ChallengeSequence = ReadonlyArray<DataDomeChallenge['rt']>;
+type ChallengeSequence = ReadonlyArray<DataDomeChallenge['rt']>;
 
-export type DataDomeChallenge = {
+type DataDomeChallenge = {
   b?: number;
   cid: string;
   e?: string;
@@ -39,7 +45,7 @@ export type DataDomeChallenge = {
   t?: string;
 };
 
-export type InterstitialSolverResult = {
+type InterstitialSolverResult = {
   body: string;
   origin: string;
   referer: string;
@@ -47,13 +53,7 @@ export type InterstitialSolverResult = {
   url: string;
 };
 
-export type SolverResult = CaptchaSolverResult | InterstitialSolverResult;
-
-type CaptchaRelayContext = {
-  headers: Readonly<Record<string, string | undefined>>;
-  solved: CaptchaSolverResult;
-  url: string;
-};
+type PreparedSubmission = CaptchaSolverResult | InterstitialSolverResult;
 
 type RawField = {
   decodedName: string;
@@ -71,7 +71,7 @@ const CAPTCHA_CHECK_URL = `${GEO_ORIGIN}/captcha/check`;
 const INTERSTITIAL_URL = `${GEO_ORIGIN}/interstitial/`;
 const MAX_SOLVER_ERROR_DETAIL_LENGTH = 1000;
 
-export type SolveDataDomeOptions = {
+export type SolveOptions = {
   proxy?: string;
   solverApiKey?: string;
   solverUrl: string;
@@ -79,7 +79,7 @@ export type SolveDataDomeOptions = {
   url: string;
 };
 
-export type SolveDataDomeResult = {
+export type SolveResult = {
   cookie: string;
   responseStatus: number;
   url: string;
@@ -151,7 +151,7 @@ type Round = {
   nativeSubmitStarted: Deferred<undefined>;
   next?: Round;
   relayStarted: boolean;
-  solver?: Promise<SolverResult>;
+  solver?: Promise<PreparedSubmission>;
   submit: Deferred<SubmitResult>;
 };
 
@@ -181,8 +181,21 @@ type WindowGeometry = {
   width: number;
 };
 
+function appendChallengeType(
+  sequence: ChallengeSequence,
+  next: DataDomeChallenge['rt']
+): ChallengeSequence {
+  if (sequence.length === 0) return [next];
+  if (sequence.length === 1 && sequence[0] === 'i' && next === 'c') {
+    return [...sequence, next];
+  }
+  throw new Error(
+    'Only interstitial, captcha, and interstitial-to-captcha sequences are supported'
+  );
+}
+
 /** Replace only the two sensor fields in Chrome's native captcha XHR URL. */
-export function buildCaptchaRelayUrl(context: CaptchaRelayContext): string {
+function buildCaptchaRelayUrl(context: CaptchaRelayContext): string {
   if (requestHeader(context.headers, 'referer') !== context.solved.referer) {
     throw new Error('The native and sandbox captcha Referer did not match');
   }
@@ -228,7 +241,7 @@ export function buildCaptchaRelayUrl(context: CaptchaRelayContext): string {
 }
 
 /** Replace only payload and plv3 in Chrome's ordered interstitial form. */
-export function buildInterstitialRelayBody(
+function buildInterstitialRelayBody(
   nativeBody: string,
   solvedBody: string
 ): string {
@@ -253,167 +266,6 @@ export function buildInterstitialRelayBody(
         : field.rawSegment
     )
     .join('&');
-}
-
-/** Parse the structured challenge required by `/dd/solve` from its document URL. */
-export function parseChallenge(input: string): DataDomeChallenge | null {
-  let url: URL;
-  try {
-    url = new URL(input.split('&amp;').join('&'));
-  } catch {
-    return null;
-  }
-  if (
-    url.protocol !== 'https:' ||
-    url.hostname !== GEO_HOST ||
-    url.port !== '' ||
-    url.username !== '' ||
-    url.password !== '' ||
-    url.hash !== ''
-  ) {
-    return null;
-  }
-
-  const rt =
-    url.pathname === '/captcha/'
-      ? 'c'
-      : url.pathname === '/interstitial/'
-        ? 'i'
-        : null;
-  if (!rt) return null;
-
-  const cid =
-    url.searchParams.get('initialCid') ??
-    (rt === 'i' ? url.searchParams.get('cid') : null);
-  const hsh = url.searchParams.get('hash');
-  if (!cid || !hsh) return null;
-
-  const rawIr = url.searchParams.get('ir');
-  const ir = challengeIrValue(rawIr);
-  if (rawIr !== null && ir === undefined) return null;
-  const b = numberValue(url.searchParams.get('b'));
-  const e = url.searchParams.get('e') || undefined;
-  const s = numberValue(url.searchParams.get('s')) ?? 0;
-  const t = url.searchParams.get('t') || undefined;
-  return {
-    ...(b === undefined ? {} : { b }),
-    cid,
-    ...(e === undefined ? {} : { e }),
-    hsh,
-    ...(ir === undefined ? {} : { ir }),
-    rt,
-    s,
-    ...(t === undefined ? {} : { t }),
-  };
-}
-
-/** Select the cookie identity appropriate to the live challenge document. */
-export function solverCookieForChallengeDocument(
-  type: DataDomeChallenge['rt'],
-  documentUrl: string,
-  targetCookie: string
-): string {
-  if (type !== 'c') return targetCookie;
-
-  let url: URL;
-  try {
-    url = new URL(documentUrl);
-  } catch {
-    throw new Error('The captcha document URL was malformed');
-  }
-  if (
-    url.protocol !== 'https:' ||
-    url.hostname !== GEO_HOST ||
-    url.port !== '' ||
-    url.username !== '' ||
-    url.password !== '' ||
-    url.pathname !== '/captcha/' ||
-    url.hash !== ''
-  ) {
-    throw new Error('The captcha document did not use the canonical URL');
-  }
-
-  const cidValues = url.searchParams.getAll('cid');
-  if (cidValues.length === 0 || cidValues[0] === '') {
-    throw new Error('The captcha document URL did not contain a cid');
-  }
-  if (cidValues.length !== 1) {
-    throw new Error('The captcha document URL contained an ambiguous cid');
-  }
-  const cid = cidValues[0];
-  if (!cid) throw new Error('The captcha document URL contained an empty cid');
-  return cid;
-}
-
-/** Validate and narrow the raw `/dd/solve?submit=false` response. */
-export function validateSolverResult(
-  raw: unknown,
-  type: DataDomeChallenge['rt']
-): SolverResult {
-  if (!isRecord(raw)) throw new Error('Solver returned an invalid response');
-
-  const body = raw['body'];
-  const origin = raw['origin'];
-  const referer = raw['referer'];
-  const rawUrl = raw['url'];
-  if (
-    origin !== GEO_ORIGIN ||
-    typeof referer !== 'string' ||
-    referer.length === 0 ||
-    typeof rawUrl !== 'string' ||
-    rawUrl.length === 0
-  ) {
-    throw new Error('Solver response was incomplete');
-  }
-
-  let url: URL;
-  try {
-    url = new URL(rawUrl, origin);
-  } catch {
-    throw new Error('Solver returned a malformed carrier URL');
-  }
-
-  if (type === 'i') {
-    if (typeof body !== 'string' || body.length === 0) {
-      throw new Error('Interstitial solver response omitted its body');
-    }
-    if (url.href !== INTERSTITIAL_URL) {
-      throw new Error('Solver returned an unexpected interstitial URL');
-    }
-    return {
-      body,
-      origin,
-      referer,
-      type: 'interstitial',
-      url: url.href,
-    };
-  }
-
-  if (body !== undefined && body !== null) {
-    throw new Error('Captcha solver response unexpectedly contained a body');
-  }
-  if (url.origin !== GEO_ORIGIN || url.pathname !== '/captcha/check') {
-    throw new Error('Solver returned an unexpected captcha URL');
-  }
-  return {
-    origin,
-    referer,
-    type: 'captcha',
-    url: url.href,
-  };
-}
-
-function appendChallengeType(
-  sequence: ChallengeSequence,
-  next: DataDomeChallenge['rt']
-): ChallengeSequence {
-  if (sequence.length === 0) return [next];
-  if (sequence.length === 1 && sequence[0] === 'i' && next === 'c') {
-    return [...sequence, next];
-  }
-  throw new Error(
-    'Only interstitial, captcha, and interstitial-to-captcha sequences are supported'
-  );
 }
 
 function challengeIrValue(value: unknown): ChallengeIr | undefined {
@@ -524,6 +376,58 @@ function parseCaptchaCarrierUrl(
   return { baseUrl, fields };
 }
 
+/** Parse the structured challenge required by `/dd/solve` from its document URL. */
+function parseChallenge(input: string): DataDomeChallenge | null {
+  let url: URL;
+  try {
+    url = new URL(input.split('&amp;').join('&'));
+  } catch {
+    return null;
+  }
+  if (
+    url.protocol !== 'https:' ||
+    url.hostname !== GEO_HOST ||
+    url.port !== '' ||
+    url.username !== '' ||
+    url.password !== '' ||
+    url.hash !== ''
+  ) {
+    return null;
+  }
+
+  const rt =
+    url.pathname === '/captcha/'
+      ? 'c'
+      : url.pathname === '/interstitial/'
+        ? 'i'
+        : null;
+  if (!rt) return null;
+
+  const cid =
+    url.searchParams.get('initialCid') ??
+    (rt === 'i' ? url.searchParams.get('cid') : null);
+  const hsh = url.searchParams.get('hash');
+  if (!cid || !hsh) return null;
+
+  const rawIr = url.searchParams.get('ir');
+  const ir = challengeIrValue(rawIr);
+  if (rawIr !== null && ir === undefined) return null;
+  const b = numberValue(url.searchParams.get('b'));
+  const e = url.searchParams.get('e') || undefined;
+  const s = numberValue(url.searchParams.get('s')) ?? 0;
+  const t = url.searchParams.get('t') || undefined;
+  return {
+    ...(b === undefined ? {} : { b }),
+    cid,
+    ...(e === undefined ? {} : { e }),
+    hsh,
+    ...(ir === undefined ? {} : { ir }),
+    rt,
+    s,
+    ...(t === undefined ? {} : { t }),
+  };
+}
+
 function parseRawSubmitForm(body: string): RawField[] {
   if (body.length === 0) throw new Error('A DataDome submit form was empty');
   const fields: RawField[] = [];
@@ -576,6 +480,102 @@ function requestHeader(
     if (headerName.toLowerCase() === expected) return value;
   }
   return undefined;
+}
+
+/** Select the cookie identity appropriate to the live challenge document. */
+function solverCookieForChallengeDocument(
+  type: DataDomeChallenge['rt'],
+  documentUrl: string,
+  targetCookie: string
+): string {
+  if (type !== 'c') return targetCookie;
+
+  let url: URL;
+  try {
+    url = new URL(documentUrl);
+  } catch {
+    throw new Error('The captcha document URL was malformed');
+  }
+  if (
+    url.protocol !== 'https:' ||
+    url.hostname !== GEO_HOST ||
+    url.port !== '' ||
+    url.username !== '' ||
+    url.password !== '' ||
+    url.pathname !== '/captcha/' ||
+    url.hash !== ''
+  ) {
+    throw new Error('The captcha document did not use the canonical URL');
+  }
+
+  const cidValues = url.searchParams.getAll('cid');
+  if (cidValues.length === 0 || cidValues[0] === '') {
+    throw new Error('The captcha document URL did not contain a cid');
+  }
+  if (cidValues.length !== 1) {
+    throw new Error('The captcha document URL contained an ambiguous cid');
+  }
+  const cid = cidValues[0];
+  if (!cid) throw new Error('The captcha document URL contained an empty cid');
+  return cid;
+}
+
+/** Validate and narrow the raw `/dd/solve?submit=false` response. */
+function validateSolverResult(
+  raw: unknown,
+  type: DataDomeChallenge['rt']
+): PreparedSubmission {
+  if (!isRecord(raw)) throw new Error('Solver returned an invalid response');
+
+  const body = raw['body'];
+  const origin = raw['origin'];
+  const referer = raw['referer'];
+  const rawUrl = raw['url'];
+  if (
+    origin !== GEO_ORIGIN ||
+    typeof referer !== 'string' ||
+    referer.length === 0 ||
+    typeof rawUrl !== 'string' ||
+    rawUrl.length === 0
+  ) {
+    throw new Error('Solver response was incomplete');
+  }
+
+  let url: URL;
+  try {
+    url = new URL(rawUrl, origin);
+  } catch {
+    throw new Error('Solver returned a malformed carrier URL');
+  }
+
+  if (type === 'i') {
+    if (typeof body !== 'string' || body.length === 0) {
+      throw new Error('Interstitial solver response omitted its body');
+    }
+    if (url.href !== INTERSTITIAL_URL) {
+      throw new Error('Solver returned an unexpected interstitial URL');
+    }
+    return {
+      body,
+      origin,
+      referer,
+      type: 'interstitial',
+      url: url.href,
+    };
+  }
+
+  if (body !== undefined && body !== null) {
+    throw new Error('Captcha solver response unexpectedly contained a body');
+  }
+  if (url.origin !== GEO_ORIGIN || url.pathname !== '/captcha/check') {
+    throw new Error('Solver returned an unexpected captcha URL');
+  }
+  return {
+    origin,
+    referer,
+    type: 'captcha',
+    url: url.href,
+  };
 }
 
 const CHALLENGE_ROUTE = 'https://geo.captcha-delivery.com/**';
@@ -650,10 +650,10 @@ const log = (message: string, ...extra: unknown[]): void =>
   console.log(`[${new Date().toISOString()}] ${message}`, ...extra);
 
 /** Solve a DataDome interstitial, captcha, or interstitial-to-captcha flow. */
-export async function solveDataDome(
+export async function solve(
   page: Page,
-  options: SolveDataDomeOptions
-): Promise<SolveDataDomeResult> {
+  options: SolveOptions
+): Promise<SolveResult> {
   const { proxy, solverApiKey, solverUrl, timeout = TIMEOUT, url } = options;
   const targetUrl = httpUrl(url, 'target');
   const solverBaseUrl = httpUrl(solverUrl, 'solver');
@@ -720,7 +720,7 @@ export async function solveDataDome(
     round: Round,
     challengeData: ChallengeData,
     documentData: ChallengeDocumentData
-  ): Promise<SolverResult> => {
+  ): Promise<PreparedSubmission> => {
     round.solver ??= callSolver(
       solverBaseUrl,
       challengeData,
@@ -1219,7 +1219,7 @@ async function callSolver(
   proxy: string | undefined,
   timeout: number,
   solverApiKey: string | undefined
-): Promise<SolverResult> {
+): Promise<PreparedSubmission> {
   const connection = document.surfaces.connection;
   const raw = await fetchJson(
     new URL('/dd/solve?submit=false', solverBaseUrl),

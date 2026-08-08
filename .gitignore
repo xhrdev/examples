@@ -14,5 +14,3 @@ result/
 
 .env
 node_modules
-.venv
-venv

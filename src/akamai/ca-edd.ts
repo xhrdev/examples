@@ -1,16 +1,19 @@
 /**
  * run this script:
 
-node --env-file=.env src/akmi/comcast.ts --headless
+node --env-file=.env src/akamai/ca-edd.ts --headless
 
 */
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';
-import { solveAkamai } from '#src/akmi/solver.js';
 
-const url = 'https://business.comcast.com/account/';
+import { solve } from '#src/akamai/solver.js';
+
+const url = 'https://eddservices.edd.ca.gov/tap/secure/eservices';
 const solverHost = process.env['host'];
 const proxy = process.env['proxy'];
+const username = process.env['username'];
+const password = process.env['password'];
 let closing = false;
 
 const log = (msg: string, ...extra: unknown[]): void =>
@@ -18,6 +21,8 @@ const log = (msg: string, ...extra: unknown[]): void =>
 
 if (!solverHost) throw new Error('set host= in .env');
 if (!proxy) throw new Error('set proxy= in .env');
+if (!username) throw new Error('set username= in .env');
+if (!password) throw new Error('set password= in .env');
 
 const solverUrl = `ws://${solverHost}:3000/akamai/session`;
 
@@ -131,7 +136,7 @@ await cdp.send('Emulation.setDeviceMetricsOverride', {
 
 // Solve Akamai
 try {
-  await solveAkamai(page, { proxy, solverUrl, url });
+  await solve(page, { proxy, solverUrl, url });
 } catch (e) {
   log(`ERROR: Solver failed: ${(e as Error).message}`);
   await cleanup(1);
@@ -139,26 +144,27 @@ try {
 
 await sleep(7000);
 
-// Check result: the goal is to reach the login form without Akamai denying
-// the page, not to complete a real login (no real Comcast credentials are
-// available in CI, so a genuine sign-in attempt would always fail).
-log(`Final URL: ${page.url()}`);
+// Login
+try {
+  await page.fill('#user-name-input', username);
+  await page.fill('#password-input', password);
+  await page.locator('#login-button').click();
+  log('Clicked Log In');
+  await page.waitForLoadState('load', { timeout: 30000 }).catch(() => {});
+} catch (e) {
+  log(`ERROR: Sign-in actions failed: ${(e as Error).message}`);
+  await cleanup(1);
+}
+
+await sleep(3000);
+
+// Check result
 const html = await page.content();
+log(`Final URL: ${page.url()}`);
 
 const denied =
   /<H1>\s*Access Denied\s*<\/H1>/i.test(html) || html.includes('Access Denied');
-let loginFormReached = false;
-if (!denied) {
-  try {
-    await page.waitForSelector('#user', { timeout: 10000 });
-    loginFormReached = true;
-  } catch {
-    loginFormReached = false;
-  }
-}
-
 if (denied) log('RESULT: FAIL - Access Denied');
-else if (!loginFormReached) log('RESULT: FAIL - login form (#user) not found');
-else log('RESULT: SUCCESS - Akamai solved, login form reached');
+else log('RESULT: SUCCESS - Login page accessible');
 
-await cleanup(denied || !loginFormReached ? 2 : 0);
+await cleanup(denied ? 2 : 0);

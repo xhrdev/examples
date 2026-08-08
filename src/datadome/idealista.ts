@@ -1,20 +1,19 @@
 /**
  * Run with:
  *
- * node --env-file=.env src/domedata/grainger.ts
- * node --env-file=.env src/domedata/grainger.ts --headless
+ * node --env-file=.env src/datadome/idealista.ts
+ * node --env-file=.env src/datadome/idealista.ts --headless
  */
 import { randomInt } from 'node:crypto';
 import fs from 'node:fs';
 
 import { chromium, type LaunchOptions } from 'playwright-core';
 
-import { solveDataDome } from '#src/domedata/solver.js';
+import { solve } from '#src/datadome/solver.js';
 
-const url = 'https://www.grainger.com/';
+const url = 'https://www.idealista.com/';
 const solverHost = process.env['host'];
 const configuredProxy = process.env['proxy'];
-const solverApiKey = process.env['solver_api_key'];
 const chromePath = process.env['CHROME_PATH'] || '';
 const browserHoldMs = Number(process.env['BROWSER_HOLD_MS'] ?? 30_000);
 
@@ -115,9 +114,8 @@ try {
     viewport: null,
   });
   const page = await context.newPage();
-  const result = await solveDataDome(page, {
+  const result = await solve(page, {
     proxy,
-    ...(solverApiKey ? { solverApiKey } : {}),
     solverUrl,
     url,
   });

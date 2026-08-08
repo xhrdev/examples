@@ -1,20 +1,17 @@
 {
   "extends": "@skilbjo/config-rc/tsconfig.json",
   "include": [
-    "src/**/*.ts",
-    "test/**/*.ts",
-    ".eslintrc.cjs"
+    "src/**/*.ts"
   ],
   "exclude": [
-    "dev-resources/repl.cjs",
     "dist",
     "node_modules"
   ],
   "compilerOptions": {
     "lib": ["DOM"],
+    "rootDir": "./src",
     "paths": {
-      "#src/*": ["./src/*"],
-      "#test/*": ["./test/*"]
+      "#src/*": ["./src/*"]
     },
     "types": [
       "node"

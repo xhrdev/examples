@@ -4,8 +4,8 @@
  *
  * run this script:
 
-node --env-file=.env src/loadtest.ts --script=src/akmi/ca-edd --headless --iterations=50 --concurrency=5
-node --env-file=.env src/loadtest.ts --script=src/xperimeter/zillow --iterations=20 --concurrency=3
+node --env-file=.env src/loadtest.ts --script=src/akamai/ca-edd --headless --iterations=50 --concurrency=5
+node --env-file=.env src/loadtest.ts --script=src/datadome/idealista --iterations=20 --concurrency=3
 
 */
 import { spawn } from 'node:child_process';
@@ -33,7 +33,7 @@ const HOST = readFlag('--host');
 const HEADLESS = args.includes('--headless');
 const QUIET = args.includes('--quiet');
 const PROXY_RAW = readFlag('--proxy') || process.env['proxy'] || '';
-const SCRIPT = readFlag('--script') || 'src/akmi/ca-edd';
+const SCRIPT = readFlag('--script') || 'src/akamai/ca-edd';
 
 // ---------------------------------------------------------------------------
 // Session rotation — replaces "-session-<N>-" in the proxy username
