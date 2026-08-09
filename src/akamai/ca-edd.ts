@@ -1,9 +1,11 @@
 /**
- * run this script:
-
-node --env-file=.env src/akamai/ca-edd.ts --headless
-
-*/
+ * Run with:
+ *
+ * node --env-file=.env src/akamai/ca-edd.ts
+ * node --env-file=.env src/akamai/ca-edd.ts --headless
+ *
+ * Needs username= and password= in .env for the sign-in step.
+ */
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';
 

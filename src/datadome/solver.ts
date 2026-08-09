@@ -1,4 +1,10 @@
 /**
+ * This is a Playwright library file, not a script. It exposes a `solve`
+ * function you add to Playwright scripts to integrate with the xhr.dev
+ * on-prem solver for anti-bot solving. See src/datadome/grainger.ts for a
+ * runnable example, or src/datadome/grainger-http.ts to do the same thing
+ * without a browser.
+ *
  * DataDome browser bridge.
  *
  * This file is long, but it only does one thing: it lets a Playwright page

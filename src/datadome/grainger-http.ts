@@ -1,4 +1,9 @@
 /**
+ * Run with:
+ *
+ * node --env-file=.env src/datadome/grainger-http.ts
+ * node --env-file=.env src/datadome/grainger-http.ts --url=https://www.grainger.com/category/pumps
+ *
  * DataDome clearance cookies for grainger.com — no browser required.
  *
  * `grainger.ts` drives a real Chrome via Playwright. This script does the same
@@ -26,11 +31,6 @@
  * So: pass `submit=false` and make the final call from the same egress IP you
  * will use for scraping. Everything below shares one proxy session for exactly
  * that reason.
- *
- * Run with:
- *
- *   node --env-file=.env src/datadome/grainger-http.ts
- *   node --env-file=.env src/datadome/grainger-http.ts --url=https://www.grainger.com/category/pumps
  */
 // undici's `fetch` is the same implementation Node exposes globally, but its
 // types expose `dispatcher`, which is how a per-request proxy is set.

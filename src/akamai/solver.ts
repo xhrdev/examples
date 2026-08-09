@@ -1,4 +1,9 @@
 /**
+ * This is a Playwright library file, not a script. It exposes a `solve`
+ * function you add to Playwright scripts to integrate with the xhr.dev
+ * on-prem solver for anti-bot solving. See src/akamai/comcast.ts for a
+ * runnable example.
+ *
  * Akamai Bot Manager browser bridge.
  *
  * Akamai scores you on telemetry produced by an obfuscated sensor script. The
@@ -27,13 +32,7 @@
  * Sessions are keyed by origin because a single login flow often spans two
  * properties (e.g. business.comcast.com and login.xfinity.com), each with its
  * own independent `_abck` to satisfy.
- *
- * run this script:
-
-node --env-file=.env src/akamai/ca-edd.ts
-node --env-file=.env src/akamai/comcast.ts
-
-*/
+ */
 import type { BrowserContext, Frame, Page, Route } from 'playwright-core';
 import { WebSocket } from 'undici';
 

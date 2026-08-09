@@ -1,9 +1,9 @@
 /**
- * run this script:
-
-node --env-file=.env src/akamai/comcast.ts --headless
-
-*/
+ * Run with:
+ *
+ * node --env-file=.env src/akamai/comcast.ts
+ * node --env-file=.env src/akamai/comcast.ts --headless
+ */
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';
 import { toLaunchProxy } from '#src/proxy.js';

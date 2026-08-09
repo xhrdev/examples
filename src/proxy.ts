@@ -1,4 +1,8 @@
 /**
+ * This is a helper library, not a script. It exposes `pinSession`,
+ * `toLaunchProxy` and `toUrl`, which every example uses to turn a proxy
+ * string into the shape it needs.
+ *
  * Proxy string handling, in one place.
  *
  * Every example needs the same three things from a proxy string: a pinned

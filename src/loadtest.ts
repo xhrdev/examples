@@ -1,13 +1,12 @@
 /**
- * Load-test runner: spawns any src/ script repeatedly with rotating
- * proxy sessions and reports pass/fail/error rates.
+ * Run with:
  *
- * run this script:
-
-node --env-file=.env src/loadtest.ts --script=src/akamai/ca-edd --headless --iterations=50 --concurrency=5
-node --env-file=.env src/loadtest.ts --script=src/datadome/idealista --iterations=20 --concurrency=3
-
-*/
+ * node --env-file=.env src/loadtest.ts --script=src/datadome/grainger-http --iterations=20 --concurrency=3
+ * node --env-file=.env src/loadtest.ts --script=src/akamai/ca-edd --headless --iterations=50 --concurrency=5
+ *
+ * Spawns any src/ script repeatedly with a rotating proxy session per
+ * iteration and reports pass/fail/error rates. Pass --help for every flag.
+ */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
