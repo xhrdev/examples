@@ -60,7 +60,9 @@ RESULT: SUCCESS
 
 | script | vendor | challenge | needs a browser |
 |---|---|---|---|
-| [`src/datadome/grainger-http.ts`](src/datadome/grainger-http.ts) | DataDome | captcha / interstitial | no |
+| [`src/datadome/grainger-http.ts`](src/datadome/grainger-http.ts) | DataDome | captcha / interstitial | no — undici |
+| [`src/datadome/grainger-axios.ts`](src/datadome/grainger-axios.ts) | DataDome | captcha / interstitial | no — axios |
+| [`src/datadome/grainger-fetch.ts`](src/datadome/grainger-fetch.ts) | DataDome | captcha / interstitial | no — no deps |
 | [`src/datadome/grainger.ts`](src/datadome/grainger.ts) | DataDome | captcha / interstitial | yes |
 | [`src/datadome/idealista.ts`](src/datadome/idealista.ts) | DataDome | interstitial → captcha | yes |
 | [`src/akamai/comcast.ts`](src/akamai/comcast.ts) | Akamai Bot Manager | `_abck` sensor | yes |
@@ -72,7 +74,9 @@ Each vendor directory has its own README with the protocol details:
 Run any of them directly, or use the npm aliases:
 
 ```bash
-npm run grainger              # DataDome, no browser
+npm run grainger              # DataDome, no browser (undici)
+npm run grainger:axios        # ...the same, with axios + a cookie jar
+npm run grainger:fetch        # ...the same, with zero dependencies
 npm run grainger:browser      # DataDome, via Playwright
 npm run idealista
 npm run comcast
@@ -87,8 +91,22 @@ node --env-file=.env src/datadome/idealista.ts --headless
 
 **Plain HTTP.** You already have an HTTP scraper and just want a cookie.
 Fetch the challenge, POST it to the solver, submit the result. No Chromium
-anywhere. This is `grainger-http.ts`, and it is the cheapest option by a wide
-margin — a solve costs four requests and a few hundred milliseconds.
+anywhere, and it is the cheapest option by a wide margin — a solve costs four
+requests and a few hundred milliseconds.
+
+There are three interchangeable versions of that example, so you can copy
+whichever matches your stack. They make the same four requests and differ only
+in the client:
+
+| file | client | notes |
+|---|---|---|
+| `grainger-http.ts` | undici | per-request proxy via `ProxyAgent`; the default |
+| `grainger-axios.ts` | axios + `axios-cookiejar-support` | cookie jar carries `datadome` for you |
+| `grainger-fetch.ts` | Node's built-in `fetch` | no dependencies; needs `--use-env-proxy` |
+
+The shared DataDome protocol lives in
+[`src/datadome/challenge.ts`](src/datadome/challenge.ts), so each file is just
+its own client.
 
 **Browser bridge.** The site needs a real browser anyway (a login flow, a
 JS-rendered page), or the challenge wants a genuine browser context. The
@@ -163,6 +181,20 @@ Drop `--headless` to watch a browser-based script work.
 | `RESULT: FAIL - proxy session failed` | dead exit node. The examples retry three times; raise it with `--attempts=5` |
 | solver returns 400 | the profile and the headers you send disagree. Change both together, never one alone |
 | solver returns 500 with `queue_full` | the container is saturated; check `GET /akamai/queue-metrics` |
+
+## repl
+
+`npm run repl` opens a Node REPL with the repo's helpers and your pinned proxy
+already loaded, which is the quickest way to poke at a live challenge:
+
+```
+> const html = await get('https://www.grainger.com/')
+HTTP 403
+> parseBlockPage(html)
+{ rt: 'c', cid: 'AHrlqAAAAAM…', hsh: '97DAF2A1CB…', cookie: 'YWlkQoc1…' }
+```
+
+`npm run repl:watch` reloads it on save.
 
 ## hot reload
 

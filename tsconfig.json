@@ -4,6 +4,7 @@
     "src/**/*.ts"
   ],
   "exclude": [
+    "dev-resources/repl.cjs",
     "dist",
     "node_modules"
   ],

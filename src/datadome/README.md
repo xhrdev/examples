@@ -90,15 +90,35 @@ HTTP flow is far cheaper.
 
 | file | what it shows |
 |---|---|
-| `grainger-http.ts` | the full HTTP flow, no browser. `--url=` points it at any DataDome site. |
+| `grainger-http.ts` | the full HTTP flow with **undici**. `--url=` points it at any DataDome site. |
+| `grainger-axios.ts` | the same flow with **axios** and a cookie jar |
+| `grainger-fetch.ts` | the same flow with **Node's built-in fetch** and no dependencies |
 | `grainger.ts` | the same target through the browser bridge |
 | `idealista.ts` | an interstitial that escalates to a captcha |
+| `challenge.ts` | the challenge handling the three HTTP versions share |
 
 ```bash
-npm run grainger
+npm run grainger          # undici
+npm run grainger:axios    # axios
+npm run grainger:fetch    # no dependencies
 node --env-file=.env src/datadome/grainger-http.ts --url=https://www.idealista.com/
 node --env-file=.env src/datadome/idealista.ts --headless
 ```
+
+### picking a client
+
+All three are the same four requests, so copy whichever matches what you
+already use. Two differences worth knowing:
+
+- **axios** needs its proxy agent and its cookie jar to be *the same object*.
+  Passing `jar` alongside a plain `HttpsProxyAgent` throws `does not support
+  for use with other http(s).Agent` — wrap the proxy agent with
+  `createCookieAgent` from `http-cookie-agent` instead. Also set
+  `proxy: false`, or axios rewrites the request line and breaks CONNECT.
+- **built-in fetch** has no per-request proxy option. Node honours
+  `HTTP_PROXY` / `HTTPS_PROXY` only when started with `--use-env-proxy`, and
+  the setting is process-wide — including the call to your own solver. If the
+  solver is not reachable from the proxy's network, use the undici version.
 
 ## gotchas
 
