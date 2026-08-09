@@ -54,6 +54,10 @@ import {
  */
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
 
+/** A real page to prove the cookie works past the landing page. */
+const PRODUCT_URL =
+  'https://www.grainger.com/product/FEIT-ELECTRIC-Compact-LED-Bulb-Candelabra-56JH27?opr=HPRVP';
+
 const attempt = async ({
   proxy,
   solverApiKey,
@@ -154,6 +158,24 @@ const attempt = async ({
   log(
     `  <- HTTP ${verified.status} (${verified.data.length} bytes) "${title ?? ''}"`
   );
+
+  // Then a real page, on the same jar and the same pinned session. The
+  // landing page is a weak test — it is cheap to serve and sites are
+  // relaxed about it. A product page with a query string is what you
+  // actually came for, so fetch one and make sure the cookie still holds.
+  log('fetching a product page on the same jar');
+  const product = await client.get<string>(PRODUCT_URL, {
+    headers: { ...navigationHeaders(), referer: targetUrl },
+    responseType: 'text',
+  });
+  log(
+    `  <- HTTP ${product.status} (${product.data.length} bytes) "${pageTitle(product.data) ?? ''}"`
+  );
+  if (product.status !== 200) {
+    throw new Error(
+      `the clearance cookie did not carry to the product page: HTTP ${product.status}`
+    );
+  }
 
   return { cookie, status: verified.status, title };
 };
