@@ -39,7 +39,7 @@ Those fields are the challenge. `cookie` is the same value DataDome set in the
 ```
 1.  GET  https://www.grainger.com/            -> 403 + var dd={…} + datadome cookie
 2.  GET  geo.captcha-delivery.com/captcha/…   -> challenge document HTML
-3.  POST <solver>/dd/solve?submit=false       -> a prepared submission
+3.  POST <solver>/dd/solve       -> a prepared submission
 4.  GET  geo.captcha-delivery.com/captcha/check?…  -> {"cookie":"datadome=…"}
 5.  GET  https://www.grainger.com/  + cookie  -> 200, the real page
 ```
@@ -47,16 +47,16 @@ Those fields are the challenge. `cookie` is the same value DataDome set in the
 Step 3 sends `dd`, `ddCookie`, `iframeData` (the HTML from step 2), and a
 `profile` / `js_profile` pair describing the browser you are claiming to be.
 
-### `submit=false`, always
+### you send the submission, always
 
-`/dd/solve` defaults to `submit=true`: the solver posts the payload itself and
-returns `{"cookie": "…"}`. It is one less request, and it is almost always
-wrong — **DataDome binds the clearance cookie to the IP that submitted it**, so
-a cookie the solver earned works from the solver, not from you. You get a fresh
-403 on your very next request and it looks like the solve failed.
+`/dd/solve` never submits for you — it returns a prepared submission.
+**DataDome binds the clearance cookie to the IP that submitted it**, so a
+cookie the solver earned would work from the solver, not from you: you would
+get a fresh 403 on your very next request and it would look like the solve
+failed.
 
-Pass `?submit=false`, take the prepared submission, and send it yourself from
-the IP you intend to scrape from.
+Take the prepared submission and send it yourself from the IP you intend to
+scrape from.
 
 ### keep the identity consistent
 
@@ -162,7 +162,7 @@ already use. Two differences worth knowing:
 - **`no challenge to solve`** — the site served your IP the page directly.
   Datacenter proxies frequently sail through; try a residential pool.
 - **A 403 immediately after a solve** — the cookie was earned on a different
-  IP. Check session pinning and that you used `submit=false`.
+  IP. Check session pinning, and that you sent the submission yourself.
 - **The cookie is a full `Set-Cookie` string.** `/captcha/check` returns
   `datadome=abc…; Max-Age=31536000; Domain=.grainger.com; …`. Split on `;` and
   keep the value.

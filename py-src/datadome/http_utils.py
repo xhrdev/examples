@@ -169,13 +169,12 @@ def challenge_document_url(dd, target_url):
 
 
 def solve_endpoint(solver_url):
-  """`submit=false` is deliberate.
+  """`/dd/solve` never submits for you — it returns a prepared submission.
 
-  The default has the solver post the payload itself, and DataDome binds
-  the clearance cookie to whichever IP submitted it — so a cookie the
-  solver earned is void from your address.
+  DataDome binds the clearance cookie to whichever IP submitted it, so a
+  cookie the solver earned would be void from your address.
   """
-  return f'{solver_url}/dd/solve?submit=false'
+  return f'{solver_url}/dd/solve'
 
 
 def solve_request_body(dd, document_html, document_url, proxy, target_url):

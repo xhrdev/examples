@@ -17,7 +17,7 @@ const args = process.argv.slice(2);
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log(
-    'Usage: node --env-file=.env src/loadtest.ts [--script=src/<dir>/<script>] [--iterations=N] [--concurrency=N] [--headless] [--proxy=<url>] [--host=<ip>] [--quiet]'
+    'Usage: node --env-file=.env src/loadtest.ts [--script=src/<dir>/<script>] [--iterations=N] [--concurrency=N] [--headless] [--require-challenge] [--proxy=<url>] [--host=<ip>] [--quiet]'
   );
   process.exit(0);
 }
@@ -32,6 +32,7 @@ const ITERATIONS = parseInt(readFlag('--iterations') || '100', 10);
 const CONCURRENCY = parseInt(readFlag('--concurrency') || '1', 10);
 const HOST = readFlag('--host');
 const HEADLESS = args.includes('--headless');
+const REQUIRE_CHALLENGE = args.includes('--require-challenge');
 const QUIET = args.includes('--quiet');
 const PROXY_RAW = readFlag('--proxy') || process.env['proxy'] || '';
 const SCRIPT = readFlag('--script') || 'src/akamai/ca-edd';
@@ -70,6 +71,7 @@ function runIteration(i: number): Promise<{ code: number; elapsed: string }> {
   return new Promise((resolve) => {
     const childArgs = [SCRIPT_PATH];
     if (HEADLESS) childArgs.push('--headless');
+    if (REQUIRE_CHALLENGE) childArgs.push('--require-challenge');
 
     const env = { ...process.env };
     if (PROXY_RAW)

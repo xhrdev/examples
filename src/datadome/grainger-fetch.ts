@@ -92,7 +92,7 @@ const attempt = async ({
   log(`  <- HTTP ${document.status} (${documentHtml.length} bytes)`);
 
   // 3. Ask xhr.dev to build the submission — but not to send it.
-  log('POST /dd/solve?submit=false');
+  log('POST /dd/solve');
   const solve = await fetch(solveEndpoint(solverUrl), {
     body: JSON.stringify(
       solveRequestBody({ dd, documentHtml, documentUrl, proxy, targetUrl })

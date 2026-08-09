@@ -17,12 +17,12 @@ The four requests:
 
   1. GET the target. DataDome answers 403 with an inline `var dd = {...}`.
   2. GET the challenge document from geo.captcha-delivery.com.
-  3. POST /dd/solve?submit=false — the solver returns a prepared submission.
+  3. POST /dd/solve — the solver returns a prepared submission.
   4. Send that submission yourself. DataDome returns the clearance cookie.
 
 Step 4 has to come from your own IP: DataDome binds the cookie to whoever
-submitted it, so letting the solver submit (`submit=true`, the default)
-yields a cookie that is void from your address. See http_utils.py.
+submitted it, which is why the solver hands back the submission instead of
+sending it. See http_utils.py.
 
 `requests.Session` keeps a cookie jar for you, which is the reason to pick
 this one: `datadome` is set on the block response and again on the solve,
@@ -83,7 +83,7 @@ def attempt(proxy, solver_api_key, solver_url, target_url):
 
   # 3. Ask xhr.dev to build the submission — but not to send it. This call
   #    goes to your own solver, so it must not use the proxy.
-  log('POST /dd/solve?submit=false')
+  log('POST /dd/solve')
   headers = {'content-type': 'application/json'}
   if solver_api_key:
     headers['x-api-key'] = solver_api_key

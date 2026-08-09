@@ -54,7 +54,7 @@ export type Outcome = {
   title?: string | undefined;
 };
 
-/** What `/dd/solve?submit=false` hands back: a request for you to make. */
+/** What `/dd/solve` hands back: a request for you to make. */
 export type PreparedSubmission = {
   body?: string;
   origin: string;
@@ -144,12 +144,12 @@ export const challengeDocumentUrl = (
 };
 
 /**
- * `?submit=false` is deliberate. The default has the solver post the payload
- * itself, and DataDome binds the clearance cookie to whichever IP submitted
- * it — so a cookie the solver earned is void from your address.
+ * `/dd/solve` never submits for you — it returns a prepared submission.
+ * DataDome binds the clearance cookie to whichever IP submitted it, so a
+ * cookie the solver earned would be void from your address.
  */
 export const solveEndpoint = (solverUrl: string): string =>
-  new URL('/dd/solve?submit=false', solverUrl).href;
+  new URL('/dd/solve', solverUrl).href;
 
 export const solveRequestBody = ({
   dd,
@@ -253,6 +253,15 @@ const isTransport = (error: unknown): boolean =>
  * Shared entry point: reads the environment, pins a fresh proxy session per
  * attempt, runs `attempt`, and reports the result the way every other example
  * in this repo does.
+ *
+ * Proxies are tried in order. `proxy` (a datacenter pool) is fast and stable
+ * but frequently is not challenged at all on some targets; when that happens
+ * we fall through to `proxy_fallback` (a residential pool), which reliably
+ * draws a challenge but has a share of dead exit nodes. A dead node is retried
+ * with a fresh session rather than failing the run.
+ *
+ * `--require-challenge` turns "nothing challenged us anywhere" into a failure.
+ * CI passes it so the smoke gate cannot go green without exercising a solve.
  */
 export const run = async (
   // eslint-disable-next-line no-unused-vars -- function-type parameter
@@ -266,41 +275,79 @@ export const run = async (
   const attempts = Number(readFlag('--attempts') ?? 3);
   const targetUrl = readFlag('--url') ?? DEFAULT_URL;
   const solverUrl = `http://${solverHost}:${SOLVER_PORT}`;
+  const requireChallenge = process.argv.includes('--require-challenge');
+
+  const fallbackProxy = process.env['proxy_fallback'];
+  const chain: Array<{ label: string; url: string }> = [
+    { label: process.env['proxy_label'] ?? 'PRIMARY', url: configuredProxy },
+  ];
+  if (fallbackProxy) {
+    chain.push({
+      label: process.env['proxy_fallback_label'] ?? 'FALLBACK',
+      url: fallbackProxy,
+    });
+  }
 
   let lastError: unknown;
-  for (let i = 1; i <= attempts; i += 1) {
-    // A fresh session per attempt: a new IP, and a clean slate with DataDome.
-    const { url: proxy } = pinSession(configuredProxy);
-    try {
-      const outcome = await attempt({
-        proxy,
-        solverApiKey: process.env['solver_api_key'],
-        solverUrl,
-        targetUrl,
-      });
+  let sawNoChallenge = false;
 
-      if (!outcome) {
-        log('RESULT: no challenge to solve');
+  for (const [chainIdx, hop] of chain.entries()) {
+    for (let i = 1; i <= attempts; i += 1) {
+      // A fresh session per attempt: a new IP, and a clean slate with DataDome.
+      const { url: proxy } = pinSession(hop.url);
+      try {
+        const outcome = await attempt({
+          proxy,
+          solverApiKey: process.env['solver_api_key'],
+          solverUrl,
+          targetUrl,
+        });
+
+        if (!outcome) {
+          sawNoChallenge = true;
+          const next = chain[chainIdx + 1];
+          if (next) {
+            log(`${hop.label} = NO CHALLENGE, NOW TRYING ${next.label}`);
+            break; // move to the next proxy in the chain
+          }
+          if (requireChallenge) {
+            process.exitCode = 1;
+            log(
+              `RESULT: FAIL - no challenge from any proxy (${chain
+                .map((c) => c.label)
+                .join(' -> ')}) and --require-challenge was set`
+            );
+            return;
+          }
+          log(`${hop.label} = NO CHALLENGE`);
+          log('RESULT: no challenge to solve');
+          return;
+        }
+        if (outcome.status !== 200) {
+          throw new Error(`verification failed: HTTP ${outcome.status}`);
+        }
+        log(`${hop.label} = SOLVED`);
+        log('RESULT: SUCCESS');
         return;
+      } catch (error) {
+        lastError = error;
+        if (isTransport(error)) {
+          const more = i < attempts ? ', NOW RETRYING' : '';
+          log(`${hop.label} = DEAD NODE (attempt ${i}/${attempts})${more}`);
+        } else {
+          const more = i < attempts ? ' — retrying' : '';
+          log(
+            `${hop.label} = attempt ${i}/${attempts} failed (${(error as Error).message})${more}`
+          );
+        }
       }
-      if (outcome.status !== 200) {
-        throw new Error(`verification failed: HTTP ${outcome.status}`);
-      }
-      log('RESULT: SUCCESS');
-      return;
-    } catch (error) {
-      lastError = error;
-      const reason = isTransport(error)
-        ? 'proxy session failed'
-        : (error as Error).message;
-      if (i < attempts)
-        log(`attempt ${i}/${attempts} failed (${reason}) — retrying`);
     }
   }
 
   process.exitCode = 1;
   const reason = isTransport(lastError)
     ? 'proxy session failed'
-    : (lastError as Error).message;
+    : ((lastError as Error)?.message ??
+      (sawNoChallenge ? 'no challenge from any proxy' : 'unknown'));
   log(`RESULT: FAIL - ${reason}`);
 };

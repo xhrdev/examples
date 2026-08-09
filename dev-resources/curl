@@ -13,7 +13,7 @@
 #
 #   1. GET the target. DataDome answers 403 with an inline `var dd = {...}`.
 #   2. GET the challenge document from geo.captcha-delivery.com.
-#   3. POST /dd/solve?submit=false — the solver returns a prepared submission.
+#   3. POST /dd/solve — the solver returns a prepared submission.
 #   4. Send that submission yourself. DataDome returns the clearance cookie.
 #
 # Step 4 has to come from your own IP: DataDome binds the cookie to whoever
@@ -223,12 +223,12 @@ jq -n \
       url: $url
     }' >"${work}/solve.json"
 
-log 'POST /dd/solve?submit=false'
+log 'POST /dd/solve'
 status="$(req "${work}/prepared.json" -m 130 \
   -H 'content-type: application/json' \
   ${solver_api_key:+-H "x-api-key: ${solver_api_key}"} \
   --data-binary "@${work}/solve.json" \
-  "${solver}/dd/solve?submit=false")"
+  "${solver}/dd/solve")"
 [ "$status" = '200' ] ||
   fail "solver returned HTTP ${status}: $(head -c 300 "${work}/prepared.json")"
 log '  <- prepared submission'

@@ -49,7 +49,7 @@ GET https://www.grainger.com/
   challenge: type=captcha cid=AHrlqAAAAAMAhkqgGpXPdrUAYp7pCQ==
 GET /captcha/ (challenge document)
   <- HTTP 200 (583748 bytes)
-POST /dd/solve?submit=false
+POST /dd/solve
   <- prepared submission for /captcha/check
 GET geo.captcha-delivery.com (submit)
   <- HTTP 200
@@ -157,10 +157,9 @@ Clearance cookies are bound to the IP that earned them. Two things follow:
 
    If a proxy offers nothing to pin, the load-test runner says so rather than
    quietly sending every iteration through one IP.
-2. **Submit from your own IP.** `/dd/solve` defaults to `submit=true`, where
-   the solver sends the payload itself — which binds the cookie to the
-   *solver's* IP. Pass `?submit=false` and make the final request yourself.
-   The examples all do this.
+2. **Submit from your own IP.** `/dd/solve` returns a prepared submission
+   rather than sending one, because DataDome binds the cookie to whichever IP
+   submitted it. Make that final request yourself. The examples all do this.
 
 Datacenter proxies are faster and cheaper, but plenty of sites do not bother
 challenging them, so you may never exercise the solve path. In our testing
@@ -198,7 +197,7 @@ Drop `--headless` to watch a browser-based script work.
 | symptom | cause |
 |---|---|
 | `no challenge to solve` | the site let your IP through. Try a residential proxy. |
-| a fresh 403 right after a successful solve | the cookie was earned on a different IP — check session pinning, and that you used `submit=false` |
+| a fresh 403 right after a successful solve | the cookie was earned on a different IP — check session pinning, and that you sent the submission yourself |
 | `RESULT: FAIL - proxy session failed` | dead exit node. The examples retry three times; raise it with `--attempts=5` |
 | solver returns 400 | the profile and the headers you send disagree. Change both together, never one alone |
 | solver returns 500 with `queue_full` | the container is saturated; check `GET /akamai/queue-metrics` |

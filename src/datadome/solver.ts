@@ -22,7 +22,7 @@
  *
  *   1. Watch for a challenge document (`geo.captcha-delivery.com`).
  *   2. Read the challenge parameters out of the page.
- *   3. POST them to `/dd/solve?submit=false`; get a prepared submission back.
+ *   3. POST them to `/dd/solve`; get a prepared submission back.
  *   4. Splice that payload into the request Chrome is already making.
  *   5. Repeat if DataDome escalates: an interstitial (`i`) frequently turns
  *      into a captcha (`c`), so the round loop handles an `i -> c` sequence.
@@ -565,7 +565,7 @@ function solverCookieForChallengeDocument(
   return cid;
 }
 
-/** Validate and narrow the raw `/dd/solve?submit=false` response. */
+/** Validate and narrow the raw `/dd/solve` response. */
 function validateSolverResult(
   raw: unknown,
   type: DataDomeChallenge['rt']
@@ -1229,7 +1229,7 @@ async function callSolver(
 ): Promise<PreparedSubmission> {
   const connection = document.surfaces.connection;
   const raw = await fetchJson(
-    new URL('/dd/solve?submit=false', solverBaseUrl),
+    new URL('/dd/solve', solverBaseUrl),
     {
       body: JSON.stringify({
         dd: challenge.dd,

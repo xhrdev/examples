@@ -90,7 +90,7 @@ def attempt(proxy, solver_api_key, solver_url, target_url):
   log(f'  <- HTTP {status} ({len(document_html)} bytes)')
 
   # 3. Ask xhr.dev to build the submission — but not to send it.
-  log('POST /dd/solve?submit=false')
+  log('POST /dd/solve')
   headers = {'content-type': 'application/json'}
   if solver_api_key:
     headers['x-api-key'] = solver_api_key

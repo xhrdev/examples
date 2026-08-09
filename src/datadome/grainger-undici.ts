@@ -17,12 +17,12 @@
  *
  *   1. GET the target. DataDome answers 403 with an inline `var dd = {...}`.
  *   2. GET the challenge document from geo.captcha-delivery.com.
- *   3. POST /dd/solve?submit=false — the solver returns a prepared submission.
+ *   3. POST /dd/solve — the solver returns a prepared submission.
  *   4. Send that submission yourself. DataDome returns the clearance cookie.
  *
  * Step 4 has to come from your own IP: DataDome binds the cookie to whoever
- * submitted it, so letting the solver submit (`submit=true`, the default)
- * yields a cookie that is void from your address. See challenge.ts.
+ * submitted it, which is why the solver hands back the submission instead of
+ * sending it. See http-utils.ts.
  */
 // undici's `fetch` is the same implementation Node exposes globally, but its
 // types expose `dispatcher`, which is how a per-request proxy is set.
@@ -84,7 +84,7 @@ const attempt = async ({
   log(`  <- HTTP ${document.status} (${documentHtml.length} bytes)`);
 
   // 3. Ask xhr.dev to build the submission — but not to send it.
-  log('POST /dd/solve?submit=false');
+  log('POST /dd/solve');
   const solve = await fetch(solveEndpoint(solverUrl), {
     body: JSON.stringify(
       solveRequestBody({ dd, documentHtml, documentUrl, proxy, targetUrl })

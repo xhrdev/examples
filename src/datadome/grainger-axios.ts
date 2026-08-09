@@ -104,7 +104,7 @@ const attempt = async ({
 
   // 3. Ask xhr.dev to build the submission — but not to send it. This one call
   //    goes to your own solver, so it must not use the proxy agent.
-  log('POST /dd/solve?submit=false');
+  log('POST /dd/solve');
   const solve = await axios.post<PreparedSubmission>(
     solveEndpoint(solverUrl),
     solveRequestBody({
