@@ -11,8 +11,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends chromium && \
     rm -rf /var/lib/apt/lists/*
 
-COPY src/akmi/ src/akmi/
+COPY src/ src/
 
 ENV CHROME_PATH=/usr/bin/chromium
 
-CMD ["node", "src/akmi/loop.ts", "--headless", "--iterations=10"]
+CMD ["node", "src/loadtest.ts", "--script=src/akamai/comcast", "--headless", "--iterations=10"]

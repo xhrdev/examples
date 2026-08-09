@@ -1,6 +1,5 @@
 ignores: [
   '#src/*',
-  '#test/*',
 
   '@tsconfig/node24',
   '@typescript-eslint/eslint-plugin',
@@ -13,9 +12,5 @@ ignores: [
   '@skilbjo/config-rc',
   'husky',
 
-  'cheerio',
-
   'nodemon',
-
-  'playwright-core',
 ]

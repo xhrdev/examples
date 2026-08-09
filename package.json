@@ -13,26 +13,31 @@
     "depcheck": "depcheck",
     "eslint": "eslint .",
     "exec": "node",
-    "repl": "node dev-resources/repl.cjs",
-    "repl:watch": "node --watch dev-resources/repl.cjs",
+    "repl": "node --env-file=.env dev-resources/repl.cjs",
+    "repl:watch": "node --env-file=.env --watch dev-resources/repl.cjs",
     "build": "tsgo -p tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "test": "node --test",
-    "playwright": "NODE_EXTRA_CA_CERTS=./xhrdev.pem node --env-file=.env src/playwright.ts",
-    "puppeteer": "node --env-file=.env src/puppeteer.ts",
-    "p": "npm run playwright",
+    "grainger": "node --env-file=.env src/datadome/grainger-undici.ts",
+    "grainger:axios": "node --env-file=.env src/datadome/grainger-axios.ts",
+    "grainger:fetch": "node --use-env-proxy --env-file=.env src/datadome/grainger-fetch.ts",
+    "grainger:browser": "node --env-file=.env src/datadome/grainger.ts",
+    "idealista": "node --env-file=.env src/datadome/idealista.ts",
+    "comcast": "node --env-file=.env src/akamai/comcast.ts",
+    "ca-edd": "node --env-file=.env src/akamai/ca-edd.ts",
+    "loadtest": "node --env-file=.env src/loadtest.ts",
     "prepare": "husky"
   },
   "author": "XHR Software Inc",
   "dependencies": {
     "axios": "1.19.0",
     "axios-cookiejar-support": "7.0.0",
-    "fetch-cookie": "3.2.0",
     "http-cookie-agent": "8.0.0",
     "https-proxy-agent": "9.1.0",
-    "node-fetch": "3.3.2",
-    "tough-cookie": "6.0.2"
+    "playwright-core": "1.62.1",
+    "tough-cookie": "6.0.2",
+    "undici": "8.9.0"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.1",
@@ -40,25 +45,18 @@
     "@skilbjo/config-rc": "1.0.56",
     "@tsconfig/node24": "24.0.4",
     "@types/node": "26.1.2",
-    "@types/tough-cookie": "4.0.5",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "cheerio": "1.2.0",
     "depcheck": "1.4.7",
     "eslint": "10.8.0",
     "husky": "9.1.7",
     "nodemon": "3.1.14",
-    "playwright": "1.62.1",
-    "puppeteer": "25.4.0",
-    "undici": "8.9.0"
+    "playwright": "1.62.1"
   },
   "imports": {
     "#src/*.js": {
       "node": "./src/*.ts",
       "import": "./dist/*.js",
       "types": "./src/*.ts"
-    },
-    "#test/*.js": {
-      "node": "./test/*.ts"
     }
   },
   "commitlint": {

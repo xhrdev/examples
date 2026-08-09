@@ -1,16 +1,17 @@
 /**
- * Load-test runner: spawns any src/ script repeatedly with rotating
- * proxy sessions and reports pass/fail/error rates.
+ * Run with:
  *
- * run this script:
-
-node --env-file=.env src/loadtest.ts --script=src/akmi/ca-edd --headless --iterations=50 --concurrency=5
-node --env-file=.env src/loadtest.ts --script=src/xperimeter/zillow --iterations=20 --concurrency=3
-
-*/
+ * node --env-file=.env src/loadtest.ts --script=src/datadome/grainger-undici --iterations=20 --concurrency=3
+ * node --env-file=.env src/loadtest.ts --script=src/akamai/ca-edd --headless --iterations=50 --concurrency=5
+ *
+ * Spawns any src/ script repeatedly with a rotating proxy session per
+ * iteration and reports pass/fail/error rates. Pass --help for every flag.
+ */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+
+import { pinSession } from '#src/proxy.js';
 
 const args = process.argv.slice(2);
 
@@ -33,33 +34,26 @@ const HOST = readFlag('--host');
 const HEADLESS = args.includes('--headless');
 const QUIET = args.includes('--quiet');
 const PROXY_RAW = readFlag('--proxy') || process.env['proxy'] || '';
-const SCRIPT = readFlag('--script') || 'src/akmi/ca-edd';
+const SCRIPT = readFlag('--script') || 'src/akamai/ca-edd';
 
-// ---------------------------------------------------------------------------
-// Session rotation — replaces "-session-<N>-" in the proxy username
-// ---------------------------------------------------------------------------
-
-const SESSION_RE = /(-session-)(\d+)(-)/;
 const BASE_SESSION = Math.floor(Math.random() * 900000) + 100000;
 
+/** True once we have told the user their proxy cannot rotate. */
+let warnedStaticProxy = false;
+
 function buildProxyWithSession(rawProxy: string, sessionId: number): string {
-  const hasScheme = /^[a-z][a-z0-9+\-.]*:\/\//i.test(rawProxy);
-  const withScheme = hasScheme ? rawProxy : `http://${rawProxy}`;
-  const parsed = new URL(withScheme);
-
-  if (parsed.username) {
-    const decoded = decodeURIComponent(parsed.username);
-    if (SESSION_RE.test(decoded)) {
-      parsed.username = encodeURIComponent(
-        decoded.replace(SESSION_RE, `$1${sessionId}$3`)
-      );
-    }
+  const { pinned, url } = pinSession(rawProxy, sessionId);
+  if (!pinned && !warnedStaticProxy) {
+    warnedStaticProxy = true;
+    console.warn(
+      'warning: no session token found in the proxy credentials, so every ' +
+        'iteration will share one exit IP and the results will not be ' +
+        "representative. Add your provider's session token, or put a " +
+        '"{session}" placeholder in the username or password where the ' +
+        'rotating value belongs.'
+    );
   }
-
-  const userPart = parsed.username
-    ? `${parsed.username}${parsed.password ? `:${parsed.password}` : ''}@`
-    : '';
-  return `${parsed.protocol}//${userPart}${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`;
+  return url;
 }
 
 // ---------------------------------------------------------------------------

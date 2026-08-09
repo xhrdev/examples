@@ -3,6 +3,6 @@ set -euo pipefail
 
 dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )" && cd "$dir"
 
-file="src/wafaws/amazon.ts"
+file="src/datadome/grainger-http.ts"
 
 npx nodemon -e ts,mjs --delay 0.5 -w "${dir}/../src" -w "${dir}/../dev-resources"  -x "node $file"

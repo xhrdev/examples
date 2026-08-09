@@ -1,16 +1,282 @@
 #!/usr/bin/env bash
-set -euo pipefail
+#
+# run this script:
+#
+#   dev-resources/curl
+#   dev-resources/curl https://www.leboncoin.fr/
+#
+# The whole DataDome flow in curl. No Node, no Python, no browser — this is
+# the example to read if you are integrating from a language we do not have
+# an example for, or if you just want to see the bare HTTP.
+#
+# It is the same four requests as src/datadome/grainger-undici.ts:
+#
+#   1. GET the target. DataDome answers 403 with an inline `var dd = {...}`.
+#   2. GET the challenge document from geo.captcha-delivery.com.
+#   3. POST /dd/solve?submit=false — the solver returns a prepared submission.
+#   4. Send that submission yourself. DataDome returns the clearance cookie.
+#
+# Step 4 has to come from your own IP: DataDome binds the cookie to whoever
+# submitted it, so letting the solver submit (`submit=true`, the default)
+# gives you a cookie that is void from your address.
+#
+# A caveat this script makes very visible: DataDome fingerprints the TLS
+# handshake, and curl's is nothing like Chrome's. That does not stop the
+# solve — the solver only ever sees the challenge you hand it — but it does
+# change what the *site* is willing to give you, and the three sites we
+# tested behave differently:
+#
+#   seloger.com     issues a real captcha and honours the cookie. Works end
+#                   to end, which is why it is the default here.
+#   leboncoin.fr    issues a real challenge and the solve succeeds, but it
+#                   re-challenges curl when the cookie comes back.
+#   idealista.com   refuses before there is anything to solve: the challenge
+#                   document is a "you have been blocked" page, and the
+#                   solver correctly reports `IP is banned`.
+#
+# So if a site rejects plain curl, that is the fingerprint talking, not the
+# solver. Use one of the Node or Python examples, whose clients are less
+# obviously not-a-browser, or a curl build that can impersonate Chrome.
+#
+# Needs: curl, jq.
 
-dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )" && cd "$dir"
-project_dir="$(cd "${dir}/.." && pwd)" && cd "$project_dir"
+set -eo pipefail
 
-source .env
+dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+project_dir="$(cd "${dir}/.." && pwd)"
+cd "$project_dir"
 
-  # --cacert ./xhrdev.pem --proxy https://magic.xhr.dev
-  # --cacert ./xhrdev.pem --proxy http://localhost:8001 # for when @skilbjo is testing
-  # -H 'cookie: AB1=G; AD1=B; bm_ss=ab8e18ef4e;' \
-curl -i -L \
-  https://www.grainger.com/category/lighting/light-bulbs-lamps/standard-decorative-light-bulbs-lamps \
-  -H "x-xhr-api-key: ${XHR_API_KEY}" \
-  --cacert ./xhrdev.pem \
-  --proxy https://magic.xhr.dev
+# Read .env without sourcing it. `source` runs the file as shell, so a
+# password containing `$` (the EDD one does) either expands to nothing or,
+# under `set -u`, aborts the script.
+read_env() {
+  local key="$1" line
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      "${key}="*)
+        line="${line#*=}"
+        line="${line%%[[:space:]]#*}"       # strip a trailing ` # comment`
+        line="${line%\"}"; line="${line#\"}"
+        line="${line%\'}"; line="${line#\'}"
+        printf '%s' "$line"
+        return 0
+        ;;
+    esac
+  done <.env
+}
+
+# Anything already exported wins, so you can point this at another proxy or
+# solver for one run without editing .env.
+host="${host:-$(read_env host)}"
+proxy="${proxy:-$(read_env proxy)}"
+solver_api_key="${solver_api_key:-$(read_env solver_api_key)}"
+
+target="${1:-https://www.seloger.com/}"
+solver="http://${host}:3000"
+geo='https://geo.captcha-delivery.com'
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+log() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
+fail() { log "RESULT: FAIL - $*"; exit 1; }
+
+# curl, but a dead proxy or a refused tunnel reports like the other examples
+# instead of dumping a raw curl error. Echoes the status code.
+req() {
+  local out status
+  out="$1"; shift
+  if ! status="$(curl -sS "$@" -o "$out" -w '%{http_code}' 2>"${work}/curl.err")"; then
+    fail "proxy session failed ($(tr -d '\n' <"${work}/curl.err" | head -c 120))"
+  fi
+  printf '%s' "$status"
+}
+
+command -v jq >/dev/null || fail 'jq is required (brew install jq)'
+
+# --- pin the proxy session ------------------------------------------------
+#
+# Clearance cookies are bound to the IP that earned them, so the pool must
+# not rotate between step 1 and step 4. Providers spell this differently;
+# see src/proxy.ts for the full set.
+session="$RANDOM$RANDOM"
+case "$proxy" in
+  *oxylabs.io*)  pinned="${proxy/:\/\//://}"
+                 pinned="$(printf '%s' "$proxy" | sed -E "s|://([^:]+):|://\1-sessid-${session}:|")" ;;
+  *rayobyte.com*) pinned="$(printf '%s' "$proxy" | sed -E "s|://([^:]+):([^@]+)@|://\1:\2-hardsession-${session}@|")" ;;
+  *)             pinned="$proxy" ;;
+esac
+
+ua='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
+nav=(
+  -H "user-agent: ${ua}"
+  -H 'accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+  -H 'accept-language: en-US,en;q=0.9'
+  -H 'sec-ch-ua: "Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"'
+  -H 'sec-ch-ua-mobile: ?0'
+  -H 'sec-ch-ua-platform: "macOS"'
+  -H 'sec-fetch-dest: document'
+  -H 'sec-fetch-mode: navigate'
+  -H 'sec-fetch-site: none'
+  -H 'sec-fetch-user: ?1'
+  -H 'upgrade-insecure-requests: 1'
+)
+
+# --- 1. trip the challenge ------------------------------------------------
+log "GET ${target}"
+status="$(req "${work}/blocked.html" -m 60 -x "$pinned" "${nav[@]}" "$target")"
+log "  <- HTTP ${status} ($(wc -c <"${work}/blocked.html" | tr -d ' ') bytes)"
+
+# The block page carries `var dd={'rt':'c',...}` — single-quoted, so swap the
+# quotes to make it JSON.
+dd="$(sed -n "s/.*var dd=\({[^}]*}\).*/\1/p" "${work}/blocked.html" | tr "'" '"')"
+if [ -z "$dd" ]; then
+  log '  no DataDome challenge — the request went straight through'
+  log 'RESULT: no challenge to solve'
+  exit 0
+fi
+
+rt="$(jq -r '.rt' <<<"$dd")"
+cid="$(jq -r '.cid' <<<"$dd")"
+[ "$rt" = 'c' ] && kind='captcha' || kind='interstitial'
+log "  challenge: ${kind} cid=${cid}"
+
+# --- 2. fetch the challenge document --------------------------------------
+#
+# Rebuild the URL DataDome's c.js would have requested. jq's @uri does the
+# percent-encoding.
+doc_url="$(jq -rn --argjson dd "$dd" --arg geo "$geo" --arg ref "$target" '
+  ($dd.rt | if . == "c" then "/captcha/" else "/interstitial/" end) as $path
+  | [
+      "initialCid=\($dd.cid | @uri)",
+      "hash=\($dd.hsh | @uri)",
+      "cid=\($dd.cookie | @uri)",
+      "t=\($dd.t // "fe" | @uri)",
+      "referer=\($ref | @uri)",
+      "s=\($dd.s // 0)",
+      (if $dd.e then "e=\($dd.e | @uri)" else empty end),
+      "dm=cd"
+    ]
+  | $geo + $path + "?" + join("&")')"
+
+log 'GET challenge document'
+status="$(req "${work}/document.html" -m 60 -x "$pinned" "${nav[@]}" \
+  -H "referer: ${target}" \
+  -H 'sec-fetch-dest: iframe' \
+  -H 'sec-fetch-site: cross-site' \
+  "$doc_url")"
+log "  <- HTTP ${status} ($(wc -c <"${work}/document.html" | tr -d ' ') bytes)"
+
+# --- 3. ask the solver to build the submission ----------------------------
+#
+# `--rawfile` slurps the challenge document straight in as a JSON string, so
+# the half-megabyte of HTML never has to touch the command line.
+jq -n \
+  --argjson dd "$dd" \
+  --arg url "$target" \
+  --arg docUrl "$doc_url" \
+  --arg proxy "$pinned" \
+  --arg ua "$ua" \
+  --rawfile html "${work}/document.html" '
+  {
+    brands: [
+      { brand: "Google Chrome", version: "149" },
+      { brand: "Chromium", version: "149" },
+      { brand: "Not)A;Brand", version: "24" }
+    ],
+    chromeFullVersion: "149.0.7827.201",
+    chromeVersion: "149",
+    deviceMemory: 32,
+    hardwareConcurrency: 10,
+    languages: "en-US,en",
+    os: "macos",
+    platformVersion: "26.5.2",
+    screen: {
+      availHeight: 948, availLeft: 0, availTop: 0, availWidth: 1512,
+      colorDepth: 30, devicePixelRatio: 2, height: 982, innerHeight: 761,
+      innerWidth: 1200, outerHeight: 904, outerWidth: 1200, pixelDepth: 30,
+      screenX: 0, screenY: 143, width: 1512
+    },
+    timezone: "America/New_York",
+    timezoneOffsetMinutes: 240,
+    vendor: "Google Inc."
+  } as $p
+  | {
+      dd: ({ cid: $dd.cid, hsh: $dd.hsh, rt: $dd.rt, s: ($dd.s // 0) }
+           + (if $dd.t then { t: $dd.t } else {} end)
+           + (if $dd.e then { e: $dd.e } else {} end)
+           + (if $dd.b then { b: $dd.b } else {} end)),
+      ddCookie: $dd.cookie,
+      iframeData: { html: $html, url: $docUrl },
+      js_profile: $p,
+      profile: {
+        chromeFullVersion: $p.chromeFullVersion,
+        httpHeaderTemplates: { form: [], iframe: [], image: [], xhr: [] },
+        id: "chrome-\($p.chromeVersion)-\($p.os)",
+        os: $p.os,
+        timezone: $p.timezone,
+        timezoneOffsetMinutes: $p.timezoneOffsetMinutes,
+        tlsClientHello: "",
+        userAgent: $ua
+      },
+      proxy: $proxy,
+      timeout: 120000,
+      url: $url
+    }' >"${work}/solve.json"
+
+log 'POST /dd/solve?submit=false'
+status="$(req "${work}/prepared.json" -m 130 \
+  -H 'content-type: application/json' \
+  ${solver_api_key:+-H "x-api-key: ${solver_api_key}"} \
+  --data-binary "@${work}/solve.json" \
+  "${solver}/dd/solve?submit=false")"
+[ "$status" = '200' ] ||
+  fail "solver returned HTTP ${status}: $(head -c 300 "${work}/prepared.json")"
+log '  <- prepared submission'
+
+submit_url="$(jq -r '.url' "${work}/prepared.json")"
+origin="$(jq -r '.origin' "${work}/prepared.json")"
+referer="$(jq -r '.referer' "${work}/prepared.json")"
+body="$(jq -r '.body // empty' "${work}/prepared.json")"
+[ "$origin" = "$geo" ] || fail "solver returned an unexpected origin: ${origin}"
+
+# --- 4. submit it ourselves, over the same pinned session -----------------
+#
+# Captcha solves carry their payload in the query string (GET); interstitials
+# post a body.
+submit=(
+  -H 'accept: */*'
+  -H 'accept-language: en-US,en;q=0.9'
+  -H 'content-type: application/x-www-form-urlencoded; charset=UTF-8'
+  -H "origin: ${origin}"
+  -H "referer: ${referer}"
+  -H 'sec-fetch-dest: empty'
+  -H 'sec-fetch-mode: cors'
+  -H 'sec-fetch-site: same-origin'
+  -H "user-agent: ${ua}"
+)
+if [ -n "$body" ]; then
+  log 'POST submission'
+  printf '%s' "$body" >"${work}/submission.txt"
+  status="$(req "${work}/submitted.json" -m 60 -x "$pinned" "${submit[@]}" \
+    --data-binary "@${work}/submission.txt" "$submit_url")"
+else
+  log 'GET submission'
+  status="$(req "${work}/submitted.json" -m 60 -x "$pinned" "${submit[@]}" "$submit_url")"
+fi
+log "  <- HTTP ${status}"
+
+# DataDome answers with a full Set-Cookie string; keep just the value.
+cookie="$(jq -r '.cookie // empty' "${work}/submitted.json" | cut -d';' -f1 | sed 's/^datadome=//')"
+[ -n "$cookie" ] ||
+  fail "DataDome rejected the solve: $(head -c 300 "${work}/submitted.json")"
+log "clearance cookie: datadome=${cookie}"
+
+# --- prove it -------------------------------------------------------------
+log 'verifying against the target'
+status="$(req "${work}/verified.html" -m 60 -x "$pinned" "${nav[@]}" \
+  -H "cookie: datadome=${cookie}" "$target")"
+title="$(sed -n 's/.*<title>\([^<]*\).*/\1/p' "${work}/verified.html" | head -1)"
+log "  <- HTTP ${status} ($(wc -c <"${work}/verified.html" | tr -d ' ') bytes) \"${title}\""
+
+[ "$status" = '200' ] || fail "verification failed: HTTP ${status}"
+log 'RESULT: SUCCESS'

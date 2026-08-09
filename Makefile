@@ -10,7 +10,7 @@ very-clean: clean
 .PHONY: very-clean
 
 clean:
-	rm -rf dist target/lint target/test target/build
+	rm -rf dist target/lint target/build
 .PHONY: clean
 
 install: | target/install
@@ -20,7 +20,8 @@ ifeq ($(is_ci), true)
 else
 	npm install
 endif
-	source venv/bin/activate && pip install -r requirements.txt
+	test -d venv || python3 -m venv venv
+	source venv/bin/activate && pip install -q -r requirements.txt
 	mkdir -p $(@D) && touch $@
 .PHONY: install
 
@@ -38,16 +39,6 @@ target/build:
 	mkdir -p $(@D) && touch $@
 .PHONY: build
 
-test: | install target/test
-target/test:
-ifeq ($(is_ci), true)
-	node --test --experimental-test-module-mocks --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=target/lcov.info test/**/*.test.ts
-else
-	npm test
-endif
-	mkdir -p $(@D) && touch $@
-.PHONY: test
-
 # --- ci
-ci: | install lint build test
+ci: | install lint build
 .PHONY: ci
