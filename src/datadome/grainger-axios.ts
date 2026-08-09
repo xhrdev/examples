@@ -5,7 +5,7 @@
  * node --env-file=.env src/datadome/grainger-axios.ts --url=https://www.idealista.com/
  *
  * DataDome clearance cookies for grainger.com with **axios** — no browser.
- * Same four requests as grainger-http.ts; see that file for the flow.
+ * Same four requests as grainger-undici.ts; see that file for the flow.
  *
  * Two axios specifics worth copying:
  *
@@ -25,16 +25,6 @@ import { createCookieAgent } from 'http-cookie-agent/http';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { CookieJar } from 'tough-cookie';
 
-/**
- * The jar has to live in the agent, not in the axios config.
- * `axios-cookiejar-support` refuses a plain `https.Agent` — pass it a `jar`
- * alongside an ordinary HttpsProxyAgent and it throws "does not support for
- * use with other http(s).Agent". Wrapping the proxy agent with
- * `createCookieAgent` gives you one object that both tunnels and stores
- * cookies.
- */
-const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
-
 import {
   challengeDocumentUrl,
   checkPreparedSubmission,
@@ -52,7 +42,17 @@ import {
   solveRequestBody,
   submissionHeaders,
   TIMEOUT_MS,
-} from '#src/datadome/challenge.js';
+} from '#src/datadome/http-utils.js';
+
+/**
+ * The jar has to live in the agent, not in the axios config.
+ * `axios-cookiejar-support` refuses a plain `https.Agent` — pass it a `jar`
+ * alongside an ordinary HttpsProxyAgent and it throws "does not support for
+ * use with other http(s).Agent". Wrapping the proxy agent with
+ * `createCookieAgent` gives you one object that both tunnels and stores
+ * cookies.
+ */
+const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
 
 const attempt = async ({
   proxy,

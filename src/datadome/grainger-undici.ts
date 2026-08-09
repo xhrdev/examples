@@ -1,15 +1,15 @@
 /**
  * Run with:
  *
- * node --env-file=.env src/datadome/grainger-http.ts
- * node --env-file=.env src/datadome/grainger-http.ts --url=https://www.idealista.com/
+ * node --env-file=.env src/datadome/grainger-undici.ts
+ * node --env-file=.env src/datadome/grainger-undici.ts --url=https://www.idealista.com/
  *
  * DataDome clearance cookies for grainger.com with **undici** — no browser.
  *
  * There are three interchangeable versions of this example, one per HTTP
  * client. They do exactly the same four requests; only the client differs:
  *
- *   grainger-http.ts   undici          (this file)
+ *   grainger-undici.ts   undici          (this file)
  *   grainger-axios.ts  axios + axios-cookiejar-support
  *   grainger-fetch.ts  Node's built-in fetch, no dependencies
  *
@@ -45,7 +45,7 @@ import {
   solveRequestBody,
   submissionHeaders,
   TIMEOUT_MS,
-} from '#src/datadome/challenge.js';
+} from '#src/datadome/http-utils.js';
 
 const attempt = async ({
   proxy,

@@ -63,7 +63,7 @@ RESULT: SUCCESS
 
 | script | vendor | challenge | needs a browser |
 |---|---|---|---|
-| [`src/datadome/grainger-http.ts`](src/datadome/grainger-http.ts) | DataDome | captcha / interstitial | no — undici |
+| [`src/datadome/grainger-undici.ts`](src/datadome/grainger-undici.ts) | DataDome | captcha / interstitial | no — undici |
 | [`src/datadome/grainger-axios.ts`](src/datadome/grainger-axios.ts) | DataDome | captcha / interstitial | no — axios |
 | [`src/datadome/grainger-fetch.ts`](src/datadome/grainger-fetch.ts) | DataDome | captcha / interstitial | no — no deps |
 | [`py-src/datadome/grainger_requests.py`](py-src/datadome/grainger_requests.py) | DataDome | captcha / interstitial | no — python, requests |
@@ -89,7 +89,7 @@ npm run comcast
 npm run ca-edd                # needs username= and password=
 
 # any script takes flags after --
-node --env-file=.env src/datadome/grainger-http.ts --url=https://www.idealista.com/
+node --env-file=.env src/datadome/grainger-undici.ts --url=https://www.idealista.com/
 node --env-file=.env src/datadome/idealista.ts --headless
 ```
 
@@ -114,17 +114,19 @@ in the client:
 
 | file | client | notes |
 |---|---|---|
-| `src/datadome/grainger-http.ts` | undici | per-request proxy via `ProxyAgent`; the default |
+| `src/datadome/grainger-undici.ts` | undici | per-request proxy via `ProxyAgent`; the default |
 | `src/datadome/grainger-axios.ts` | axios + `axios-cookiejar-support` | cookie jar carries `datadome` for you |
 | `src/datadome/grainger-fetch.ts` | Node's built-in `fetch` | no dependencies; run it with `--use-env-proxy` |
 | `py-src/datadome/grainger_requests.py` | requests | `Session` keeps the jar |
 | `py-src/datadome/grainger_httpx.py` | httpx | proxy is per-client, one per pinned session |
 | `py-src/datadome/grainger_urllib.py` | urllib | standard library only |
 
-The shared DataDome protocol lives in
-[`src/datadome/challenge.ts`](src/datadome/challenge.ts) and
-[`py-src/datadome/challenge.py`](py-src/datadome/challenge.py), so each file is
-just its own client.
+The shared request building lives in
+[`src/datadome/http-utils.ts`](src/datadome/http-utils.ts) and
+[`py-src/datadome/http_utils.py`](py-src/datadome/http_utils.py), so each file
+is just its own client. The browser identity sits apart in
+[`src/datadome/profile.ts`](src/datadome/profile.ts), which the Playwright
+solver shares — there is one answer to "which Chrome are we claiming to be".
 
 **Browser bridge.** The site needs a real browser anyway (a login flow, a
 JS-rendered page), or the challenge wants a genuine browser context. The

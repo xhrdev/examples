@@ -19,7 +19,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "test": "node --test",
-    "grainger": "node --env-file=.env src/datadome/grainger-http.ts",
+    "grainger": "node --env-file=.env src/datadome/grainger-undici.ts",
     "grainger:axios": "node --env-file=.env src/datadome/grainger-axios.ts",
     "grainger:fetch": "node --use-env-proxy --env-file=.env src/datadome/grainger-fetch.ts",
     "grainger:browser": "node --env-file=.env src/datadome/grainger.ts",

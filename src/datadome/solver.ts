@@ -2,7 +2,7 @@
  * This is a Playwright library file, not a script. It exposes a `solve`
  * function you add to Playwright scripts to integrate with the xhr.dev
  * on-prem solver for anti-bot solving. See src/datadome/grainger.ts for a
- * runnable example, or src/datadome/grainger-http.ts to do the same thing
+ * runnable example, or src/datadome/grainger-undici.ts to do the same thing
  * without a browser.
  *
  * DataDome browser bridge.
@@ -57,6 +57,13 @@ import type {
   Route,
 } from 'playwright-core';
 
+import {
+  GEO_HOST,
+  GEO_ORIGIN,
+  PROFILE,
+  PROFILE_ID,
+} from '#src/datadome/profile.js';
+
 type CaptchaRelayContext = {
   headers: Readonly<Record<string, string | undefined>>;
   solved: CaptchaSolverResult;
@@ -105,8 +112,6 @@ type RawField = {
 
 const CAPTCHA_SENSOR_FIELDS = new Set(['ddCaptchaEncodedPayload', 'plv3']);
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=UTF-8';
-const GEO_HOST = 'geo.captcha-delivery.com';
-const GEO_ORIGIN = `https://${GEO_HOST}`;
 const CAPTCHA_CHECK_URL = `${GEO_ORIGIN}/captcha/check`;
 const INTERSTITIAL_URL = `${GEO_ORIGIN}/interstitial/`;
 const MAX_SOLVER_ERROR_DETAIL_LENGTH = 1000;
@@ -620,46 +625,8 @@ function validateSolverResult(
 
 const CHALLENGE_ROUTE = 'https://geo.captcha-delivery.com/**';
 const DD_TAGS_ROUTE = '*://dd.*/**/tags.js*';
-const PROFILE_ID = 'chrome-149-macos';
 const QUIET_WINDOW_MS = 5000;
 const TIMEOUT = 120000;
-
-const PROFILE = {
-  brands: [
-    { brand: 'Google Chrome', version: '149' },
-    { brand: 'Chromium', version: '149' },
-    { brand: 'Not)A;Brand', version: '24' },
-  ],
-  chromeFullVersion: '149.0.7827.201',
-  chromeVersion: '149',
-  deviceMemory: 32,
-  hardwareConcurrency: 10,
-  languages: 'en-US,en',
-  os: 'macos',
-  platformVersion: '26.5.2',
-  screen: {
-    availHeight: 948,
-    availLeft: 0,
-    availTop: 0,
-    availWidth: 1512,
-    colorDepth: 30,
-    devicePixelRatio: 2,
-    height: 982,
-    innerHeight: 761,
-    innerWidth: 1200,
-    outerHeight: 904,
-    outerWidth: 1200,
-    pixelDepth: 30,
-    screenX: 0,
-    screenY: 143,
-    width: 1512,
-  },
-  timezone: 'America/New_York',
-  timezoneOffsetMinutes: 240,
-  userAgent:
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
-  vendor: 'Google Inc.',
-} as const;
 
 const UA_OVERRIDE = {
   acceptLanguage: 'en-US,en',

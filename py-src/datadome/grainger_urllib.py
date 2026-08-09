@@ -29,7 +29,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from datadome.challenge import (  # noqa: E402
+from datadome.http_utils import (  # noqa: E402
   TIMEOUT_S,
   challenge_document_url,
   check_prepared_submission,

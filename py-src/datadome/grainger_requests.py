@@ -22,7 +22,7 @@ The four requests:
 
 Step 4 has to come from your own IP: DataDome binds the cookie to whoever
 submitted it, so letting the solver submit (`submit=true`, the default)
-yields a cookie that is void from your address. See challenge.py.
+yields a cookie that is void from your address. See http_utils.py.
 
 `requests.Session` keeps a cookie jar for you, which is the reason to pick
 this one: `datadome` is set on the block response and again on the solve,
@@ -38,7 +38,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from datadome.challenge import (  # noqa: E402
+from datadome.http_utils import (  # noqa: E402
   TIMEOUT_S,
   challenge_document_url,
   check_prepared_submission,

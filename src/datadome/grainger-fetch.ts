@@ -6,7 +6,7 @@
  *
  * DataDome clearance cookies for grainger.com with **nothing but Node** — no
  * browser, and no dependencies at all. Same four requests as
- * grainger-http.ts; see that file for the flow.
+ * grainger-undici.ts; see that file for the flow.
  *
  * Note the `--use-env-proxy` flag. Node's `fetch` takes its proxy from
  * `HTTP_PROXY` / `HTTPS_PROXY` rather than a per-request option, and only
@@ -39,7 +39,7 @@ import {
   solveRequestBody,
   submissionHeaders,
   TIMEOUT_MS,
-} from '#src/datadome/challenge.js';
+} from '#src/datadome/http-utils.js';
 
 if (
   !process.execArgv.includes('--use-env-proxy') &&

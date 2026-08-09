@@ -1,7 +1,7 @@
 /**
  * Run with:
  *
- * node --env-file=.env src/loadtest.ts --script=src/datadome/grainger-http --iterations=20 --concurrency=3
+ * node --env-file=.env src/loadtest.ts --script=src/datadome/grainger-undici --iterations=20 --concurrency=3
  * node --env-file=.env src/loadtest.ts --script=src/akamai/ca-edd --headless --iterations=50 --concurrency=5
  *
  * Spawns any src/ script repeatedly with a rotating proxy session per

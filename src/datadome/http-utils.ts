@@ -1,18 +1,20 @@
 /**
- * This is a helper library, not a script. It holds the DataDome protocol
- * details shared by the browser-free examples, so each of those files shows
- * only its own HTTP client:
+ * This is a helper library, not a script. It holds the request-building and
+ * response-parsing shared by the browser-free examples, so each of those
+ * files shows only its own HTTP client:
  *
- *   grainger-http.ts   undici
- *   grainger-axios.ts  axios + axios-cookiejar-support
- *   grainger-fetch.ts  Node's built-in fetch, no dependencies
+ *   grainger-undici.ts  undici
+ *   grainger-axios.ts   axios + axios-cookiejar-support
+ *   grainger-fetch.ts   Node's built-in fetch, no dependencies
+ *
+ * The browser identity itself lives in profile.ts, which solver.ts shares.
  *
  * The challenge handling is identical in all three. Pick the file that matches
  * the client you already use; see src/datadome/README.md for the flow.
  */
+import { GEO_ORIGIN, PROFILE, PROFILE_ID } from '#src/datadome/profile.js';
 import { pinSession } from '#src/proxy.js';
 
-const GEO_ORIGIN = 'https://geo.captcha-delivery.com';
 const DEFAULT_URL = 'https://www.grainger.com/';
 const SOLVER_PORT = 3000;
 
@@ -24,44 +26,6 @@ export const TIMEOUT_MS = 120_000;
  * changing the user agent here without changing `navigationHeaders` is the
  * most common way to get a solve rejected.
  */
-const PROFILE = {
-  brands: [
-    { brand: 'Google Chrome', version: '149' },
-    { brand: 'Chromium', version: '149' },
-    { brand: 'Not)A;Brand', version: '24' },
-  ],
-  chromeFullVersion: '149.0.7827.201',
-  chromeVersion: '149',
-  deviceMemory: 32,
-  hardwareConcurrency: 10,
-  languages: 'en-US,en',
-  os: 'macos',
-  platformVersion: '26.5.2',
-  screen: {
-    availHeight: 948,
-    availLeft: 0,
-    availTop: 0,
-    availWidth: 1512,
-    colorDepth: 30,
-    devicePixelRatio: 2,
-    height: 982,
-    innerHeight: 761,
-    innerWidth: 1200,
-    outerHeight: 904,
-    outerWidth: 1200,
-    pixelDepth: 30,
-    screenX: 0,
-    screenY: 143,
-    width: 1512,
-  },
-  timezone: 'America/New_York',
-  timezoneOffsetMinutes: 240,
-  userAgent:
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
-  vendor: 'Google Inc.',
-} as const;
-
-const PROFILE_ID = `chrome-${PROFILE.chromeVersion}-${PROFILE.os}`;
 
 /** Everything an attempt needs, already resolved from the environment. */
 export type Context = {

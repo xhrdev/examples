@@ -8,7 +8,7 @@ only its own HTTP client:
   grainger_httpx.py     httpx
   grainger_urllib.py    urllib, from the standard library
 
-It is the Python port of src/datadome/challenge.ts, and the flow is
+It is the Python port of src/datadome/http-utils.ts, and the flow is
 identical — see src/datadome/README.md.
 """
 

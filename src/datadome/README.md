@@ -34,7 +34,7 @@ Those fields are the challenge. `cookie` is the same value DataDome set in the
 
 ## the HTTP flow
 
-`grainger-http.ts` is this, end to end, in about 200 lines:
+`grainger-undici.ts` is this, end to end, in about 200 lines:
 
 ```
 1.  GET  https://www.grainger.com/            -> 403 + var dd={…} + datadome cookie
@@ -90,12 +90,13 @@ HTTP flow is far cheaper.
 
 | file | what it shows |
 |---|---|
-| `grainger-http.ts` | the full HTTP flow with **undici**. `--url=` points it at any DataDome site. |
+| `grainger-undici.ts` | the full HTTP flow with **undici**. `--url=` points it at any DataDome site. |
 | `grainger-axios.ts` | the same flow with **axios** and a cookie jar |
 | `grainger-fetch.ts` | the same flow with **Node's built-in fetch** and no dependencies |
 | `grainger.ts` | the same target through the browser bridge |
 | `idealista.ts` | an interstitial that escalates to a captcha |
-| `challenge.ts` | the challenge handling the three HTTP versions share |
+| `http-utils.ts` | request building and response parsing the three HTTP versions share |
+| `profile.ts` | the browser identity and DataDome endpoints, shared with `solver.ts` |
 
 The same three, in Python, under `py-src/datadome/`:
 
@@ -104,13 +105,13 @@ The same three, in Python, under `py-src/datadome/`:
 | `grainger_requests.py` | the HTTP flow with **requests** |
 | `grainger_httpx.py` | the same flow with **httpx** |
 | `grainger_urllib.py` | the same flow with **only the standard library** |
-| `challenge.py` | the Python port of `challenge.ts` |
+| `http_utils.py` | the Python port of `http-utils.ts` (identity included) |
 
 ```bash
 npm run grainger          # undici
 npm run grainger:axios    # axios
 npm run grainger:fetch    # no dependencies
-node --env-file=.env src/datadome/grainger-http.ts --url=https://www.idealista.com/
+node --env-file=.env src/datadome/grainger-undici.ts --url=https://www.idealista.com/
 node --env-file=.env src/datadome/idealista.ts --headless
 ```
 
