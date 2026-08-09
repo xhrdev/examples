@@ -97,6 +97,15 @@ HTTP flow is far cheaper.
 | `idealista.ts` | an interstitial that escalates to a captcha |
 | `challenge.ts` | the challenge handling the three HTTP versions share |
 
+The same three, in Python, under `py-src/datadome/`:
+
+| file | what it shows |
+|---|---|
+| `grainger_requests.py` | the HTTP flow with **requests** |
+| `grainger_httpx.py` | the same flow with **httpx** |
+| `grainger_urllib.py` | the same flow with **only the standard library** |
+| `challenge.py` | the Python port of `challenge.ts` |
+
 ```bash
 npm run grainger          # undici
 npm run grainger:axios    # axios
@@ -115,6 +124,18 @@ already use. Two differences worth knowing:
   for use with other http(s).Agent` — wrap the proxy agent with
   `createCookieAgent` from `http-cookie-agent` instead. Also set
   `proxy: false`, or axios rewrites the request line and breaks CONNECT.
+- **requests and httpx** both keep a cookie jar, and both need help with
+  this one cookie. DataDome sets the clearance cookie with
+  `Domain=.grainger.com`, but the response comes from
+  `geo.captcha-delivery.com`, so the jar drops it as a domain mismatch. Worse,
+  the *block* response already put a pre-solve `datadome` cookie in the jar
+  for that domain — add the new one without removing it and both go out, the
+  stale value wins, and it looks exactly like a failed solve. Replace, do not
+  append.
+- **urllib** has no per-request proxy escape hatch, so build two openers: one
+  with a `ProxyHandler` for the target traffic, and one with an empty
+  `ProxyHandler({})` for the call to your own solver. Credentials in the proxy
+  URL become the `Proxy-Authorization` header on the CONNECT automatically.
 - **built-in fetch** takes its proxy from `HTTP_PROXY` / `HTTPS_PROXY`, and
   only reads them when Node is started with `--use-env-proxy`. Set `NO_PROXY`
   to the solver's host so that call goes direct — this is required, not

@@ -25,6 +25,9 @@ worked.
 ```bash
 npm ci
 cp .env.example .env   # then fill in host= and proxy=
+
+# only if you want the Python examples
+python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
 ```
 
 Point `host=` at the machine running the container and check it is up:
@@ -63,6 +66,9 @@ RESULT: SUCCESS
 | [`src/datadome/grainger-http.ts`](src/datadome/grainger-http.ts) | DataDome | captcha / interstitial | no — undici |
 | [`src/datadome/grainger-axios.ts`](src/datadome/grainger-axios.ts) | DataDome | captcha / interstitial | no — axios |
 | [`src/datadome/grainger-fetch.ts`](src/datadome/grainger-fetch.ts) | DataDome | captcha / interstitial | no — no deps |
+| [`py-src/datadome/grainger_requests.py`](py-src/datadome/grainger_requests.py) | DataDome | captcha / interstitial | no — python, requests |
+| [`py-src/datadome/grainger_httpx.py`](py-src/datadome/grainger_httpx.py) | DataDome | captcha / interstitial | no — python, httpx |
+| [`py-src/datadome/grainger_urllib.py`](py-src/datadome/grainger_urllib.py) | DataDome | captcha / interstitial | no — python, stdlib |
 | [`src/datadome/grainger.ts`](src/datadome/grainger.ts) | DataDome | captcha / interstitial | yes |
 | [`src/datadome/idealista.ts`](src/datadome/idealista.ts) | DataDome | interstitial → captcha | yes |
 | [`src/akamai/comcast.ts`](src/akamai/comcast.ts) | Akamai Bot Manager | `_abck` sensor | yes |
@@ -87,6 +93,14 @@ node --env-file=.env src/datadome/grainger-http.ts --url=https://www.idealista.c
 node --env-file=.env src/datadome/idealista.ts --headless
 ```
 
+The Python examples read the same `.env` and take the same flags:
+
+```bash
+./venv/bin/python py-src/datadome/grainger_requests.py
+./venv/bin/python py-src/datadome/grainger_httpx.py
+./venv/bin/python py-src/datadome/grainger_urllib.py --url=https://www.idealista.com/
+```
+
 ## two ways to integrate
 
 **Plain HTTP.** You already have an HTTP scraper and just want a cookie.
@@ -100,13 +114,17 @@ in the client:
 
 | file | client | notes |
 |---|---|---|
-| `grainger-http.ts` | undici | per-request proxy via `ProxyAgent`; the default |
-| `grainger-axios.ts` | axios + `axios-cookiejar-support` | cookie jar carries `datadome` for you |
-| `grainger-fetch.ts` | Node's built-in `fetch` | no dependencies; run it with `--use-env-proxy` |
+| `src/datadome/grainger-http.ts` | undici | per-request proxy via `ProxyAgent`; the default |
+| `src/datadome/grainger-axios.ts` | axios + `axios-cookiejar-support` | cookie jar carries `datadome` for you |
+| `src/datadome/grainger-fetch.ts` | Node's built-in `fetch` | no dependencies; run it with `--use-env-proxy` |
+| `py-src/datadome/grainger_requests.py` | requests | `Session` keeps the jar |
+| `py-src/datadome/grainger_httpx.py` | httpx | proxy is per-client, one per pinned session |
+| `py-src/datadome/grainger_urllib.py` | urllib | standard library only |
 
 The shared DataDome protocol lives in
-[`src/datadome/challenge.ts`](src/datadome/challenge.ts), so each file is just
-its own client.
+[`src/datadome/challenge.ts`](src/datadome/challenge.ts) and
+[`py-src/datadome/challenge.py`](py-src/datadome/challenge.py), so each file is
+just its own client.
 
 **Browser bridge.** The site needs a real browser anyway (a login flow, a
 JS-rendered page), or the challenge wants a genuine browser context. The

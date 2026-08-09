@@ -20,6 +20,8 @@ ifeq ($(is_ci), true)
 else
 	npm install
 endif
+	test -d venv || python3 -m venv venv
+	source venv/bin/activate && pip install -q -r requirements.txt
 	mkdir -p $(@D) && touch $@
 .PHONY: install
 
@@ -27,6 +29,7 @@ lint: | install target/lint
 target/lint:
 	npm run lint
 	npm run depcheck
+	source venv/bin/activate && ruff check
 	mkdir -p $(@D) && touch $@
 .PHONY: lint
 
