@@ -115,6 +115,13 @@ node --env-file=.env src/datadome/grainger-undici.ts --url=https://www.idealista
 node --env-file=.env src/datadome/idealista.ts --headless
 ```
 
+There is a shell version too, `dev-resources/curl`, which is the same flow in
+curl and jq. It is the clearest place to see the raw HTTP, and it doubles as a
+demonstration that TLS fingerprinting is a separate problem from solving: the
+solve always succeeds, but whether the site honours the cookie afterwards
+depends on how it treats a non-browser client. See the README for the
+site-by-site results.
+
 ### picking a client
 
 All three are the same four requests, so copy whichever matches what you

@@ -120,6 +120,7 @@ in the client:
 | `py-src/datadome/grainger_requests.py` | requests | `Session` keeps the jar |
 | `py-src/datadome/grainger_httpx.py` | httpx | proxy is per-client, one per pinned session |
 | `py-src/datadome/grainger_urllib.py` | urllib | standard library only |
+| `dev-resources/curl` | curl + jq | the bare HTTP, no runtime at all |
 
 The shared request building lives in
 [`src/datadome/http-utils.ts`](src/datadome/http-utils.ts) and
@@ -201,6 +202,32 @@ Drop `--headless` to watch a browser-based script work.
 | `RESULT: FAIL - proxy session failed` | dead exit node. The examples retry three times; raise it with `--attempts=5` |
 | solver returns 400 | the profile and the headers you send disagree. Change both together, never one alone |
 | solver returns 500 with `queue_full` | the container is saturated; check `GET /akamai/queue-metrics` |
+
+## curl
+
+[`dev-resources/curl`](dev-resources/curl) runs the same four requests in
+shell, which is the one to read if you are integrating from a language we do
+not have an example for:
+
+```bash
+dev-resources/curl                          # defaults to seloger.com
+dev-resources/curl https://www.leboncoin.fr/
+```
+
+It also makes one thing very visible: **DataDome fingerprints the TLS
+handshake**, and curl's is nothing like Chrome's. That never stops the solve —
+the solver only sees the challenge you hand it — but it changes what the site
+is willing to give you. Of the three we tested:
+
+| site | plain curl |
+|---|---|
+| seloger.com | works end to end — the default |
+| leboncoin.fr | solves, but the site re-challenges when the cookie comes back |
+| idealista.com | refuses before there is anything to solve; the challenge document is a block page and the solver reports `IP is banned` |
+
+If a site rejects curl, that is the fingerprint talking and not the solver.
+Use one of the Node or Python examples, or a curl build that impersonates
+Chrome.
 
 ## repl
 
