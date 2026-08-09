@@ -102,7 +102,7 @@ in the client:
 |---|---|---|
 | `grainger-http.ts` | undici | per-request proxy via `ProxyAgent`; the default |
 | `grainger-axios.ts` | axios + `axios-cookiejar-support` | cookie jar carries `datadome` for you |
-| `grainger-fetch.ts` | Node's built-in `fetch` | no dependencies; needs `--use-env-proxy` |
+| `grainger-fetch.ts` | Node's built-in `fetch` | no dependencies; run it with `--use-env-proxy` |
 
 The shared DataDome protocol lives in
 [`src/datadome/challenge.ts`](src/datadome/challenge.ts), so each file is just

@@ -115,10 +115,18 @@ already use. Two differences worth knowing:
   for use with other http(s).Agent` — wrap the proxy agent with
   `createCookieAgent` from `http-cookie-agent` instead. Also set
   `proxy: false`, or axios rewrites the request line and breaks CONNECT.
-- **built-in fetch** has no per-request proxy option. Node honours
-  `HTTP_PROXY` / `HTTPS_PROXY` only when started with `--use-env-proxy`, and
-  the setting is process-wide — including the call to your own solver. If the
-  solver is not reachable from the proxy's network, use the undici version.
+- **built-in fetch** takes its proxy from `HTTP_PROXY` / `HTTPS_PROXY`, and
+  only reads them when Node is started with `--use-env-proxy`. Set `NO_PROXY`
+  to the solver's host so that call goes direct — this is required, not
+  tidiness: a datacenter proxy will not tunnel to the solver's port, so the
+  solve fails without it. Node matches `NO_PROXY` on the bare host, so an IP
+  works as well as a name.
+
+  The only thing you give up is that the configuration is per-process rather
+  than per-request, so one process cannot use two proxies at once. Every
+  example here uses a single proxy and the load-test runner spawns a process
+  per iteration, so it makes no practical difference — pick this version if
+  you would rather not take a dependency.
 
 ## gotchas
 

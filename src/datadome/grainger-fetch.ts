@@ -8,15 +8,19 @@
  * browser, and no dependencies at all. Same four requests as
  * grainger-http.ts; see that file for the flow.
  *
- * Note the `--use-env-proxy` flag. Node's global `fetch` has no per-request
- * proxy option, but since v24 it will honour `HTTP_PROXY` / `HTTPS_PROXY` when
- * that flag (or `NODE_USE_ENV_PROXY=1`) is set. This script sets those
- * variables from `proxy=` in your `.env` before making any request.
+ * Note the `--use-env-proxy` flag. Node's `fetch` takes its proxy from
+ * `HTTP_PROXY` / `HTTPS_PROXY` rather than a per-request option, and only
+ * reads them when started with that flag (or `NODE_USE_ENV_PROXY=1`). This
+ * script sets them from `proxy=` in your `.env`, and sets `NO_PROXY` so the
+ * call to your own solver goes direct — that one is required, not a nicety:
+ * a datacenter proxy will not tunnel to the solver's port, so without it the
+ * solve request simply fails.
  *
- * That is also this version's one limitation: the proxy is process-wide, so
- * every request — including the one to your own solver — goes through it. If
- * your solver is not reachable from the proxy's network, use the undici
- * version, where the proxy is per-request.
+ * The only thing you give up versus the undici version is that this
+ * configuration is per-process, not per-request, so one process cannot use
+ * two different proxies at once. Every example here uses a single proxy, and
+ * the load-test runner spawns a process per iteration, so in practice it
+ * makes no difference.
  */
 import {
   challengeDocumentUrl,
@@ -58,7 +62,9 @@ const attempt = async ({
   // this attempt's session.
   process.env['HTTP_PROXY'] = proxy;
   process.env['HTTPS_PROXY'] = proxy;
-  // Keep solver traffic off the proxy where the runtime allows it.
+  // Required: the solver is on your own network, and a datacenter proxy will
+  // refuse to tunnel to it. Node matches this against the bare host, so an IP
+  // works as well as a name.
   process.env['NO_PROXY'] = new URL(solverUrl).hostname;
 
   // 1. Trip the challenge.
