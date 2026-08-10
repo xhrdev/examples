@@ -468,7 +468,24 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
       }
 
       if (!scriptUrl || !scriptSource) {
-        log(`[${origin}] No Akamai script found, skipping`);
+        // Say *why*. These two cases have completely different causes:
+        // no URL means the page we got does not carry the sensor script at
+        // all (often a block/error page rather than the real one), whereas a
+        // URL with no source means the script response was not captured in
+        // time. Dump enough of the frame to tell them apart from a CI log.
+        const srcs = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gim)]
+          .map((m) => m[1])
+          .slice(0, 8);
+        log(
+          `[${origin}] No Akamai script found, skipping — ` +
+            (scriptUrl
+              ? `url=${scriptUrl} detected but its source was never captured ` +
+                `(captured ${capturedScripts.size} scripts)`
+              : 'no sensor-script URL in this frame') +
+            ` | frame=${frameUrl} html=${html.length}b title=${
+              /<title[^>]*>([^<]*)<\/title>/i.exec(html)?.[1]?.trim() ?? '?'
+            } scripts=[${srcs.join(', ')}]`
+        );
         return;
       }
 
