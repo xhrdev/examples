@@ -86,15 +86,23 @@ function runIteration(i: number): Promise<{ code: number; elapsed: string }> {
       stdio: QUIET ? ['ignore', 'pipe', 'pipe'] : 'inherit',
     });
 
+    // Deliberately longer than the solver's own 120s acceptance timeout. When
+    // the two are equal they race, and killing the child usually wins — which
+    // reports a bare "killed after timeout" and throws away the real reason the
+    // child was about to print. The extra headroom lets the child fail first
+    // and say why; this timer is only a backstop for a genuinely wedged run.
+    const KILL_TIMEOUT_MS = 150_000;
     const killTimer = setTimeout(() => {
       if (!resolved) {
         child.kill();
         resolved = true;
         const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-        console.error(`  [#${i + 1}] killed after 120s timeout`);
+        console.error(
+          `  [#${i + 1}] killed after ${KILL_TIMEOUT_MS / 1000}s timeout`
+        );
         resolve({ code: 1, elapsed });
       }
-    }, 120_000);
+    }, KILL_TIMEOUT_MS);
 
     let output = '';
     if (child.stdout)
