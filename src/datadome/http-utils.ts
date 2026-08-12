@@ -254,14 +254,11 @@ const isTransport = (error: unknown): boolean =>
  * attempt, runs `attempt`, and reports the result the way every other example
  * in this repo does.
  *
- * Proxies are tried in order. `proxy` (a datacenter pool) is fast and stable
- * but frequently is not challenged at all on some targets; when that happens
- * we fall through to `proxy_fallback` (a residential pool), which reliably
- * draws a challenge but has a share of dead exit nodes. A dead node is retried
- * with a fresh session rather than failing the run.
+ * There is one proxy pool, `proxy`. Each attempt pins a fresh session, so a
+ * dead exit node is retried on a new IP rather than failing the run.
  *
- * `--require-challenge` turns "nothing challenged us anywhere" into a failure.
- * CI passes it so the smoke gate cannot go green without exercising a solve.
+ * `--require-challenge` turns "nothing challenged us" into a failure. CI passes
+ * it so the smoke gate cannot go green without actually exercising a solve.
  */
 export const run = async (
   // eslint-disable-next-line no-unused-vars -- function-type parameter
@@ -277,69 +274,50 @@ export const run = async (
   const solverUrl = `http://${solverHost}:${SOLVER_PORT}`;
   const requireChallenge = process.argv.includes('--require-challenge');
 
-  const fallbackProxy = process.env['proxy_fallback'];
-  const chain: Array<{ label: string; url: string }> = [
-    { label: process.env['proxy_label'] ?? 'PRIMARY', url: configuredProxy },
-  ];
-  if (fallbackProxy) {
-    chain.push({
-      label: process.env['proxy_fallback_label'] ?? 'FALLBACK',
-      url: fallbackProxy,
-    });
-  }
+  const label = process.env['proxy_label'] ?? 'PROXY';
 
   let lastError: unknown;
   let sawNoChallenge = false;
 
-  for (const [chainIdx, hop] of chain.entries()) {
-    for (let i = 1; i <= attempts; i += 1) {
-      // A fresh session per attempt: a new IP, and a clean slate with DataDome.
-      const { url: proxy } = pinSession(hop.url);
-      try {
-        const outcome = await attempt({
-          proxy,
-          solverApiKey: process.env['solver_api_key'],
-          solverUrl,
-          targetUrl,
-        });
+  for (let i = 1; i <= attempts; i += 1) {
+    // A fresh session per attempt: a new IP, and a clean slate with DataDome.
+    const { url: proxy } = pinSession(configuredProxy);
+    try {
+      const outcome = await attempt({
+        proxy,
+        solverApiKey: process.env['solver_api_key'],
+        solverUrl,
+        targetUrl,
+      });
 
-        if (!outcome) {
-          sawNoChallenge = true;
-          const next = chain[chainIdx + 1];
-          if (next) {
-            log(`${hop.label} = NO CHALLENGE, NOW TRYING ${next.label}`);
-            break; // move to the next proxy in the chain
-          }
-          if (requireChallenge) {
-            process.exitCode = 1;
-            log(
-              `RESULT: FAIL - no challenge from any proxy (${chain
-                .map((c) => c.label)
-                .join(' -> ')}) and --require-challenge was set`
-            );
-            return;
-          }
-          log(`${hop.label} = NO CHALLENGE`);
-          log('RESULT: no challenge to solve');
+      if (!outcome) {
+        sawNoChallenge = true;
+        if (requireChallenge) {
+          process.exitCode = 1;
+          log(`${label} = NO CHALLENGE`);
+          log('RESULT: FAIL - no challenge and --require-challenge was set');
           return;
         }
-        if (outcome.status !== 200) {
-          throw new Error(`verification failed: HTTP ${outcome.status}`);
-        }
-        log(`${hop.label} = SOLVED`);
-        log('RESULT: SUCCESS');
+        log(`${label} = NO CHALLENGE`);
+        log('RESULT: no challenge to solve');
         return;
-      } catch (error) {
-        lastError = error;
-        if (isTransport(error)) {
-          const more = i < attempts ? ', NOW RETRYING' : '';
-          log(`${hop.label} = DEAD NODE (attempt ${i}/${attempts})${more}`);
-        } else {
-          const more = i < attempts ? ' — retrying' : '';
-          log(
-            `${hop.label} = attempt ${i}/${attempts} failed (${(error as Error).message})${more}`
-          );
-        }
+      }
+      if (outcome.status !== 200) {
+        throw new Error(`verification failed: HTTP ${outcome.status}`);
+      }
+      log(`${label} = SOLVED`);
+      log('RESULT: SUCCESS');
+      return;
+    } catch (error) {
+      lastError = error;
+      if (isTransport(error)) {
+        const more = i < attempts ? ', NOW RETRYING' : '';
+        log(`${label} = DEAD NODE (attempt ${i}/${attempts})${more}`);
+      } else {
+        const more = i < attempts ? ' — retrying' : '';
+        log(
+          `${label} = attempt ${i}/${attempts} failed (${(error as Error).message})${more}`
+        );
       }
     }
   }
@@ -348,6 +326,6 @@ export const run = async (
   const reason = isTransport(lastError)
     ? 'proxy session failed'
     : ((lastError as Error)?.message ??
-      (sawNoChallenge ? 'no challenge from any proxy' : 'unknown'));
+      (sawNoChallenge ? 'no challenge' : 'unknown'));
   log(`RESULT: FAIL - ${reason}`);
 };
