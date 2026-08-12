@@ -17,7 +17,7 @@ const args = process.argv.slice(2);
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log(
-    'Usage: node --env-file=.env src/loadtest.ts [--script=src/<dir>/<script>] [--iterations=N] [--concurrency=N] [--headless] [--require-challenge] [--proxy=<url>] [--host=<ip>] [--quiet]'
+    'Usage: node --env-file=.env src/loadtest.ts [--script=src/<dir>/<script>] [--iterations=N] [--concurrency=N] [--headless] [--require-challenge] [--attempts=N] [--proxy=<url>] [--host=<ip>] [--quiet]'
   );
   process.exit(0);
 }
@@ -33,6 +33,7 @@ const CONCURRENCY = parseInt(readFlag('--concurrency') || '1', 10);
 const HOST = readFlag('--host');
 const HEADLESS = args.includes('--headless');
 const REQUIRE_CHALLENGE = args.includes('--require-challenge');
+const ATTEMPTS = readFlag('--attempts');
 const QUIET = args.includes('--quiet');
 const PROXY_RAW = readFlag('--proxy') || process.env['proxy'] || '';
 const SCRIPT = readFlag('--script') || 'src/akamai/ca-edd';
@@ -69,9 +70,13 @@ const SCRIPT_PATH = path.join(PROJECT_ROOT, `${SCRIPT}.ts`);
 
 function runIteration(i: number): Promise<{ code: number; elapsed: string }> {
   return new Promise((resolve) => {
+    // Anything the child also parses has to be forwarded explicitly — a flag
+    // accepted here but not passed on is silently ignored, which is how
+    // --attempts looked like it was doing something and was not.
     const childArgs = [SCRIPT_PATH];
     if (HEADLESS) childArgs.push('--headless');
     if (REQUIRE_CHALLENGE) childArgs.push('--require-challenge');
+    if (ATTEMPTS) childArgs.push(`--attempts=${ATTEMPTS}`);
 
     const env = { ...process.env };
     if (PROXY_RAW)
