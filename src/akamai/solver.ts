@@ -37,6 +37,34 @@ import type { BrowserContext, Frame, Page, Route } from 'playwright-core';
 import { WebSocket } from 'undici';
 
 export type SolveOptions = {
+  /**
+   * Fetch intercepted requests with this instead of Playwright's
+   * `route.fetch`. Only needed for browsers where route.fetch is unreliable —
+   * `src/mitm.ts` exposes exactly this shape, and
+   * `src/akamai/comcast-lightpanda.ts` passes it. Whatever you give it must
+   * come from the same address the browser uses, or the telemetry will be
+   * scored against the wrong client.
+   */
+  fetchResponse?: (
+    // eslint-disable-next-line no-unused-vars -- function-type parameters
+    request: {
+      body?: string;
+      headers: Record<string, string>;
+      method: string;
+      url: string;
+    }
+  ) => Promise<Fetched>;
+  /**
+   * How long a frame gets to reach `domcontentloaded` after it navigates,
+   * before we give up on reading the sensor script out of it. Default 15s.
+   */
+  loadStateTimeout?: number;
+  /**
+   * How long the opening navigation gets. Default 30s. Every request on the
+   * page is intercepted and refetched, so a script-heavy target behind a slow
+   * proxy — or a browser slower than Chrome — can need more.
+   */
+  navigationTimeout?: number;
   proxy?: string;
   /**
    * Sent as `x-api-key` on the WebSocket upgrade. Required when the solver
@@ -50,6 +78,15 @@ export type SolveOptions = {
 };
 
 type CookieRecord = Record<string, string>;
+
+/** A response, however it was fetched. */
+type Fetched = {
+  body: string;
+  headers: Record<string, string>;
+  /** Each `set-cookie` separately; a joined string cannot be parsed back. */
+  setCookie?: string[];
+  status: number;
+};
 type SolverMessage = {
   accepted?: boolean;
   body?: string;
@@ -141,7 +178,16 @@ const PROFILE = {
 };
 
 export async function solve(page: Page, opts: SolveOptions): Promise<void> {
-  const { proxy, solverApiKey, solverUrl, timeout = 120000, url } = opts;
+  const {
+    fetchResponse,
+    loadStateTimeout = 15000,
+    navigationTimeout = 30000,
+    proxy,
+    solverApiKey,
+    solverUrl,
+    timeout = 120000,
+    url,
+  } = opts;
   const context: BrowserContext = page.context();
   const capturedDocs = new Map<string, { html: string; url: string }>();
   const capturedScripts = new Map<string, string>();
@@ -283,6 +329,26 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
                 );
                 resultStatus = result.status;
                 resultBody = result.body;
+              } else if (fetchResponse) {
+                // No frame for this origin, but we have a fetcher that shares
+                // the browser's address. Prefer it over context.request:
+                // Playwright's request context is a separate client, and on a
+                // CDP-attached browser it does not even use the browser's
+                // proxy — telemetry posted from a different IP than the page
+                // is scored as a different visitor and never accepted.
+                const resp = await fetchResponse({
+                  body: body ?? '',
+                  headers: {
+                    ...xhrHeaders,
+                    Origin: scriptOrigin,
+                    Referer: data.url,
+                  },
+                  method: method ?? 'POST',
+                  url: subUrl ?? '',
+                });
+                await applyCookies(subUrl ?? '', resp.setCookie);
+                resultStatus = resp.status;
+                resultBody = resp.body;
               } else {
                 const submitUrl = subUrl ?? '';
                 const submitMethod = method ?? 'POST';
@@ -356,7 +422,7 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
       const cookies = cookiesToRecord(await context.cookies(cookieUrl));
       const sanitizedHtml = stripScripts(html);
       log(
-        `[${origin}] Captured: script=${script.length}b html=${sanitizedHtml.length}b cookies=${Object.keys(cookies).length}`
+        `[${origin}] Captured: script=${script.length}b html=${sanitizedHtml.length}b cookies=[${Object.keys(cookies).sort().join(',')}]`
       );
       startSession(
         origin,
@@ -370,14 +436,41 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
     // silently, leaving the Akamai script uncaptured and the solve session
     // never started (hanging until the caller's outer timeout). Retry once
     // and log any failure so it's visible instead of a silent 120s hang.
+    //
+    // `fetchResponse` replaces route.fetch entirely when the caller supplies
+    // one, because against some browsers route.fetch is the thing that fails:
+    // it runs in Playwright's request context, which syncs cookies with the
+    // browser, and on Lightpanda that stops answering — after which every
+    // route.fetch waits out its timeout. See comcast-lightpanda.ts.
     const fetchWithRetry = async (
       route: Route,
       attempts = 2
-    ): Promise<Awaited<ReturnType<Route['fetch']>>> => {
+    ): Promise<Fetched> => {
       let lastErr: unknown;
       for (let i = 0; i < attempts; i++) {
         try {
-          return await route.fetch({ maxRedirects: 0 });
+          if (fetchResponse) {
+            const req = route.request();
+            const postData = req.postData();
+            const response = await fetchResponse({
+              ...(postData === null ? {} : { body: postData }),
+              headers: await req.allHeaders(),
+              method: req.method(),
+              url: req.url(),
+            });
+            return {
+              body: response.body,
+              headers: response.headers,
+              ...(response.setCookie ? { setCookie: response.setCookie } : {}),
+              status: response.status,
+            };
+          }
+          const resp = await route.fetch({ maxRedirects: 0 });
+          return {
+            body: await resp.text(),
+            headers: resp.headers(),
+            status: resp.status(),
+          };
         } catch (e) {
           lastErr = e;
         }
@@ -385,21 +478,91 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
       throw lastErr;
     };
 
+    /**
+     * Put a response's cookies in the browser's jar ourselves.
+     *
+     * `route.fulfill` takes one header map, so it can carry exactly one
+     * `set-cookie` — a response that sets four (Akamai sets `_abck`, `bm_sz`,
+     * `ak_bmsc`, `bm_sv`) loses three of them, and if `_abck` is one of the
+     * lost ones the session starts without the very cookie the protocol
+     * advances. That failure is invisible: every round returns the same
+     * `_abck` and `rval` never leaves -1.
+     *
+     * Playwright applies cookies itself when `route.fetch` did the fetching,
+     * so this only runs on the `fetchResponse` path.
+     */
+    const applyCookies = async (
+      url: string,
+      setCookie: string[] | undefined
+    ): Promise<void> => {
+      if (!setCookie || setCookie.length === 0) return;
+      const { hostname } = new URL(url);
+      const cookies = setCookie.flatMap((header) => {
+        const [pair, ...attributes] = header.split(';');
+        const index = pair?.indexOf('=') ?? -1;
+        if (!pair || index < 1) return [];
+        const attribute = (name: string): string | undefined =>
+          attributes
+            .map((a) => a.trim())
+            .find((a) => a.toLowerCase().startsWith(`${name}=`))
+            ?.slice(name.length + 1);
+        const expires = attribute('expires');
+        const maxAge = attribute('max-age');
+        const seconds = maxAge === undefined ? NaN : Number(maxAge);
+        const expiresAt = Number.isFinite(seconds)
+          ? Date.now() / 1000 + seconds
+          : expires
+            ? Date.parse(expires) / 1000
+            : NaN;
+        return [
+          {
+            domain: attribute('domain') ?? hostname,
+            ...(Number.isFinite(expiresAt) ? { expires: expiresAt } : {}),
+            httpOnly: attributes.some(
+              (a) => a.trim().toLowerCase() === 'httponly'
+            ),
+            name: pair.slice(0, index).trim(),
+            path: attribute('path') ?? '/',
+            secure: attributes.some((a) => a.trim().toLowerCase() === 'secure'),
+            value: pair.slice(index + 1).trim(),
+          },
+        ];
+      });
+      if (cookies.length > 0) await context.addCookies(cookies);
+    };
+
+    /** Pass a fetched response back to the page, framing headers stripped. */
+    const fulfillFetched = (
+      route: Route,
+      fetched: Fetched,
+      body = fetched.body
+    ): Promise<void> => {
+      const headers = { ...fetched.headers };
+      // The body we hold is decoded, so the original framing would be a lie,
+      // and the cookies went into the jar through applyCookies instead.
+      delete headers['content-encoding'];
+      delete headers['content-length'];
+      delete headers['set-cookie'];
+      return route.fulfill({ body, headers, status: fetched.status });
+    };
+
     const routeHandler = async (route: Route) => {
       const req = route.request();
       if (req.resourceType() === 'document') {
         try {
           const resp = await fetchWithRetry(route);
-          const ct = resp.headers()['content-type'] ?? '';
-          if (resp.ok() && ct.includes('text/html')) {
-            const html = await resp.text();
+          const ct = resp.headers['content-type'] ?? '';
+          if (resp.status < 400 && ct.includes('text/html')) {
             capturedDocs.set(new URL(req.url()).origin, {
-              html,
+              html: resp.body,
               url: req.url(),
             });
-            return await route.fulfill({ body: html, response: resp });
           }
-          return await route.fulfill({ response: resp });
+          // Release the route before touching the cookie jar: while a request
+          // is paused, `addCookies` waits behind it on Lightpanda and the
+          // navigation never completes.
+          await fulfillFetched(route, resp);
+          return await applyCookies(req.url(), resp.setCookie);
         } catch (e) {
           log(
             `Document fetch failed for ${req.url()}: ${(e as Error).message}`
@@ -409,9 +572,19 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
       if (req.resourceType() === 'script') {
         try {
           const resp = await fetchWithRetry(route);
-          const body = await resp.text();
+          const body = resp.body;
           capturedScripts.set(req.url(), body);
           if (isLikelyAkamaiScriptUrl(req.url())) {
+            // The page gets a stub: the real sensor must not run, or it posts
+            // its own telemetry alongside the solver's.
+            await route.fulfill({
+              body: '/* blocked */',
+              contentType: 'application/javascript',
+              status: 200,
+            });
+            // Cookies first, then the session — `init` sends the jar, and a
+            // session that opens without the current `_abck` never advances.
+            await applyCookies(req.url(), resp.setCookie);
             const scriptOrigin = new URL(req.url()).origin;
             const doc = capturedDocs.get(scriptOrigin);
             if (doc && !sessions.has(scriptOrigin))
@@ -423,13 +596,10 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
                 doc.html,
                 null
               );
-            return await route.fulfill({
-              body: '/* blocked */',
-              contentType: 'application/javascript',
-              status: 200,
-            });
+            return;
           }
-          return await route.fulfill({ body, response: resp });
+          await fulfillFetched(route, resp, body);
+          return await applyCookies(req.url(), resp.setCookie);
         } catch (e) {
           log(`Script fetch failed for ${req.url()}: ${(e as Error).message}`);
         }
@@ -513,7 +683,9 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
       }
 
       try {
-        await frame.waitForLoadState('domcontentloaded', { timeout: 15000 });
+        await frame.waitForLoadState('domcontentloaded', {
+          timeout: loadStateTimeout,
+        });
         await processFrame(frame);
       } catch (e) {
         log(`Navigation handling error: ${(e as Error).message}`);
@@ -524,7 +696,7 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
       .then(() => {
         page.on('framenavigated', navHandler);
         return page.goto(url, {
-          timeout: 30000,
+          timeout: navigationTimeout,
           waitUntil: 'domcontentloaded',
         });
       })

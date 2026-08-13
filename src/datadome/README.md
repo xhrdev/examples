@@ -94,6 +94,7 @@ HTTP flow is far cheaper.
 | `grainger-axios.ts` | the same flow with **axios** and a cookie jar |
 | `grainger-fetch.ts` | the same flow with **Node's built-in fetch** and no dependencies |
 | `grainger.ts` | the same target through the browser bridge |
+| `grainger-lightpanda.ts` | the flow driven by **Lightpanda** instead of Chrome — see below |
 | `idealista.ts` | an interstitial that escalates to a captcha |
 | `http-utils.ts` | request building and response parsing the three HTTP versions share |
 | `profile.ts` | the browser identity and DataDome endpoints, shared with `solver.ts` |
@@ -114,6 +115,51 @@ npm run grainger:fetch    # no dependencies
 node --env-file=.env src/datadome/grainger-undici.ts --url=https://www.idealista.com/
 node --env-file=.env src/datadome/idealista.ts --headless
 ```
+
+### lightpanda
+
+`grainger-lightpanda.ts` swaps Chrome for [Lightpanda], a headless browser with
+no renderer — a ~70MB binary that starts in milliseconds and holds a page in a
+few MB. Get it, or point `LIGHTPANDA_PATH=` at a copy you already have:
+
+```bash
+curl -Lo lightpanda https://github.com/lightpanda-io/browser/releases/latest/download/lightpanda-aarch64-macos
+chmod +x lightpanda
+LIGHTPANDA_PATH=./lightpanda npm run grainger:lightpanda
+```
+
+**Lightpanda cannot reach DataDome on its own.** Point it straight at a proxy
+and DataDome answers `rt:"c"` with `t:"bv"` — a banned visitor — before a line
+of JavaScript runs, where the same proxy IP a second later gets a plain
+`t:"fe"` from `grainger-undici.ts`. It is not the user agent: undici sending
+`User-Agent: Lightpanda/1.0` over that proxy still gets `t:"fe"`. It is the
+connection, and nothing inside the browser can change it — `--user-agent`
+rejects any value containing "Mozilla", and `Emulation.setUserAgentOverride` is
+ignored on the wire.
+
+So `src/lightpanda.ts` puts `src/mitm.ts` in front of it: a local proxy that
+terminates TLS and re-makes each request with undici, the client the
+browser-free examples already use. With that the ban is gone — grainger serves
+an ordinary interstitial and the solve comes back in a second or two. Two
+details of that proxy were found here:
+
+- a request with **no `accept-encoding`** gets a captcha where the same request
+  with one gets an interstitial. `undici.request` sends none, `undici.fetch`
+  does, so the proxy uses `fetch`.
+- Lightpanda sends six headers and no `sec-fetch-*`. Without them grainger.com
+  serves its own error page instead of the real one.
+
+**Status:** it reaches the submission and DataDome hands back a clearance
+cookie, but that cookie is currently refused on first use — and so is one
+earned by submitting the same prepared payload from Node with the canonical
+`submissionHeaders()`. That points at the solver's DataDome path rather than
+anything in this file, and it is being fixed. Re-run this when it is.
+
+See `src/lightpanda.ts` for the three differences that bite immediately (never
+reuse the starting page, `newCDPSession` crashes Playwright, `content()` never
+returns).
+
+[Lightpanda]: https://lightpanda.io
 
 There is a shell version too, `dev-resources/curl`, which is the same flow in
 curl and jq. It is the clearest place to see the raw HTTP, and it doubles as a

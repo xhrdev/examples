@@ -84,6 +84,7 @@ the origin you actually need has to reach `~0~`.
 |---|---|
 | `comcast.ts` | solving across two origins during an OAuth redirect chain, up to the login form |
 | `ca-edd.ts` | the same, then an actual login — needs `username=` and `password=` in `.env` |
+| `comcast-lightpanda.ts` | the same target driven by **Lightpanda** instead of Chrome — see below |
 
 ```bash
 npm run comcast
@@ -92,6 +93,67 @@ npm run ca-edd
 ```
 
 Drop `--headless` to watch it happen.
+
+### lightpanda
+
+`comcast-lightpanda.ts` runs the same solve on [Lightpanda], a headless browser
+with no renderer — a ~70MB binary that starts in milliseconds. `solve()` needs
+no CDP session, so it drives a Lightpanda page unchanged:
+
+```bash
+curl -Lo lightpanda https://github.com/lightpanda-io/browser/releases/latest/download/lightpanda-aarch64-macos
+chmod +x lightpanda
+LIGHTPANDA_PATH=./lightpanda npm run comcast:lightpanda
+```
+
+It solves. `_abck` reaches `~0~` on round 5 — the same round Chrome takes:
+
+```
+[https://login.xfinity.com] Cookie update: round=5 rval=0 accepted=true _abck=~0~
+[https://login.xfinity.com] Cookie accepted (round 5)
+RESULT: SUCCESS - Akamai solved, reached /login
+```
+
+Four things had to be true, and each failed silently in a way that looked like
+something else:
+
+- **The connection is re-originated.** `src/lightpanda.ts` runs the browser
+  behind `src/mitm.ts`, a local proxy that terminates TLS and re-makes each
+  request with undici. That is also the only place the identity can be set:
+  Lightpanda's user agent cannot be changed from inside the browser, and
+  `context.newCDPSession()` — how `comcast.ts` overrides it — crashes
+  Playwright here.
+- **The identity has to be the profile the solver was told about**, not the
+  proxy's DataDome default. Telemetry claiming Chrome 146 under headers
+  claiming 149 is a mismatch, and `_abck` stays at `~-1~` however long you run.
+- **`fetchResponse` replaces `route.fetch`.** Playwright's route.fetch never
+  returns against Lightpanda — it runs in Playwright's request context, which
+  syncs cookies with the browser, and once that stops answering every later
+  route.fetch waits out its timeout, sensor script included. The MITM fetches
+  it instead, from the same address with the same headers.
+- **Cookies are applied by hand on that path.** `route.fulfill` carries one
+  `set-cookie` header and Akamai's document response sets four; lose `_abck`
+  and the session opens without the cookie the protocol advances. Akamai then
+  returns the *same* `_abck` to every submission and the rounds count up
+  forever. This is why each session now logs `cookies=[...]` by name: compare
+  it with a Chrome run and the missing one is right there.
+
+Two more that look like bugs and are not, both handled for you:
+
+- **`Target page, context or browser has been closed`, on everything at once.**
+  Lightpanda caps CDP messages at 1MB by default and drops the connection
+  rather than rejecting an oversized one. Playwright fulfills an intercepted
+  request by sending the whole body back over CDP, base64'd, so a single 1MB
+  analytics bundle ends the session. `start()` passes
+  `--cdp-max-message-size 32MB`.
+- **`page.goto` and `waitForLoadState` timing out.** The solver's 30s/15s
+  defaults are not enough for a script-heavy page under interception; they are
+  now the `navigationTimeout` and `loadStateTimeout` options.
+
+`_abck` only has to reach `~0~` on the origin you actually need — here
+login.xfinity.com. business.comcast.com stays at `~-1~` in a Chrome run too.
+
+[Lightpanda]: https://lightpanda.io
 
 ## gotchas
 
