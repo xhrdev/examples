@@ -149,11 +149,22 @@ details of that proxy were found here:
 - Lightpanda sends six headers and no `sec-fetch-*`. Without them grainger.com
   serves its own error page instead of the real one.
 
-**Status:** it reaches the submission and DataDome hands back a clearance
-cookie, but that cookie is currently refused on first use — and so is one
-earned by submitting the same prepared payload from Node with the canonical
-`submissionHeaders()`. That points at the solver's DataDome path rather than
-anything in this file, and it is being fixed. Re-run this when it is.
+**Status:** it works, but not on every attempt. A verified attempt returns the
+real page and DataDome rotates the cookie:
+
+```
+clearance cookie: datadome=QTlff_rUpD_JXTy6VJjnQ0wA9hB7akP68m1D2t678Gh_…
+verifying against the target
+  <- HTTP 200 (489743 bytes) "Grainger Industrial Supply - MRO Products…"
+```
+
+About one attempt in four gets there; the others earn a cookie that is refused
+on first use and come back as a fresh `rt=c t=fe`. With the three attempts the
+runner makes, a run succeeds roughly six times in ten. `grainger-undici.ts` on
+the same proxy in the same minute verifies first time, every time — so what is
+borderline is the solve computed from a Lightpanda page, not the solver, the
+proxy, or the IP. Retry rather than expect it; a failed attempt costs about
+seven seconds.
 
 See `src/lightpanda.ts` for the three differences that bite immediately (never
 reuse the starting page, `newCDPSession` crashes Playwright, `content()` never

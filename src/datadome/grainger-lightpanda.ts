@@ -33,11 +33,24 @@
  *
  * ## status
  *
- * End to end this reaches the submission, and DataDome hands back a clearance
- * cookie — but the cookie is currently refused on first use, and so is one
- * earned by submitting the same prepared payload from Node with the canonical
- * `submissionHeaders()`. That points at the solver's DataDome path rather than
- * anything here; it is being fixed. Everything in this file is ready for it.
+ * This works, but not every time. A verified attempt returns the real page and
+ * DataDome rotates the cookie, which is the whole flow:
+ *
+ *   clearance cookie: datadome=QTlff_rUpD_JXTy6VJjnQ0wA9hB7akP68m1D2t678Gh_…
+ *   verifying against the target
+ *     <- HTTP 200 (489743 bytes) "Grainger Industrial Supply - MRO Products…"
+ *
+ * Roughly one attempt in four gets that far; the rest earn a cookie that is
+ * refused on first use and come back as a fresh `rt=c t=fe`. The three
+ * attempts `run()` makes turn that into a run that succeeds about six times in
+ * ten. `grainger-undici.ts` on the same proxy, the same minute, verifies on
+ * the first attempt every time — so this is the browser, not the solver and
+ * not the IP. The cookie is what DataDome scores it as: a solve computed from
+ * a Lightpanda page is evidently borderline, and it falls on either side of
+ * the line from one attempt to the next.
+ *
+ * Retry rather than expect it. Nothing below needs changing to make an
+ * attempt work; a failed one costs about seven seconds.
  *
  * ## what it does
  *
