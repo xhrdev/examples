@@ -23,8 +23,10 @@
     "grainger:axios": "node --env-file=.env src/datadome/grainger-axios.ts",
     "grainger:fetch": "node --use-env-proxy --env-file=.env src/datadome/grainger-fetch.ts",
     "grainger:browser": "node --env-file=.env src/datadome/grainger.ts",
+    "grainger:lightpanda": "node --env-file=.env src/datadome/grainger-lightpanda.ts",
     "idealista": "node --env-file=.env src/datadome/idealista.ts",
     "comcast": "node --env-file=.env src/akamai/comcast.ts",
+    "comcast:lightpanda": "node --env-file=.env src/akamai/comcast-lightpanda.ts",
     "ca-edd": "node --env-file=.env src/akamai/ca-edd.ts",
     "loadtest": "node --env-file=.env src/loadtest.ts",
     "prepare": "husky"
