@@ -16,13 +16,11 @@ const solverHost = process.env['host'];
 const configuredProxy = process.env['proxy'];
 const solverApiKey = process.env['solver_api_key'];
 const chromePath = process.env['CHROME_PATH'] || '';
-const browserHoldMs = Number(process.env['BROWSER_HOLD_MS'] ?? 30_000);
+// How long the browser stays open after a run, to inspect what it landed on.
+const browserHoldMs = 30_000;
 
 if (!solverHost) throw new Error('set host= in .env');
 if (!configuredProxy) throw new Error('set proxy= in .env');
-if (!Number.isSafeInteger(browserHoldMs) || browserHoldMs < 0) {
-  throw new Error('BROWSER_HOLD_MS must be a non-negative integer');
-}
 
 const solverUrl = `http://${solverHost}:3000`;
 const log = (msg: string, ...extra: unknown[]): void =>
@@ -59,7 +57,7 @@ const cleanup = async (): Promise<void> => {
 };
 
 const holdBrowser = async (): Promise<void> => {
-  if (closing || !browser.isConnected() || browserHoldMs === 0) return;
+  if (closing || !browser.isConnected()) return;
   log(`Keeping browser open for ${browserHoldMs}ms (Ctrl+C to close now)`);
   await new Promise<void>((resolve) => {
     const done = () => {
