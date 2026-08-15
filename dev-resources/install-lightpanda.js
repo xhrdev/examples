@@ -2,7 +2,7 @@
  * Runs from `postinstall`. Downloads the Lightpanda binary that
  * src/lightpanda.ts spawns — see that file for what it is and why the examples
  * use it. There is no npm package for it, only a ~70MB release asset per
- * platform, so it lands in bin/ (gitignored) rather than node_modules/.
+ * platform, so it lands in target/ (gitignored) rather than node_modules/.
  *
  * Nothing here is fatal. Lightpanda is only needed by the two `:lightpanda`
  * examples, so a platform without a release asset, or a machine with no network,
@@ -28,7 +28,7 @@ const ASSETS = {
 };
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const target = path.join(root, 'bin', 'lightpanda');
+const target = path.join(root, 'target', 'lightpanda');
 
 async function main() {
   if (await stat(target).catch(() => null)) {

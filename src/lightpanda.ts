@@ -8,7 +8,7 @@
  * starts in milliseconds. Playwright talks to it over `connectOverCDP`, so
  * most of an existing script carries over.
  *
- * `npm install` downloads the binary to `bin/` for you, via
+ * `npm install` downloads the binary to `target/` for you, via
  * `dev-resources/install-lightpanda.js`. It is also found on $PATH, or point
  * `LIGHTPANDA_PATH=` at a copy you already have.
  *
@@ -64,12 +64,13 @@ import {
 
 import { type Capture, type Mitm, start as startMitm } from '#src/mitm.js';
 
-// `npm install` drops the binary in bin/ (dev-resources/install-lightpanda.js).
-// Fall back to $PATH so a system-wide install works with no configuration.
+// `npm install` drops the binary in target/
+// (dev-resources/install-lightpanda.js). Fall back to $PATH so a system-wide
+// install works with no configuration.
 const VENDORED = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
-  'bin',
+  'target',
   'lightpanda'
 );
 const BINARY =

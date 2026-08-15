@@ -14,9 +14,6 @@ result/
 
 .env
 node_modules
-
-# downloaded by dev-resources/install-lightpanda.js
-bin/
 .venv
 venv
 __pycache__/
