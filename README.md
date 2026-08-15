@@ -37,6 +37,15 @@ curl http://$host:3000/hc
 # {"status":"ok"}
 ```
 
+If you were issued an API key, put it in `.env` as `solver_api_key=` — every
+example sends it as `x-api-key`. `/hc` is always reachable without one, so a
+healthy `/hc` alongside a `401` from anything else means the key is missing or
+wrong, not that the solver is down. You can check your own solve rate with it:
+
+```bash
+curl "http://$host:3000/stats?api_key=$solver_api_key"
+```
+
 Then get a clearance cookie for grainger.com, using nothing but `fetch`:
 
 ```bash
