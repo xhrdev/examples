@@ -101,9 +101,7 @@ with no renderer — a ~70MB binary that starts in milliseconds. `solve()` needs
 no CDP session, so it drives a Lightpanda page unchanged:
 
 ```bash
-curl -Lo lightpanda https://github.com/lightpanda-io/browser/releases/latest/download/lightpanda-aarch64-macos
-chmod +x lightpanda
-LIGHTPANDA_PATH=./lightpanda npm run comcast:lightpanda
+npm run comcast:lightpanda
 ```
 
 It solves. `_abck` reaches `~0~` on round 5 — the same round Chrome takes:

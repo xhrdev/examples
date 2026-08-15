@@ -8,9 +8,8 @@
  * starts in milliseconds. Playwright talks to it over `connectOverCDP`, so
  * most of an existing script carries over.
  *
- * `npm install` downloads the binary to `target/` for you, via
- * `dev-resources/install-lightpanda.js`. It is also found on $PATH, or point
- * `LIGHTPANDA_PATH=` at a copy you already have.
+ * `npm install` downloads the binary to `target/` for you. To fetch it again
+ * by hand: `npm run lightpanda:download`.
  *
  * ## the connection is re-originated
  *
@@ -64,18 +63,15 @@ import {
 
 import { type Capture, type Mitm, start as startMitm } from '#src/mitm.js';
 
-// `npm install` drops the binary in target/
-// (dev-resources/install-lightpanda.js). Fall back to $PATH so a system-wide
-// install works with no configuration.
-const VENDORED = path.join(
+// `npm install` downloads the binary here, via `npm run lightpanda:download`.
+// One fixed location, so a run cannot pick up some other copy off $PATH and
+// leave you wondering which build you are actually testing.
+const BINARY = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
   'target',
   'lightpanda'
 );
-const BINARY =
-  process.env['LIGHTPANDA_PATH'] ||
-  (existsSync(VENDORED) ? VENDORED : 'lightpanda');
 const READY_TIMEOUT_MS = 10_000;
 const CDP_MAX_MESSAGE_SIZE = 32 * 1024 * 1024;
 
@@ -161,6 +157,14 @@ export const start = async (options: StartOptions = {}): Promise<Session> => {
     reoriginate = true,
   } = options;
 
+  // Checked before anything is started, so a missing binary does not leave a
+  // MITM proxy listening behind it.
+  if (!existsSync(BINARY)) {
+    throw new Error(
+      `lightpanda is not installed at ${BINARY} — run: npm run lightpanda:download`
+    );
+  }
+
   const mitm = reoriginate
     ? await startMitm({
         debug: process.env['MITM_DEBUG'] === '1',
@@ -225,7 +229,7 @@ export const start = async (options: StartOptions = {}): Promise<Session> => {
     if (spawnError) {
       return await abort(
         new Error(
-          `could not start ${BINARY}: ${spawnError.message} — set LIGHTPANDA_PATH= or put it on $PATH`
+          `could not start ${BINARY}: ${spawnError.message} — re-download it with: npm run lightpanda:download -- --force`
         )
       );
     }

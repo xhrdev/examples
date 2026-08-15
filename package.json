@@ -9,7 +9,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "postinstall": "npx playwright install --with-deps chrome && node dev-resources/install-lightpanda.js",
+    "postinstall": "npx playwright install --with-deps chrome && npm run lightpanda:download",
+    "lightpanda:download": "node dev-resources/lightpanda-download.js",
     "depcheck": "depcheck",
     "eslint": "eslint .",
     "exec": "node",

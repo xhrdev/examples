@@ -1,5 +1,6 @@
 /*
- * Runs from `postinstall`. Downloads the Lightpanda binary that
+ * Runs from `postinstall`, or by hand as `npm run lightpanda:download`.
+ * Downloads the Lightpanda binary that
  * src/lightpanda.ts spawns — see that file for what it is and why the examples
  * use it. There is no npm package for it, only a ~70MB release asset per
  * platform, so it lands in target/ (gitignored) rather than node_modules/.
@@ -31,7 +32,10 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const target = path.join(root, 'target', 'lightpanda');
 
 async function main() {
-  if (await stat(target).catch(() => null)) {
+  // Skipping keeps `npm install` from re-fetching 70MB every time. `--force`
+  // is the way back from a binary that is present but will not run.
+  const force = process.argv.includes('--force');
+  if (!force && (await stat(target).catch(() => null))) {
     console.log(`lightpanda: already at ${path.relative(root, target)}`);
     return;
   }

@@ -120,12 +120,10 @@ node --env-file=.env src/datadome/idealista.ts --headless
 
 `grainger-lightpanda.ts` swaps Chrome for [Lightpanda], a headless browser with
 no renderer — a ~70MB binary that starts in milliseconds and holds a page in a
-few MB. Get it, or point `LIGHTPANDA_PATH=` at a copy you already have:
+few MB. `npm install` downloads it to `target/`, so there is nothing to set up:
 
 ```bash
-curl -Lo lightpanda https://github.com/lightpanda-io/browser/releases/latest/download/lightpanda-aarch64-macos
-chmod +x lightpanda
-LIGHTPANDA_PATH=./lightpanda npm run grainger:lightpanda
+npm run grainger:lightpanda
 ```
 
 **Lightpanda cannot reach DataDome on its own.** Point it straight at a proxy
