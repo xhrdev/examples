@@ -8,10 +8,9 @@
  * starts in milliseconds. Playwright talks to it over `connectOverCDP`, so
  * most of an existing script carries over.
  *
- * Get the binary, or point `LIGHTPANDA_PATH=` at one you already have:
- *
- *   curl -Lo lightpanda https://github.com/lightpanda-io/browser/releases/latest/download/lightpanda-aarch64-macos
- *   chmod +x lightpanda
+ * `npm install` downloads the binary to `bin/` for you, via
+ * `dev-resources/install-lightpanda.js`. It is also found on $PATH, or point
+ * `LIGHTPANDA_PATH=` at a copy you already have.
  *
  * ## the connection is re-originated
  *
@@ -49,7 +48,11 @@
  * `start()` gives you.
  */
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { createServer } from 'node:net';
+import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 
 import {
   type Browser,
@@ -61,10 +64,41 @@ import {
 
 import { type Capture, type Mitm, start as startMitm } from '#src/mitm.js';
 
-const BINARY = process.env['LIGHTPANDA_PATH'] || 'lightpanda';
-const PORT = Number(process.env['LIGHTPANDA_PORT'] ?? 9222);
+// `npm install` drops the binary in bin/ (dev-resources/install-lightpanda.js).
+// Fall back to $PATH so a system-wide install works with no configuration.
+const VENDORED = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'bin',
+  'lightpanda'
+);
+const BINARY =
+  process.env['LIGHTPANDA_PATH'] ||
+  (existsSync(VENDORED) ? VENDORED : 'lightpanda');
 const READY_TIMEOUT_MS = 10_000;
 const CDP_MAX_MESSAGE_SIZE = 32 * 1024 * 1024;
+
+/**
+ * Reserve a free port for the CDP server. Every session needs its own process
+ * (see the header), so a fixed port would cap the machine at one browser and
+ * fail the rest with "address already in use" — which is what `loadtest.ts
+ * --concurrency=2` does to a `:lightpanda` script. Lightpanda binds the port
+ * itself, so unlike the MITM proxy this can only ask the kernel for one and
+ * hand over the number.
+ */
+const freePort = async (): Promise<number> => {
+  const probe = createServer();
+  try {
+    await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const address = probe.address();
+    if (address === null || typeof address === 'string') {
+      throw new Error('lightpanda: could not reserve a CDP port');
+    }
+    return address.port;
+  } finally {
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+  }
+};
 
 export type Session = {
   browser: Browser;
@@ -140,6 +174,7 @@ export const start = async (options: StartOptions = {}): Promise<Session> => {
     log(`mitm proxy on ${mitm.url} -> ${upstream}`);
   }
 
+  const port = await freePort();
   const browserProxy = mitm ? mitm.url : proxy;
   const child = spawn(
     BINARY,
@@ -148,7 +183,7 @@ export const start = async (options: StartOptions = {}): Promise<Session> => {
       '--host',
       '127.0.0.1',
       '--port',
-      String(PORT),
+      String(port),
       // Playwright fulfills an intercepted request by sending the whole body
       // back over CDP, base64'd. Lightpanda's default cap is 1MB, and it does
       // not reject the oversized message — it drops the connection, which
@@ -174,7 +209,7 @@ export const start = async (options: StartOptions = {}): Promise<Session> => {
     spawnError = error;
   });
 
-  const endpoint = `http://127.0.0.1:${PORT}`;
+  const endpoint = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + READY_TIMEOUT_MS;
   const kill = (): void => {
     child.kill('SIGTERM');
@@ -215,7 +250,7 @@ export const start = async (options: StartOptions = {}): Promise<Session> => {
     if (Date.now() > deadline) {
       return await abort(
         new Error(
-          `${BINARY} did not open a CDP port on ${PORT} within ${READY_TIMEOUT_MS}ms`
+          `${BINARY} did not open a CDP port on ${port} within ${READY_TIMEOUT_MS}ms`
         )
       );
     }
