@@ -274,7 +274,7 @@ export const run = async (
   const solverUrl = `http://${solverHost}:${SOLVER_PORT}`;
   const requireChallenge = process.argv.includes('--require-challenge');
 
-  const label = process.env['proxy_label'] ?? 'PROXY';
+  const label = 'PROXY';
 
   let lastError: unknown;
   let sawNoChallenge = false;
