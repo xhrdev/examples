@@ -194,6 +194,11 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
   const capturedDocs = new Map<string, { html: string; url: string }>();
   const capturedScripts = new Map<string, string>();
   const sessions = new Map<string, { frame: Frame | null; ws: WebSocket }>();
+  /**
+   * Sockets we closed ourselves because a newer session replaced them. They
+   * never open, and that is not a failure — see diagnoseIfNeverOpened.
+   */
+  const superseded = new WeakSet<WebSocket>();
   let closing = false;
 
   return new Promise<void>((resolve, reject) => {
@@ -230,7 +235,10 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
         log(`[${origin}] Session already open, skipping duplicate start`);
         return;
       }
-      if (existing) existing.ws.close(1000, 'New session');
+      if (existing) {
+        superseded.add(existing.ws);
+        existing.ws.close(1000, 'New session');
+      }
 
       const ws = new WebSocket(solverUrl, {
         ...(solverApiKey ? { headers: { 'x-api-key': solverApiKey } } : {}),
@@ -412,13 +420,27 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
       // opened, the upgrade itself was refused, and waiting for the
       // acceptance timeout would report that as a solve failure instead of
       // the 429 (or 401) it actually is.
+      //
+      // The `superseded` guard is the important one. A single origin can
+      // start a session twice (two frames capture the same script), and the
+      // second start deliberately closes the first socket before it has
+      // opened. That is a socket we killed, not a refused upgrade, and
+      // diagnosing it would report a failure for a solve that is about to
+      // succeed on the replacement socket.
       const diagnoseIfNeverOpened = (): void => {
         if (opened || closing || diagnosed) return;
+        if (superseded.has(ws) || sessions.get(origin)?.ws !== ws) return;
         diagnosed = true;
         void classifyUpgradeFailure(solverUrl, solverApiKey).then((error) => {
           log(`[${origin}] ${error.message}`);
-          finish();
-          reject(error);
+          // Only a 429 or a 401 is a definitive verdict worth failing on.
+          // Anything else means the probe could not explain the failure, so
+          // leave the previous behaviour alone and let the acceptance timeout
+          // decide rather than turning an unexplained blip into a hard error.
+          if (error instanceof RateLimitError || isAuthFailure(error)) {
+            finish();
+            reject(error);
+          }
         });
       };
 
@@ -753,7 +775,10 @@ async function classifyUpgradeFailure(
     // Throws RateLimitError on 429; anything else falls through.
     checkRateLimit(probe.status, probe.headers);
     if (probe.status === 401) {
-      return new Error(`solver rejected the API key (HTTP 401) on ${probeUrl}`);
+      return Object.assign(
+        new Error(`solver rejected the API key (HTTP 401) on ${probeUrl}`),
+        { authFailure: true }
+      );
     }
     return new Error(
       `solver WebSocket upgrade failed (probe returned HTTP ${probe.status})`
@@ -764,4 +789,9 @@ async function classifyUpgradeFailure(
       `solver WebSocket upgrade failed and ${probeUrl} is unreachable: ${(error as Error).message}`
     );
   }
+}
+
+/** Whether classifyUpgradeFailure identified a rejected API key. */
+function isAuthFailure(error: Error): boolean {
+  return (error as { authFailure?: boolean }).authFailure === true;
 }
