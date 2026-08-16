@@ -30,11 +30,7 @@ const SCRIPTS = [
   { blocking: false, script: 'src/datadome/grainger-lightpanda' },
   { headless: true, script: 'src/datadome/idealista' },
   { headless: true, script: 'src/akamai/comcast' },
-  // dev-resources/lightpanda-download.js only runs on a plain `npm install`;
-  // CI and Docker both install with --ignore-scripts by design (see that
-  // file), so the binary this needs is never present there. Non-blocking so
-  // CI can still exercise every other example.
-  { blocking: false, script: 'src/akamai/comcast-lightpanda' },
+  { script: 'src/akamai/comcast-lightpanda' },
   { headless: true, script: 'src/akamai/ca-edd' },
 ];
 

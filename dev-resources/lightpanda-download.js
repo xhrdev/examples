@@ -10,8 +10,10 @@
  * should still end up with a working install of everything else. The two
  * scripts that do need it fail with a clear message on their own.
  *
- * CI and Docker both install with `--ignore-scripts`, so this does not run
- * there — it is a convenience for a local checkout.
+ * CI and Docker both install with `--ignore-scripts`, so the postinstall
+ * hook never fires there. `make test` runs this explicitly as its own step
+ * before `npm test` so the CI smoke suite can still exercise the
+ * `:lightpanda` examples; Docker doesn't run them, so its image skips this.
  */
 import { chmod, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
