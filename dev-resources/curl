@@ -69,7 +69,7 @@ read_env() {
 # solver for one run without editing .env.
 host="${host:-$(read_env host)}"
 proxy="${proxy:-$(read_env proxy)}"
-solver_api_key="${solver_api_key:-$(read_env solver_api_key)}"
+api_key="${api_key:-$(read_env api_key)}"
 
 target="${1:-https://www.seloger.com/}"
 solver="http://${host}:3000"
@@ -226,7 +226,7 @@ jq -n \
 log 'POST /dd/solve'
 status="$(req "${work}/prepared.json" -m 130 \
   -H 'content-type: application/json' \
-  ${solver_api_key:+-H "x-api-key: ${solver_api_key}"} \
+  ${api_key:+-H "x-api-key: ${api_key}"} \
   --data-binary "@${work}/solve.json" \
   "${solver}/dd/solve")"
 [ "$status" = '200' ] ||

@@ -50,14 +50,14 @@ jobs:
         env:
           ENV_HOST: ${{ secrets.HOST }}
           ENV_PROXY: ${{ secrets.PROXY }}
-          ENV_SOLVER_API_KEY: ${{ secrets.SOLVER_API_KEY }}
+          ENV_API_KEY: ${{ secrets.API_KEY }}
           ENV_USERNAME: ${{ secrets.USERNAME }}
           ENV_PASSWORD: ${{ secrets.PASSWORD }}
         run: |
           {
             echo "host=$ENV_HOST"
             echo "proxy=$ENV_PROXY"
-            echo "solver_api_key=$ENV_SOLVER_API_KEY"
+            echo "api_key=$ENV_API_KEY"
             echo "username=$ENV_USERNAME"
             echo "password=$ENV_PASSWORD"
           } > .env

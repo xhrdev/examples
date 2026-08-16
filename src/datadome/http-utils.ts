@@ -285,7 +285,7 @@ export const run = async (
     try {
       const outcome = await attempt({
         proxy,
-        solverApiKey: process.env['solver_api_key'],
+        solverApiKey: process.env['api_key'],
         solverUrl,
         targetUrl,
       });

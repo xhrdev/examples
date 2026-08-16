@@ -15,7 +15,7 @@ import { solve } from '#src/akamai/solver.js';
 const url = 'https://eddservices.edd.ca.gov/tap/secure/eservices';
 const solverHost = process.env['host'];
 const proxy = process.env['proxy'];
-const solverApiKey = process.env['solver_api_key'];
+const solverApiKey = process.env['api_key'];
 const username = process.env['username'];
 const password = process.env['password'];
 let closing = false;

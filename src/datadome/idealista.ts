@@ -14,7 +14,7 @@ import { solve } from '#src/datadome/solver.js';
 const url = 'https://www.idealista.com/';
 const solverHost = process.env['host'];
 const configuredProxy = process.env['proxy'];
-const solverApiKey = process.env['solver_api_key'];
+const solverApiKey = process.env['api_key'];
 const chromePath = process.env['CHROME_PATH'] || '';
 // How long the browser stays open after a run, to inspect what it landed on.
 const browserHoldMs = 30_000;

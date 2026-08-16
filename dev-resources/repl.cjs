@@ -80,8 +80,8 @@ async function main() {
       {
         headers: {
           'content-type': 'application/json',
-          ...(process.env.solver_api_key
-            ? { 'x-api-key': process.env.solver_api_key }
+          ...(process.env.api_key
+            ? { 'x-api-key': process.env.api_key }
             : {}),
         },
         validateStatus: () => true,

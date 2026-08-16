@@ -50,7 +50,7 @@ import { outerHtml, start } from '#src/lightpanda.js';
 const url = 'https://business.comcast.com/account/';
 const solverHost = process.env['host'];
 const proxy = process.env['proxy'];
-const solverApiKey = process.env['solver_api_key'];
+const solverApiKey = process.env['api_key'];
 
 if (!solverHost) throw new Error('set host= in .env');
 if (!proxy) throw new Error('set proxy= in .env');

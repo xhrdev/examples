@@ -269,7 +269,7 @@ def _is_transport(error):
 def run(attempt):
   """Read the environment, pin a fresh session per attempt, report.
 
-  `attempt` takes (proxy, solver_api_key, solver_url, target_url) and
+  `attempt` takes (proxy, api_key, solver_url, target_url) and
   returns a (cookie, status) pair, or None when there was no challenge.
   """
   solver_host = os.environ.get('host')
@@ -282,14 +282,14 @@ def run(attempt):
   attempts = int(read_flag('--attempts', '3'))
   target_url = read_flag('--url', DEFAULT_URL)
   solver_url = f'http://{solver_host}:{SOLVER_PORT}'
-  solver_api_key = os.environ.get('solver_api_key')
+  api_key = os.environ.get('api_key')
 
   last_error = None
   for i in range(1, attempts + 1):
     # A fresh session per attempt: a new IP, and a clean slate.
     proxy, _pinned = pin_session(configured_proxy)
     try:
-      outcome = attempt(proxy, solver_api_key, solver_url, target_url)
+      outcome = attempt(proxy, api_key, solver_url, target_url)
       if outcome is None:
         log('RESULT: no challenge to solve')
         return

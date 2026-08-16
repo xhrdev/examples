@@ -39,7 +39,7 @@ from datadome.http_utils import (  # noqa: E402
 )
 
 
-def attempt(proxy, solver_api_key, solver_url, target_url):
+def attempt(proxy, api_key, solver_url, target_url):
   with httpx.Client(
     follow_redirects=True, proxy=proxy, timeout=TIMEOUT_S
   ) as client:
@@ -65,8 +65,8 @@ def attempt(proxy, solver_api_key, solver_url, target_url):
     #    call goes to your own solver, so it uses a proxy-less client.
     log('POST /dd/solve')
     headers = {'content-type': 'application/json'}
-    if solver_api_key:
-      headers['x-api-key'] = solver_api_key
+    if api_key:
+      headers['x-api-key'] = api_key
     solve = httpx.post(
       solve_endpoint(solver_url),
       headers=headers,

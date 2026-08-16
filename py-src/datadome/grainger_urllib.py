@@ -59,7 +59,7 @@ def _send(opener, url, headers, data=None, method=None):
     return error.code, error.read().decode('utf-8', 'replace')
 
 
-def attempt(proxy, solver_api_key, solver_url, target_url):
+def attempt(proxy, api_key, solver_url, target_url):
   # Credentials ride along in the proxy URL; urllib turns them into the
   # Proxy-Authorization header on the CONNECT.
   proxied = urllib.request.build_opener(
@@ -92,8 +92,8 @@ def attempt(proxy, solver_api_key, solver_url, target_url):
   # 3. Ask xhr.dev to build the submission — but not to send it.
   log('POST /dd/solve')
   headers = {'content-type': 'application/json'}
-  if solver_api_key:
-    headers['x-api-key'] = solver_api_key
+  if api_key:
+    headers['x-api-key'] = api_key
   body = solve_request_body(
     dd, document_html, document_url, proxy, target_url
   )

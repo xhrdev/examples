@@ -55,7 +55,7 @@ from datadome.http_utils import (  # noqa: E402
 )
 
 
-def attempt(proxy, solver_api_key, solver_url, target_url):
+def attempt(proxy, api_key, solver_url, target_url):
   session = requests.Session()
   session.proxies = {'http': proxy, 'https': proxy}
 
@@ -85,8 +85,8 @@ def attempt(proxy, solver_api_key, solver_url, target_url):
   #    goes to your own solver, so it must not use the proxy.
   log('POST /dd/solve')
   headers = {'content-type': 'application/json'}
-  if solver_api_key:
-    headers['x-api-key'] = solver_api_key
+  if api_key:
+    headers['x-api-key'] = api_key
   solve = requests.post(
     solve_endpoint(solver_url),
     headers=headers,

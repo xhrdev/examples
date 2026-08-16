@@ -12,7 +12,7 @@ import { solve } from '#src/akamai/solver.js';
 const url = 'https://business.comcast.com/account/';
 const solverHost = process.env['host'];
 const proxy = process.env['proxy'];
-const solverApiKey = process.env['solver_api_key'];
+const solverApiKey = process.env['api_key'];
 let closing = false;
 
 const log = (msg: string, ...extra: unknown[]): void =>
