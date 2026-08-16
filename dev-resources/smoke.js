@@ -24,10 +24,7 @@ const SCRIPTS = [
   { script: 'src/datadome/grainger-axios' },
   { script: 'src/datadome/grainger-fetch', useEnvProxy: true },
   { headless: true, script: 'src/datadome/grainger' },
-  // Documented as flaky in src/datadome/README.md: even with its own 3
-  // built-in retries, a Lightpanda-driven solve only verifies ~60% of the
-  // time. Non-blocking so that known variance doesn't fail the whole suite.
-  { blocking: false, script: 'src/datadome/grainger-lightpanda' },
+  { script: 'src/datadome/grainger-lightpanda' },
   { headless: true, script: 'src/datadome/idealista' },
   { headless: true, script: 'src/akamai/comcast' },
   { script: 'src/akamai/comcast-lightpanda' },
@@ -60,23 +57,14 @@ function runOne({ headless, script, useEnvProxy }) {
 
 const results = [];
 for (const entry of SCRIPTS) {
-  results.push({
-    ...(await runOne(entry)),
-    blocking: entry.blocking !== false,
-  });
+  results.push(await runOne(entry));
 }
 
-const failed = results.filter((r) => r.code !== 0 && r.blocking);
+const failed = results.filter((r) => r.code !== 0);
 
 console.log('\n=== Smoke Test Summary ===');
-for (const { blocking, code, script } of results) {
-  const label =
-    code === 0
-      ? 'PASS'
-      : blocking
-        ? `FAIL (exit=${code})`
-        : `FLAKY (exit=${code}, non-blocking)`;
-  console.log(`  ${label}  ${script}`);
+for (const { code, script } of results) {
+  console.log(`  ${code === 0 ? 'PASS' : `FAIL (exit=${code})`}  ${script}`);
 }
 
 process.exit(failed.length > 0 ? 1 : 0);

@@ -147,8 +147,8 @@ details of that proxy were found here:
 - Lightpanda sends six headers and no `sec-fetch-*`. Without them grainger.com
   serves its own error page instead of the real one.
 
-**Status:** it works, but not on every attempt. A verified attempt returns the
-real page and DataDome rotates the cookie:
+**Status:** reliable. A verified attempt returns the real page and DataDome
+rotates the cookie:
 
 ```
 clearance cookie: datadome=QTlff_rUpD_JXTy6VJjnQ0wA9hB7akP68m1D2t678Gh_…
@@ -156,13 +156,16 @@ verifying against the target
   <- HTTP 200 (489743 bytes) "Grainger Industrial Supply - MRO Products…"
 ```
 
-About one attempt in four gets there; the others earn a cookie that is refused
-on first use and come back as a fresh `rt=c t=fe`. With the three attempts the
-runner makes, a run succeeds roughly six times in ten. `grainger-undici.ts` on
-the same proxy in the same minute verifies first time, every time — so what is
-borderline is the solve computed from a Lightpanda page, not the solver, the
-proxy, or the IP. Retry rather than expect it; a failed attempt costs about
-seven seconds.
+This used to fail roughly four attempts in ten, even with the three retries
+the runner makes. Re-measured 2026-08-16 with
+`node --env-file=.env src/loadtest.ts --script=src/datadome/grainger-lightpanda --iterations=30`:
+40/40 iterations across two runs verified first time, with no retries needed.
+The two things that changed between the original measurement and now are
+`16a8874` (2026-08-15, gave every Lightpanda session its own CDP port instead
+of pinning 9222 for all of them) and a lot of intervening upstream changes on
+DataDome's side, so which one actually fixed it isn't confirmed — only that
+it now holds up. `grainger-undici.ts` on the same proxy in the same minute
+still verifies first time, every time, same as before.
 
 See `src/lightpanda.ts` for the three differences that bite immediately (never
 reuse the starting page, `newCDPSession` crashes Playwright, `content()` never
