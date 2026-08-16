@@ -63,6 +63,7 @@ import {
   PROFILE,
   PROFILE_ID,
 } from '#src/datadome/profile.js';
+import { checkRateLimit } from '#src/rate-limit.js';
 
 type CaptchaRelayContext = {
   headers: Readonly<Record<string, string | undefined>>;
@@ -1421,6 +1422,7 @@ async function fetchJson(
     ...init,
     signal: AbortSignal.timeout(timeout),
   });
+  checkRateLimit(response.status, response.headers);
   const text = await response.text();
   if (!response.ok) {
     const detail = solverResponseErrorDetail(text);

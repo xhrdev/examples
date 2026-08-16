@@ -88,6 +88,7 @@ import {
   solveRequestBody,
   TIMEOUT_MS,
 } from '#src/datadome/http-utils.js';
+import { checkRateLimit } from '#src/rate-limit.js';
 import { GEO_HOST } from '#src/datadome/profile.js';
 import { outerHtml, start } from '#src/lightpanda.js';
 
@@ -201,6 +202,7 @@ const attempt = async ({
       method: 'POST',
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+    checkRateLimit(solve.status, solve.headers);
     if (!solve.ok) {
       throw new Error(
         `solver returned HTTP ${solve.status}: ${(await solve.text()).slice(0, 300)}`

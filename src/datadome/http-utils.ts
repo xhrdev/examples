@@ -14,6 +14,11 @@
  */
 import { GEO_ORIGIN, PROFILE, PROFILE_ID } from '#src/datadome/profile.js';
 import { pinSession } from '#src/proxy.js';
+import {
+  RATE_LIMIT_EXIT_CODE,
+  RateLimitError,
+  reportRateLimit,
+} from '#src/rate-limit.js';
 
 const DEFAULT_URL = 'https://www.grainger.com/';
 const SOLVER_PORT = 3000;
@@ -309,6 +314,15 @@ export const run = async (
       log('RESULT: SUCCESS');
       return;
     } catch (error) {
+      // A 429 is not retryable: the budget is already spent, and every retry
+      // spends more of it. Stop the loop here rather than burning the other
+      // attempts to arrive at the same answer.
+      if (error instanceof RateLimitError) {
+        process.exitCode = RATE_LIMIT_EXIT_CODE;
+        log(`${label} = RATE LIMITED`);
+        reportRateLimit(error);
+        return;
+      }
       lastError = error;
       if (isTransport(error)) {
         const more = i < attempts ? ', NOW RETRYING' : '';

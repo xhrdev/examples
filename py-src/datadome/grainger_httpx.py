@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datadome.http_utils import (  # noqa: E402
   TIMEOUT_S,
   challenge_document_url,
+  check_rate_limit,
   check_prepared_submission,
   document_headers,
   log,
@@ -75,6 +76,7 @@ def attempt(proxy, api_key, solver_url, target_url):
       ),
       timeout=TIMEOUT_S,
     )
+    check_rate_limit(solve.status_code, solve.headers)
     if solve.status_code != 200:
       raise RuntimeError(
         f'solver returned HTTP {solve.status_code}: {solve.text[:300]}'

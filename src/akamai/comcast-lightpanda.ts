@@ -46,6 +46,11 @@
  */
 import { solve } from '#src/akamai/solver.js';
 import { outerHtml, start } from '#src/lightpanda.js';
+import {
+  RATE_LIMIT_EXIT_CODE,
+  RateLimitError,
+  reportRateLimit,
+} from '#src/rate-limit.js';
 
 const url = 'https://business.comcast.com/account/';
 const solverHost = process.env['host'];
@@ -126,16 +131,24 @@ try {
     );
   }
 } catch (error) {
-  exitCode = 1;
-  log(`RESULT: FAIL - ${(error as Error).message}`);
-  // The two failures worth telling apart, because they look identical from
-  // here and have nothing to do with each other.
-  log(
-    'If the rounds ran but never reached ~0~, check the `cookies=[...]` line ' +
-      'for `_abck` and the identity above against the solver profile. If no ' +
-      'session opened at all, the sensor script was never captured — look ' +
-      'for a fetch that did not return.'
-  );
+  // A 429 is not a failed solve and retrying cannot help. Report it as its own
+  // outcome and skip the Akamai-specific advice below, which would be
+  // misleading here: nothing was wrong with the sensor or the identity.
+  if (error instanceof RateLimitError) {
+    exitCode = RATE_LIMIT_EXIT_CODE;
+    reportRateLimit(error);
+  } else {
+    exitCode = 1;
+    log(`RESULT: FAIL - ${(error as Error).message}`);
+    // The two failures worth telling apart, because they look identical
+    // from here and have nothing to do with each other.
+    log(
+      'If the rounds ran but never reached ~0~, check the `cookies=[...]` ' +
+        'line for `_abck` and the identity above against the solver profile. ' +
+        'If no session opened at all, the sensor script was never captured — ' +
+        'look for a fetch that did not return.'
+    );
+  }
 } finally {
   await session.stop();
 }

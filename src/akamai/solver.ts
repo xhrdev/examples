@@ -34,7 +34,9 @@
  * own independent `_abck` to satisfy.
  */
 import type { BrowserContext, Frame, Page, Route } from 'playwright-core';
-import { WebSocket } from 'undici';
+import { fetch, WebSocket } from 'undici';
+
+import { checkRateLimit, RateLimitError } from '#src/rate-limit.js';
 
 export type SolveOptions = {
   /**
@@ -234,8 +236,12 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
         ...(solverApiKey ? { headers: { 'x-api-key': solverApiKey } } : {}),
       });
       sessions.set(origin, { frame, ws });
+      // A refused upgrade never reaches 'open'. See classifyUpgradeFailure.
+      let opened = false;
+      let diagnosed = false;
 
       ws.addEventListener('open', () => {
+        opened = true;
         log(`[${origin}] WS connected, sending init...`);
         ws.send(
           JSON.stringify({
@@ -402,12 +408,28 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
         }
       });
 
+      // Both listeners funnel into the same place: if the socket never
+      // opened, the upgrade itself was refused, and waiting for the
+      // acceptance timeout would report that as a solve failure instead of
+      // the 429 (or 401) it actually is.
+      const diagnoseIfNeverOpened = (): void => {
+        if (opened || closing || diagnosed) return;
+        diagnosed = true;
+        void classifyUpgradeFailure(solverUrl, solverApiKey).then((error) => {
+          log(`[${origin}] ${error.message}`);
+          finish();
+          reject(error);
+        });
+      };
+
       ws.addEventListener('close', ({ code, reason }) => {
         log(`[${origin}] WS closed: code=${code} reason=${reason || 'none'}`);
+        diagnoseIfNeverOpened();
       });
 
       ws.addEventListener('error', (event: Event) => {
         log(`[${origin}] WS error: ${(event as ErrorEvent).message}`);
+        diagnoseIfNeverOpened();
       });
     };
 
@@ -706,4 +728,40 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
         reject(e);
       });
   });
+}
+
+/**
+ * Why this exists: undici reports a rejected WebSocket upgrade as a bare
+ * `TypeError` with close code 1006 and no HTTP status, so a rate-limited
+ * upgrade (429) looks exactly like the solver being down. One plain GET to the
+ * same URL with the same key goes through the same auth and rate-limit
+ * handlers and *does* carry a status, which is enough to tell them apart.
+ *
+ * Only ever called on a connection that already failed, so the extra request
+ * costs nothing in the normal case.
+ */
+async function classifyUpgradeFailure(
+  solverUrl: string,
+  solverApiKey: string | undefined
+): Promise<Error> {
+  const probeUrl = solverUrl.replace(/^ws/, 'http');
+  try {
+    const probe = await fetch(probeUrl, {
+      ...(solverApiKey ? { headers: { 'x-api-key': solverApiKey } } : {}),
+      signal: AbortSignal.timeout(10000),
+    });
+    // Throws RateLimitError on 429; anything else falls through.
+    checkRateLimit(probe.status, probe.headers);
+    if (probe.status === 401) {
+      return new Error(`solver rejected the API key (HTTP 401) on ${probeUrl}`);
+    }
+    return new Error(
+      `solver WebSocket upgrade failed (probe returned HTTP ${probe.status})`
+    );
+  } catch (error) {
+    if (error instanceof RateLimitError) return error;
+    return new Error(
+      `solver WebSocket upgrade failed and ${probeUrl} is unreachable: ${(error as Error).message}`
+    );
+  }
 }

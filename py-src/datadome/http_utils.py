@@ -254,6 +254,81 @@ def read_flag(name, default=None):
   return default
 
 
+RATE_LIMIT_EXIT_CODE = 3
+"""Exit code used when the solver rate limit is hit.
+
+Distinct from 1 (generic failure) so a wrapper script can tell "slow down"
+apart from "this did not work".
+"""
+
+
+class RateLimitError(Exception):
+  """Raised when the solver answers HTTP 429.
+
+  Deliberately not a retryable failure: the budget is already spent, so
+  retrying cannot succeed, and each retry spends more of the budget you are
+  waiting to get back. `run` aborts the whole attempt loop on it.
+  """
+
+  def __init__(self, retry_after_seconds=None):
+    self.retry_after_seconds = retry_after_seconds
+    if retry_after_seconds is None:
+      super().__init__('rate limit hit: the solver returned HTTP 429')
+    else:
+      super().__init__(
+        'rate limit hit: the solver returned HTTP 429, '
+        f'retry after {retry_after_seconds}s'
+      )
+
+
+def check_rate_limit(status, headers=None):
+  """Raise RateLimitError if a solver response is a 429, else do nothing.
+
+  Call this before any generic "solver returned HTTP n" check so the rate
+  limit gets its own message instead of being reported as a random failure.
+  `headers` is any mapping with case-insensitive lookup (requests, httpx) or a
+  plain dict.
+  """
+  if status != 429:
+    return
+  raw = None
+  if headers is not None:
+    try:
+      raw = headers.get('retry-after')
+    except AttributeError:
+      raw = None
+  seconds = None
+  if raw is not None:
+    try:
+      seconds = int(raw)
+    except (TypeError, ValueError):
+      seconds = None
+  raise RateLimitError(seconds)
+
+
+def report_rate_limit(error):
+  """The message every example prints when the rate limit stops it."""
+  log('RESULT: FAIL - rate limit hit')
+  if error.retry_after_seconds is None:
+    log(
+      '  the solver returned HTTP 429. Wait for the limit window to roll '
+      'over, then re-run.'
+    )
+  else:
+    log(
+      f'  the solver returned HTTP 429. Wait {error.retry_after_seconds}s for '
+      'the limit window to roll over, then re-run.'
+    )
+  log(
+    '  limits are per API key, so this is your key going too fast, not the '
+    'solver being down.'
+  )
+  log(
+    '  not retried on purpose: the budget is already spent, and retrying '
+    'spends more of it. If you need more throughput, ask for a higher limit.'
+  )
+
+
 def _is_transport(error):
   """Dead exit nodes are not solve failures — take a new session."""
   text = f'{type(error).__name__}: {error}'
@@ -298,6 +373,11 @@ def run(attempt):
         raise RuntimeError(f'verification failed: HTTP {status}')
       log('RESULT: SUCCESS')
       return
+    except RateLimitError as error:
+      # Not retryable: stop the loop rather than burning the other attempts
+      # to arrive at the same answer.
+      report_rate_limit(error)
+      raise SystemExit(RATE_LIMIT_EXIT_CODE) from error
     except Exception as error:  # noqa: BLE001 - report and retry
       last_error = error
       reason = 'proxy session failed' if _is_transport(error) else str(error)

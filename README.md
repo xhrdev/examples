@@ -210,6 +210,23 @@ Drop `--headless` to watch a browser-based script work.
 | `RESULT: FAIL - proxy session failed` | dead exit node. The examples retry three times; raise it with `--attempts=5` |
 | solver returns 400 | the profile and the headers you send disagree. Change both together, never one alone |
 | solver returns 500 with `queue_full` | the container is saturated; check `GET /akamai/queue-metrics` |
+| `RESULT: FAIL - rate limit hit` | the solver answered 429. See rate limits below |
+
+## rate limits
+
+The solver is rate limited per API key. Over the limit it answers HTTP 429
+with a `Retry-After`, and every example here treats that as its own outcome:
+it prints `RESULT: FAIL - rate limit hit` with how long to wait, and exits **3**
+(distinct from 1 for a generic failure and 2 for an Akamai access denial).
+
+Nothing retries a 429 on purpose. Every other error in these examples is worth
+another attempt on a fresh proxy session; a 429 is not, because the budget is
+already spent and retrying only spends more of it. `src/loadtest.ts` goes
+further and stops launching iterations the moment one comes back rate limited.
+
+Permanent keys are not limited. If you are on a shared or trial key and hitting
+the ceiling in normal use, ask for a higher limit rather than retrying in a
+loop.
 
 ## curl
 

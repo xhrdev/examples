@@ -10,6 +10,11 @@ import { chromium, type LaunchOptions } from 'playwright-core';
 
 import { pinSession, toLaunchProxy } from '#src/proxy.js';
 import { solve } from '#src/datadome/solver.js';
+import {
+  RATE_LIMIT_EXIT_CODE,
+  RateLimitError,
+  reportRateLimit,
+} from '#src/rate-limit.js';
 
 const url = 'https://www.grainger.com/';
 const solverHost = process.env['host'];
@@ -98,8 +103,15 @@ try {
 
   log(`RESULT: SUCCESS - DataDome returned HTTP ${result.responseStatus}`);
 } catch (error) {
-  process.exitCode = 1;
-  log(`RESULT: FAIL - ${(error as Error).message}`);
+  // A 429 is its own outcome, not a failed solve: retrying cannot help, so
+  // say so plainly and exit with a code the caller can branch on.
+  if (error instanceof RateLimitError) {
+    process.exitCode = RATE_LIMIT_EXIT_CODE;
+    reportRateLimit(error);
+  } else {
+    process.exitCode = 1;
+    log(`RESULT: FAIL - ${(error as Error).message}`);
+  }
 } finally {
   await holdBrowser();
   await cleanup();

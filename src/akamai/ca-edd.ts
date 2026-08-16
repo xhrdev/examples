@@ -11,6 +11,11 @@ import { chromium } from 'playwright-core';
 
 import { toLaunchProxy } from '#src/proxy.js';
 import { solve } from '#src/akamai/solver.js';
+import {
+  RATE_LIMIT_EXIT_CODE,
+  RateLimitError,
+  reportRateLimit,
+} from '#src/rate-limit.js';
 
 const url = 'https://eddservices.edd.ca.gov/tap/secure/eservices';
 const solverHost = process.env['host'];
@@ -136,8 +141,15 @@ try {
     url,
   });
 } catch (e) {
-  log(`ERROR: Solver failed: ${(e as Error).message}`);
-  await cleanup(1);
+  // A 429 is not a failed solve and retrying cannot help, so report it as its
+  // own outcome with its own exit code.
+  if (e instanceof RateLimitError) {
+    reportRateLimit(e);
+    await cleanup(RATE_LIMIT_EXIT_CODE);
+  } else {
+    log(`ERROR: Solver failed: ${(e as Error).message}`);
+    await cleanup(1);
+  }
 }
 
 await sleep(7000);

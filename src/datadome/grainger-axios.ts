@@ -43,6 +43,7 @@ import {
   submissionHeaders,
   TIMEOUT_MS,
 } from '#src/datadome/http-utils.js';
+import { checkRateLimit } from '#src/rate-limit.js';
 
 /**
  * The jar has to live in the agent, not in the axios config.
@@ -123,6 +124,7 @@ const attempt = async ({
       validateStatus: () => true,
     }
   );
+  checkRateLimit(solve.status, solve.headers);
   if (solve.status !== 200) {
     throw new Error(
       `solver returned HTTP ${solve.status}: ${JSON.stringify(solve.data).slice(0, 300)}`

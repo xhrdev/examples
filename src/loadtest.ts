@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 import { pinSession } from '#src/proxy.js';
+import { RATE_LIMIT_EXIT_CODE } from '#src/rate-limit.js';
 
 const args = process.argv.slice(2);
 
@@ -169,7 +170,21 @@ console.log(
 );
 console.log();
 
-const results = { completed: 0, denied: 0, error: 0, success: 0 };
+const results = {
+  completed: 0,
+  denied: 0,
+  error: 0,
+  rateLimited: 0,
+  success: 0,
+};
+
+/**
+ * Set the moment any iteration exits with RATE_LIMIT_EXIT_CODE. A load test is
+ * the fastest way there is to exhaust a rate limit budget, and once it is
+ * exhausted every remaining iteration would fail the same way — so stop
+ * launching them rather than spending the next window's budget too.
+ */
+let rateLimited = false;
 
 function recordResult(i: number, code: number, elapsed: string): void {
   results.completed++;
@@ -180,6 +195,10 @@ function recordResult(i: number, code: number, elapsed: string): void {
   } else if (code === 2) {
     status = 'FAIL';
     results.denied++;
+  } else if (code === RATE_LIMIT_EXIT_CODE) {
+    status = 'RATE LIMITED';
+    results.rateLimited++;
+    rateLimited = true;
   } else {
     status = `ERROR (exit=${code})`;
     results.error++;
@@ -192,6 +211,7 @@ function recordResult(i: number, code: number, elapsed: string): void {
 
 if (CONCURRENCY <= 1) {
   for (let i = 0; i < ITERATIONS; i++) {
+    if (rateLimited) break;
     if (!QUIET) console.log(`[${i + 1}/${ITERATIONS}] Starting...`);
     const { code, elapsed } = await runIteration(i);
     recordResult(i, code, elapsed);
@@ -201,6 +221,7 @@ if (CONCURRENCY <= 1) {
 
   async function worker(): Promise<void> {
     while (nextIndex < ITERATIONS) {
+      if (rateLimited) return;
       const i = nextIndex++;
       if (!QUIET) console.log(`  Starting #${i + 1}...`);
       const { code, elapsed } = await runIteration(i);
@@ -227,5 +248,16 @@ console.log(
 console.log(
   `  Error (timeout/crash):   ${results.error} (${pct(results.error)}%)`
 );
+if (results.rateLimited > 0) {
+  console.log(
+    `  Rate limited:            ${results.rateLimited} (${pct(results.rateLimited)}%)`
+  );
+  console.log(
+    `\n  Stopped early after ${results.completed}/${total} iterations: the solver` +
+      ' rate limit was hit. Lower --concurrency or --iterations, or use a key' +
+      ' with a higher limit.'
+  );
+}
 
+if (results.rateLimited > 0) process.exit(RATE_LIMIT_EXIT_CODE);
 process.exit(results.denied > 0 || results.error > 0 ? 1 : 0);
