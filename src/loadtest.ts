@@ -17,7 +17,7 @@ const args = process.argv.slice(2);
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log(
-    'Usage: node --env-file=.env src/loadtest.ts [--script=src/<dir>/<script>] [--iterations=N] [--concurrency=N] [--headless] [--require-challenge] [--attempts=N] [--proxy=<url>] [--host=<ip>] [--quiet]'
+    'Usage: node --env-file=.env src/loadtest.ts [--script=src/<dir>/<script>] [--iterations=N] [--concurrency=N] [--headless] [--require-challenge] [--attempts=N] [--proxy=<url>] [--host=<ip>] [--quiet] [--use-env-proxy]'
   );
   process.exit(0);
 }
@@ -35,6 +35,7 @@ const HEADLESS = args.includes('--headless');
 const REQUIRE_CHALLENGE = args.includes('--require-challenge');
 const ATTEMPTS = readFlag('--attempts');
 const QUIET = args.includes('--quiet');
+const USE_ENV_PROXY = args.includes('--use-env-proxy');
 const PROXY_RAW = readFlag('--proxy') || process.env['proxy'] || '';
 const SCRIPT = readFlag('--script') || 'src/akamai/ca-edd';
 
@@ -73,7 +74,13 @@ function runIteration(i: number): Promise<{ code: number; elapsed: string }> {
     // Anything the child also parses has to be forwarded explicitly — a flag
     // accepted here but not passed on is silently ignored, which is how
     // --attempts looked like it was doing something and was not.
-    const childArgs = [SCRIPT_PATH];
+    //
+    // --use-env-proxy is a node runtime flag, not a script arg, so it has to
+    // land before SCRIPT_PATH — scripts using node's built-in fetch (e.g.
+    // grainger-fetch.ts) refuse to run without it.
+    const childArgs = USE_ENV_PROXY
+      ? ['--use-env-proxy', SCRIPT_PATH]
+      : [SCRIPT_PATH];
     if (HEADLESS) childArgs.push('--headless');
     if (REQUIRE_CHALLENGE) childArgs.push('--require-challenge');
     if (ATTEMPTS) childArgs.push(`--attempts=${ATTEMPTS}`);

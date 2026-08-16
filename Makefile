@@ -39,6 +39,19 @@ target/build:
 	mkdir -p $(@D) && touch $@
 .PHONY: build
 
+test: | build target/test
+target/test:
+ifeq ($(is_ci), true)
+	@if ls test/*.test.ts >/dev/null 2>&1; then \
+		node --test --experimental-test-coverage --test-reporter=spec --test-reporter=lcov --test-reporter-destination=stdout --test-reporter-destination=target/lcov.info test/*.test.ts; \
+	fi
+	npm test
+else
+	npm test
+endif
+	mkdir -p $(@D) && touch $@
+.PHONY: test
+
 # --- ci
 ci: | install lint build
 .PHONY: ci

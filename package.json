@@ -19,7 +19,7 @@
     "build": "tsgo -p tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
-    "test": "node --test",
+    "test": "node --test && node --env-file=.env dev-resources/smoke.js",
     "grainger": "node --env-file=.env src/datadome/grainger-undici.ts",
     "grainger:axios": "node --env-file=.env src/datadome/grainger-axios.ts",
     "grainger:fetch": "node --use-env-proxy --env-file=.env src/datadome/grainger-fetch.ts",

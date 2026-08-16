@@ -13,7 +13,7 @@ jobs:
   make-ci:
     runs-on: ubuntu-latest
     # runs-on: ubuntu-24.04-arm # not until q2 2026: https://blog.chromium.org/2026/03/bringing-chrome-to-arm64-linux-devices.html
-    timeout-minutes: 6
+    timeout-minutes: 15
     permissions:
       pull-requests: write
       contents: write
@@ -36,6 +36,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }} # keep it as `secrets.GITHUB_TOKEN` as repo is public and this token has limited privs
           persist-credentials: false
 
+      - name: Install Chromium
+        run: sudo snap install chromium
+
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
@@ -46,6 +49,27 @@ jobs:
           cache-dependency-path: |
             requirements.txt
           install-cmd: pip install -r requirements.txt
+
+      - name: Write .env for the live example/smoke suite
+        env:
+          ENV_HOST: ${{ secrets.HOST }}
+          ENV_PROXY: ${{ secrets.PROXY }}
+          ENV_SOLVER_API_KEY: ${{ secrets.SOLVER_API_KEY }}
+          ENV_USERNAME: ${{ secrets.USERNAME }}
+          ENV_PASSWORD: ${{ secrets.PASSWORD }}
+        run: |
+          {
+            echo "host=$ENV_HOST"
+            echo "proxy=$ENV_PROXY"
+            echo "solver_api_key=$ENV_SOLVER_API_KEY"
+            echo "username=$ENV_USERNAME"
+            echo "password=$ENV_PASSWORD"
+          } > .env
+
+      - name: make test
+        env:
+          CHROME_PATH: /snap/bin/chromium
+        run: make test
 
       - uses: cycjimmy/semantic-release-action@v6.0.0
         id: semantic # need an `id` for output variables
