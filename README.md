@@ -37,6 +37,12 @@ curl http://$host:3000/hc
 # {"status":"ok"}
 ```
 
+`host=` takes either a bare host — `host=10.0.0.5`, meaning plain HTTP on port
+3000, the self-hosted default — or a full URL such as
+`host=https://trial.xhr.dev`. Use the URL form for anything you reach over the
+public internet, so the API key and the clearance cookies come back over TLS
+rather than in the clear.
+
 If you were issued an API key, put it in `.env` as `api_key=` — every
 example sends it as `x-api-key`. `/hc` is always reachable without one, so a
 healthy `/hc` alongside a `401` from anything else means the key is missing or

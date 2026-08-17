@@ -33,7 +33,8 @@ Akamai integration is stateful, so it runs over a socket rather than a single
 POST:
 
 ```
-ws://<host>:3000/akamai/session
+ws://<host>:3000/akamai/session     # self-hosted, plain
+wss://<host>/akamai/session         # behind TLS
 ```
 
 The exchange:
@@ -59,7 +60,9 @@ response within 30 seconds.
 ```typescript
 import { solve } from '#src/akamai/solver.js';
 
-const solverUrl = `ws://${process.env['host']}:3000/akamai/session`;
+import { solverWsUrl } from '#src/solver-url.js';
+
+const solverUrl = solverWsUrl(process.env['host'], '/akamai/session');
 await solve(page, { proxy, solverApiKey, solverUrl, url });
 // resolves when _abck is accepted; rejects on timeout (default 120s)
 ```
@@ -69,8 +72,10 @@ sits behind an API-key gate you need it here — a gate matches the header on
 the WebSocket upgrade like any other request, so leaving it out fails the
 handshake with a 401 rather than anything that looks Akamai-related.
 
-Note the `ws://` scheme and the `/akamai/session` path — unlike the DataDome
-client, this one takes the full socket URL, not a base URL.
+Note the socket scheme and the `/akamai/session` path — unlike the DataDome
+client, this one takes the full socket URL, not a base URL. `solverWsUrl`
+derives the scheme from `host=`, so a TLS solver gets `wss://` and a plain one
+`ws://`; sending `ws://` to a TLS listener fails the connection outright.
 
 Given a Playwright page, `solve` intercepts the Akamai script, opens a session
 **per origin**, and relays submissions until the cookie is accepted. Per-origin

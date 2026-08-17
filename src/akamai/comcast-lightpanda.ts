@@ -45,6 +45,7 @@
  * 30s/15s navigation defaults, which a page this heavy overruns.
  */
 import { solve } from '#src/akamai/solver.js';
+import { solverWsUrl } from '#src/solver-url.js';
 import { outerHtml, start } from '#src/lightpanda.js';
 import {
   RATE_LIMIT_EXIT_CODE,
@@ -60,7 +61,7 @@ const solverApiKey = process.env['api_key'];
 if (!solverHost) throw new Error('set host= in .env');
 if (!proxy) throw new Error('set proxy= in .env');
 
-const solverUrl = `ws://${solverHost}:3000/akamai/session`;
+const solverUrl = solverWsUrl(solverHost, '/akamai/session');
 const timeout = Number(process.env['AKAMAI_TIMEOUT_MS'] ?? 120_000);
 
 const log = (msg: string, ...extra: unknown[]): void =>

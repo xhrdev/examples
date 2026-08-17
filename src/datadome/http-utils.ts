@@ -14,6 +14,7 @@
  */
 import { GEO_ORIGIN, PROFILE, PROFILE_ID } from '#src/datadome/profile.js';
 import { pinSession } from '#src/proxy.js';
+import { solverBaseUrl } from '#src/solver-url.js';
 import {
   RATE_LIMIT_EXIT_CODE,
   RateLimitError,
@@ -21,7 +22,6 @@ import {
 } from '#src/rate-limit.js';
 
 const DEFAULT_URL = 'https://www.grainger.com/';
-const SOLVER_PORT = 3000;
 
 export const TIMEOUT_MS = 120_000;
 
@@ -276,7 +276,7 @@ export const run = async (
 
   const attempts = Number(readFlag('--attempts') ?? 3);
   const targetUrl = readFlag('--url') ?? DEFAULT_URL;
-  const solverUrl = `http://${solverHost}:${SOLVER_PORT}`;
+  const solverUrl = solverBaseUrl(solverHost);
   const requireChallenge = process.argv.includes('--require-challenge');
 
   const label = 'PROXY';

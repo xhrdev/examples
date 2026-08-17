@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';
 import { toLaunchProxy } from '#src/proxy.js';
+import { solverWsUrl } from '#src/solver-url.js';
 import { solve } from '#src/akamai/solver.js';
 import {
   RATE_LIMIT_EXIT_CODE,
@@ -26,7 +27,7 @@ const log = (msg: string, ...extra: unknown[]): void =>
 if (!solverHost) throw new Error('set host= in .env');
 if (!proxy) throw new Error('set proxy= in .env');
 
-const solverUrl = `ws://${solverHost}:3000/akamai/session`;
+const solverUrl = solverWsUrl(solverHost, '/akamai/session');
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));

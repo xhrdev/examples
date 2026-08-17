@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import { chromium, type LaunchOptions } from 'playwright-core';
 
 import { pinSession, toLaunchProxy } from '#src/proxy.js';
+import { solverBaseUrl } from '#src/solver-url.js';
 import { solve } from '#src/datadome/solver.js';
 import {
   RATE_LIMIT_EXIT_CODE,
@@ -27,7 +28,7 @@ const browserHoldMs = 30_000;
 if (!solverHost) throw new Error('set host= in .env');
 if (!configuredProxy) throw new Error('set proxy= in .env');
 
-const solverUrl = `http://${solverHost}:3000`;
+const solverUrl = solverBaseUrl(solverHost);
 const log = (msg: string, ...extra: unknown[]): void =>
   console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
 
