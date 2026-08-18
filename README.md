@@ -152,6 +152,86 @@ requests carry real TLS fingerprints and a real cookie jar. This is
 
 Start with plain HTTP. Reach for the browser bridge when the site forces you to.
 
+## mcp server
+
+Everything above is written the other way round from how an agent works: a
+human picks the target, and the challenge handling is written out ahead of time
+for that one site. An LLM agent doing its own browsing does not know which page
+will block it until the 403 arrives, so it cannot have the handling written in
+advance.
+
+[`src/mcp.ts`](src/mcp.ts) exposes the solver over
+[MCP](https://modelcontextprotocol.io) so an agent can solve a challenge inside
+its own loop and retry the request:
+
+```bash
+npm run mcp
+```
+
+It speaks stdio and reads `host=`, `api_key=` and `proxy=` from `.env`, exactly
+like every other script here. Started by hand it will just sit there waiting for
+a client on stdin — that is correct; the client is what launches it.
+
+| tool | what it does |
+|---|---|
+| `health_check` | `GET /hc` — is the solver reachable |
+| `solver_stats` | your own solve rate |
+| `akamai_queue_metrics` | queue depth, for backpressure |
+| `akamai_solve` | solve an Akamai `_abck` challenge for a URL |
+| `datadome_solve` | solve a DataDome captcha or interstitial |
+
+The browser identity is filled in from
+[`src/datadome/profile.ts`](src/datadome/profile.ts), so an agent calls these
+with a URL rather than having to invent a coherent `profile` and `js_profile` —
+which it cannot do, since those fields are cross-checked against each other and
+against the headers actually sent.
+
+`datadome_solve` takes the HTML body of the 403 you just received, parses the
+challenge out of it, and returns a **prepared submission** rather than a cookie.
+Your agent has to send that itself, from the same exit IP it will browse from —
+DataDome binds the clearance cookie to whoever submitted it, so a submission
+made by anything else earns a cookie that is void where you need it.
+
+### client config
+
+Claude Code:
+
+```bash
+claude mcp add xhr-dev -- npm --prefix /path/to/examples run mcp
+```
+
+Anything that reads the standard `mcpServers` block — Claude Desktop, Cursor,
+Windsurf, Zed:
+
+```json
+{
+  "mcpServers": {
+    "xhr-dev": {
+      "command": "npm",
+      "args": ["--prefix", "/path/to/examples", "run", "mcp"]
+    }
+  }
+}
+```
+
+Use an absolute path — the client does not launch it from this directory. `.env`
+is read relative to `--prefix`, so the same `.env` the examples use applies.
+
+### what works and what does not
+
+`datadome_solve` clears grainger.com end to end through the tool: parse the 403,
+solve, submit, verify `200`.
+
+`akamai_solve` drives `POST /akamai/solve`, which fetches and solves
+server-side. That path builds a valid sensor payload — call it with
+`submit: false` and you get the submission back to send yourself — but for a
+target that checks the submitting client, as `business.comcast.com` does, the
+cookie is never accepted and the solve ends `timeout` /`deadline_exceeded`. Those
+targets need the WebSocket session with a real browser relaying each sensor
+request, which is what [`src/akamai/comcast.ts`](src/akamai/comcast.ts) does and
+is not reachable over MCP. Treat `akamai_solve` as working for targets the
+solver can fetch itself, and drop to the browser bridge when it is not.
+
 ## proxies
 
 Clearance cookies are bound to the IP that earned them. Two things follow:
