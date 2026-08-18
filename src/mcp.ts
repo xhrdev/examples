@@ -37,7 +37,7 @@ import {
   documentHeaders,
   parseBlockPage,
 } from '#src/datadome/http-utils.js';
-import { PROFILE, PROFILE_ID } from '#src/datadome/profile.js';
+import { PROFILE, PROFILE_ID, SEC_CH_UA } from '#src/profile.js';
 import { solverBaseUrl, solverWsUrl } from '#src/solver-url.js';
 
 const solverHost = process.env['host'];
@@ -220,6 +220,56 @@ server.registerTool(
     log(`akamai_solve ${url}`);
 
     /**
+     * Is the target actually challenging us right now?
+     *
+     * Worth one request to find out, because the alternative is bad. Akamai
+     * only serves the sensor script to clients it wants to interrogate, so
+     * against a warm IP there is no script, no session ever opens, and the
+     * solve below sits there until it hits its deadline and reports an
+     * acceptance timeout — a hard failure that reads as "the solver is
+     * broken", after two minutes, when nothing was wrong and the agent could
+     * simply have made its request.
+     *
+     * An agent calling this on a URL that turns out not to be blocked is the
+     * expected case, not a mistake: it cannot know until it looks.
+     */
+    try {
+      const dispatcher = resolvedProxy
+        ? new ProxyAgent(resolvedProxy)
+        : undefined;
+      const probe = await undiciFetch(url, {
+        headers: {
+          accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'accept-language': 'en-US,en;q=0.9',
+          'sec-ch-ua': SEC_CH_UA,
+          'sec-ch-ua-mobile': '?0',
+          'sec-ch-ua-platform': '"macOS"',
+          'user-agent': PROFILE.userAgent,
+        },
+        ...(dispatcher ? { dispatcher } : {}),
+      });
+      const body = await probe.text();
+      const blocked =
+        probe.status === 403 ||
+        probe.status === 429 ||
+        /access denied/i.test(body);
+      if (!blocked) {
+        log(`akamai_solve ${url} -> not challenged (${probe.status})`);
+        return asText({
+          challenged: false,
+          note: 'The target served this URL without challenging. No solve was needed or run — make your request directly, through this same proxy.',
+          proxy: resolvedProxy ?? null,
+          status: probe.status,
+        });
+      }
+    } catch (error) {
+      // A probe that cannot reach the target says nothing about whether a
+      // challenge is waiting, so fall through and let the browser try.
+      log(`probe failed, solving anyway: ${(error as Error).message}`);
+    }
+
+    /**
      * A real browser, rather than `POST /akamai/solve`.
      *
      * The HTTP endpoint is the obvious thing to call here and does not work
@@ -306,7 +356,18 @@ server.registerTool(
           },
           true
         );
-      return asText({ error: (error as Error).message }, true);
+      const message = (error as Error).message;
+      return asText(
+        {
+          error: message,
+          ...(message.includes('acceptance timeout')
+            ? {
+                note: 'The rounds never reached ~0~. Most often the exit IP is burnt rather than anything being wrong with the payload — rotate the proxy and retry. If the target had stopped challenging by the time the browser got there, no session opens and this is what that looks like too.',
+              }
+            : {}),
+        },
+        true
+      );
     } finally {
       await browser?.close().catch(() => undefined);
     }

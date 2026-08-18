@@ -224,6 +224,50 @@ Windsurf, Zed:
 Use an absolute path — the client does not launch it from this directory. `.env`
 is read relative to `--prefix`, so the same `.env` the examples use applies.
 
+### an example prompt
+
+Give the agent a target and tell it what to do when the target says no:
+
+> Fetch `https://business.comcast.com/account/` and tell me the page title.
+> Make the request through the proxy in `.env`, following redirects. If you get
+> a `403` or an "Access Denied" page, use the **xhrdev** MCP server to get past
+> it, then retry the same request with whatever cookies it gives you — through
+> that same proxy.
+
+That is the whole shape of it. The agent makes its request, and only if it is
+actually blocked does it reach for a tool:
+
+```
+1. GET https://business.comcast.com/account/   (through the proxy)
+   -> HTTP 403, "Access Denied"
+
+2. akamai_solve { url: "https://business.comcast.com/account/" }
+   -> { accepted: true, cookie_header: "_abck=...~0~...; bm_sz=...", ... }
+
+3. GET the same URL again, same proxy, sending that cookie header
+   -> HTTP 200, "Dashboard"
+```
+
+**All three steps have to leave from the same address.** The cookies are bound
+to the IP that earned them, so an agent that solves through the proxy and then
+retries with a built-in web-fetch tool from somewhere else gets a fresh 403
+that looks exactly like a failed solve. Whatever your agent makes requests
+with, it has to honour the proxy — which is worth stating in the prompt, as
+above, rather than hoping.
+
+For a DataDome target the middle step differs, because the solver hands back a
+submission rather than a cookie:
+
+> Fetch `https://www.grainger.com/` through the proxy in `.env`. If the
+> response is a `403` whose body contains `var dd =`, pass that whole body to
+> the xhrdev MCP server's `datadome_solve`, send the prepared submission it
+> returns — same proxy — and retry with the `datadome` cookie you get back.
+
+`akamai_solve` answers `challenged: false` when the target serves the page
+without a challenge, which is the common case when an IP is already warm. That
+is not a failure and takes about a second — the agent should just make its
+request.
+
 ### what it does under the hood
 
 `akamai_solve` launches a real Chrome and relays each sensor request through
