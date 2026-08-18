@@ -204,7 +204,7 @@ made by anything else earns a cookie that is void where you need it.
 Claude Code:
 
 ```bash
-claude mcp add xhr-dev -- npm --prefix /path/to/examples run mcp
+claude mcp add xhrdev -- npm --prefix /path/to/examples run mcp
 ```
 
 Anything that reads the standard `mcpServers` block — Claude Desktop, Cursor,
@@ -213,7 +213,7 @@ Windsurf, Zed:
 ```json
 {
   "mcpServers": {
-    "xhr-dev": {
+    "xhrdev": {
       "command": "npm",
       "args": ["--prefix", "/path/to/examples", "run", "mcp"]
     }

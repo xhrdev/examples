@@ -151,7 +151,7 @@ const call = async (
   }
 };
 
-const server = new McpServer({ name: 'xhr-dev', version: '1.0.0' });
+const server = new McpServer({ name: 'xhrdev', version: '1.0.0' });
 
 server.registerTool(
   'health_check',
