@@ -18,10 +18,19 @@
  * the connection with a parse error that names none of this. Every diagnostic
  * below goes to stderr for that reason.
  */
+import { existsSync } from 'node:fs';
+
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import type { Browser } from 'playwright-core';
+import { chromium } from 'playwright-core';
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { z } from 'zod';
+
+import { applyIdentity, USER_AGENT, VIEWPORT } from '#src/akamai/identity.js';
+import { solve } from '#src/akamai/solver.js';
+import { toLaunchProxy } from '#src/proxy.js';
+import { RateLimitError } from '#src/rate-limit.js';
 
 import {
   challengeDocumentUrl,
@@ -29,7 +38,7 @@ import {
   parseBlockPage,
 } from '#src/datadome/http-utils.js';
 import { PROFILE, PROFILE_ID } from '#src/datadome/profile.js';
-import { solverBaseUrl } from '#src/solver-url.js';
+import { solverBaseUrl, solverWsUrl } from '#src/solver-url.js';
 
 const solverHost = process.env['host'];
 const apiKey = process.env['api_key'];
@@ -182,58 +191,125 @@ server.registerTool(
   'akamai_solve',
   {
     description:
-      'Solve an Akamai Bot Manager challenge (_abck / bm-sz sensor) for a URL and return a clearance cookie. End-to-end: the solver fetches the page, extracts the sensor script, runs it, and submits the payload. Call this when a request returns 403 with an _abck cookie, then retry the original request with the cookie_header this returns. The browser profile is supplied automatically, so a URL is normally all you need.',
+      'Solve an Akamai Bot Manager challenge (_abck sensor) for a URL and return clearance cookies. Call this when a request returns 403 or an Akamai "Access Denied" page, then retry your request with the cookie_header this returns, from the same proxy. Launches a real Chrome internally and relays each sensor request through it, so the cookies are bound to a genuine TLS fingerprint. Takes roughly 20-60s and the browser profile is supplied automatically, so a URL is all you need. Your MCP client may need its request timeout raised above the default 60s.',
     inputSchema: {
-      maxSensors: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe('Cap on sensor beacons sent before giving up.'),
-      mode: z
-        .enum(['abck', 'sbsd'])
+      headed: z
+        .boolean()
         .optional()
         .describe(
-          'Force a challenge mode. Auto-detected from the script when omitted.'
+          'Run the browser headed rather than headless. Debugging only.'
         ),
       proxy: z
         .string()
         .optional()
         .describe(
-          'Outbound proxy URL for this solve. Defaults to proxy= from the environment.'
-        ),
-      submit: z
-        .boolean()
-        .optional()
-        .describe(
-          'False returns the built sensor submission without sending it to the origin. Defaults to true.'
+          'Outbound proxy URL for this solve. Defaults to proxy= from the environment. Retry your request through the same proxy — the cookies are bound to this exit IP.'
         ),
       timeout: z
         .number()
         .int()
         .positive()
         .optional()
-        .describe('Overall deadline in milliseconds. Defaults to 20000.'),
+        .describe('Overall deadline in milliseconds. Defaults to 120000.'),
       url: z.url().describe('The URL that is being challenged.'),
     },
     title: 'Solve an Akamai challenge',
   },
-  async ({ maxSensors, mode, proxy, submit, timeout, url }) => {
-    log(`akamai_solve ${url}`);
+  async ({ headed, proxy, timeout, url }) => {
     const resolvedProxy = proxy ?? defaultProxy;
-    return call('akamai/solve', {
-      body: {
-        js_profile: jsProfile,
-        profile: profileSnapshot,
-        url,
+    log(`akamai_solve ${url}`);
+
+    /**
+     * A real browser, rather than `POST /akamai/solve`.
+     *
+     * The HTTP endpoint is the obvious thing to call here and does not work
+     * for the targets that matter. It solves server-side, so the sensor
+     * requests carry the container's TLS fingerprint and cookie jar rather
+     * than a browser's; against a target that checks the submitting client
+     * the payload is built correctly and then simply never accepted, and the
+     * solve ends `timeout`/`deadline_exceeded` with nothing naming the cause.
+     *
+     * So this drives the same browser bridge `src/akamai/comcast.ts` does:
+     * Chrome relays each sensor request over the session socket, and `_abck`
+     * reaches `~0~`. The cost is a browser per call and tens of seconds.
+     */
+    let browser: Browser | undefined;
+    try {
+      const launchOpts: Parameters<typeof chromium.launch>[0] = {
+        args: [
+          '--disable-blink-features=AutomationControlled',
+          '--no-first-run',
+          '--no-default-browser-check',
+        ],
+        headless: !headed,
+        ...(resolvedProxy ? { proxy: toLaunchProxy(resolvedProxy) } : {}),
+      };
+      const chromePath = process.env['CHROME_PATH'] ?? '';
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      if (chromePath && existsSync(chromePath))
+        launchOpts.executablePath = chromePath;
+      else launchOpts.channel = 'chrome';
+
+      browser = await chromium.launch(launchOpts);
+      const context = await browser.newContext({
+        deviceScaleFactor: 2,
+        ignoreHTTPSErrors: true,
+        locale: 'en-US',
+        timezoneId: PROFILE.timezone,
+        userAgent: USER_AGENT,
+        viewport: VIEWPORT,
+      });
+      const page = await context.newPage();
+      await applyIdentity(await context.newCDPSession(page));
+
+      await solve(page, {
         ...(resolvedProxy ? { proxy: resolvedProxy } : {}),
-        ...(mode ? { mode } : {}),
-        ...(maxSensors === undefined ? {} : { maxSensors }),
-        ...(submit === undefined ? {} : { submit }),
-        ...(timeout === undefined ? {} : { timeout }),
-      },
-      method: 'POST',
-    });
+        ...(apiKey ? { solverApiKey: apiKey } : {}),
+        solverUrl: solverWsUrl(solverHost, '/akamai/session'),
+        timeout: timeout ?? 120_000,
+        url,
+      });
+
+      const cookies = await context.cookies();
+      const jar: Record<string, string> = {};
+      for (const { name, value } of cookies) jar[name] = value;
+
+      // `~0~` in the second field is Akamai's own "this cookie is good".
+      // Anything else — `~-1~` especially — means the rounds ran and never
+      // landed, which is a failure however clean the transcript looked.
+      const abck = jar['_abck'];
+      const accepted = abck?.split('~')[1] === '0';
+
+      return asText(
+        {
+          accepted,
+          cookie_header: Object.entries(jar)
+            .map(([name, value]) => `${name}=${value}`)
+            .join('; '),
+          cookies: jar,
+          final_url: page.url(),
+          ...(accepted
+            ? {}
+            : {
+                note: '_abck did not reach ~0~. The solve ran but was not accepted — usually the exit IP rather than the payload. Rotate the proxy and retry.',
+              }),
+          proxy: resolvedProxy ?? null,
+        },
+        !accepted
+      );
+    } catch (error) {
+      if (error instanceof RateLimitError)
+        return asText(
+          {
+            error: `solver rate limit: ${error.message}`,
+            retryable: false,
+          },
+          true
+        );
+      return asText({ error: (error as Error).message }, true);
+    } finally {
+      await browser?.close().catch(() => undefined);
+    }
   }
 );
 

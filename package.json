@@ -21,6 +21,7 @@
     "lint:fix": "eslint --fix .",
     "test": "node --test && node --env-file=.env dev-resources/smoke.js",
     "mcp": "node --env-file=.env src/mcp.ts",
+    "emit:profile": "node dev-resources/emit-profile.mjs",
     "grainger": "node --env-file=.env src/datadome/grainger-undici.ts",
     "grainger:axios": "node --env-file=.env src/datadome/grainger-axios.ts",
     "grainger:fetch": "node --use-env-proxy --env-file=.env src/datadome/grainger-fetch.ts",

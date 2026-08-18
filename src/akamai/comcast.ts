@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import { chromium } from 'playwright-core';
 import { toLaunchProxy } from '#src/proxy.js';
 import { solverWsUrl } from '#src/solver-url.js';
+import { applyIdentity, USER_AGENT, VIEWPORT } from '#src/akamai/identity.js';
 import { solve } from '#src/akamai/solver.js';
 import {
   RATE_LIMIT_EXIT_CODE,
@@ -32,8 +33,7 @@ const solverUrl = solverWsUrl(solverHost, '/akamai/session');
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-const UA =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36';
+const UA = USER_AGENT;
 
 const CHROME_PATH = process.env['CHROME_PATH'] || '';
 const launchOpts: Record<string, unknown> = {
@@ -57,7 +57,7 @@ const context = await browser.newContext({
   locale: 'en-US',
   timezoneId: 'America/New_York',
   userAgent: UA,
-  viewport: { height: 761, width: 1200 },
+  viewport: VIEWPORT,
 });
 const page = await context.newPage();
 
@@ -92,39 +92,9 @@ process.on('unhandledRejection', (reason) => {
   void cleanup(1);
 });
 
-// CDP overrides for Chrome 151
+// The identity the solver was told to model, installed on the real browser.
 const cdp = await context.newCDPSession(page);
-await cdp.send('Emulation.setUserAgentOverride', {
-  acceptLanguage: 'en-US,en;q=0.9',
-  userAgent: UA,
-  userAgentMetadata: {
-    architecture: 'arm',
-    bitness: '64',
-    brands: [
-      { brand: 'Chromium', version: '151' },
-      { brand: 'Not=A?Brand', version: '99' },
-      { brand: 'Google Chrome', version: '151' },
-    ],
-    fullVersion: '151.0.7922.109',
-    fullVersionList: [
-      { brand: 'Chromium', version: '151.0.7922.109' },
-      { brand: 'Not=A?Brand', version: '99.0.0.0' },
-      { brand: 'Google Chrome', version: '151.0.7922.109' },
-    ],
-    mobile: false,
-    model: '',
-    platform: 'macOS',
-    platformVersion: '26.5.2',
-  },
-});
-await cdp.send('Emulation.setDeviceMetricsOverride', {
-  deviceScaleFactor: 2,
-  height: 817,
-  mobile: false,
-  screenHeight: 982,
-  screenWidth: 1512,
-  width: 1200,
-});
+await applyIdentity(cdp);
 
 // Solve Akamai
 try {

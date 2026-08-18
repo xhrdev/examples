@@ -47,6 +47,7 @@
  * (one 1MB analytics bundle silently drops the connection), and the solver's
  * 30s/15s navigation defaults, which a page this heavy overruns.
  */
+import { PROFILE, SEC_CH_UA } from '#src/profile.js';
 import { solve } from '#src/akamai/solver.js';
 import { solverWsUrl } from '#src/solver-url.js';
 import { outerHtml, start } from '#src/lightpanda.js';
@@ -79,12 +80,10 @@ const log = (msg: string, ...extra: unknown[]): void =>
  * another, and `_abck` sits at `~-1~` however many rounds you give it.
  */
 const IDENTITY = {
-  'sec-ch-ua':
-    '"Chromium";v="151", "Not=A?Brand";v="99", "Google Chrome";v="151"',
+  'sec-ch-ua': SEC_CH_UA,
   'sec-ch-ua-mobile': '?0',
   'sec-ch-ua-platform': '"macOS"',
-  'user-agent':
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+  'user-agent': PROFILE.userAgent,
 };
 
 const session = await start({ identity: IDENTITY, log, proxy });
