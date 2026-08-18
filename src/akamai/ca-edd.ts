@@ -40,7 +40,7 @@ const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 const UA =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36';
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36';
 
 const CHROME_PATH = process.env['CHROME_PATH'] || '';
 const launchOpts: Record<string, unknown> = {
@@ -99,7 +99,7 @@ process.on('unhandledRejection', (reason) => {
   void cleanup(1);
 });
 
-// CDP overrides for Chrome 146
+// CDP overrides for Chrome 151
 const cdp = await context.newCDPSession(page);
 await cdp.send('Emulation.setUserAgentOverride', {
   acceptLanguage: 'en-US,en;q=0.9',
@@ -108,25 +108,25 @@ await cdp.send('Emulation.setUserAgentOverride', {
     architecture: 'arm',
     bitness: '64',
     brands: [
-      { brand: 'Chromium', version: '146' },
-      { brand: 'Not-A.Brand', version: '24' },
-      { brand: 'Google Chrome', version: '146' },
+      { brand: 'Chromium', version: '151' },
+      { brand: 'Not=A?Brand', version: '99' },
+      { brand: 'Google Chrome', version: '151' },
     ],
-    fullVersion: '146.0.7680.81',
+    fullVersion: '151.0.7922.109',
     fullVersionList: [
-      { brand: 'Chromium', version: '146.0.7680.81' },
-      { brand: 'Not-A.Brand', version: '24.0.0.0' },
-      { brand: 'Google Chrome', version: '146.0.7680.81' },
+      { brand: 'Chromium', version: '151.0.7922.109' },
+      { brand: 'Not=A?Brand', version: '99.0.0.0' },
+      { brand: 'Google Chrome', version: '151.0.7922.109' },
     ],
     mobile: false,
     model: '',
     platform: 'macOS',
-    platformVersion: '15.7.3',
+    platformVersion: '26.5.2',
   },
 });
 await cdp.send('Emulation.setDeviceMetricsOverride', {
   deviceScaleFactor: 2,
-  height: 761,
+  height: 817,
   mobile: false,
   screenHeight: 982,
   screenWidth: 1512,

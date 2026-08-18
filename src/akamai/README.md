@@ -126,9 +126,11 @@ something else:
   Lightpanda's user agent cannot be changed from inside the browser, and
   `context.newCDPSession()` — how `comcast.ts` overrides it — crashes
   Playwright here.
-- **The identity has to be the profile the solver was told about**, not the
-  proxy's DataDome default. Telemetry claiming Chrome 146 under headers
-  claiming 149 is a mismatch, and `_abck` stays at `~-1~` however long you run.
+- **The identity has to be the profile the solver was told about.** Telemetry
+  claiming one Chrome under headers claiming another is a mismatch, and `_abck`
+  stays at `~-1~` however long you run. Both solvers currently sit on
+  `chrome-151-macos`, so the proxy's DataDome default happens to agree — pin it
+  anyway; the two registries move independently.
 - **`fetchResponse` replaces `route.fetch`.** Playwright's route.fetch never
   returns against Lightpanda — it runs in Playwright's request context, which
   syncs cookies with the browser, and once that stops answering every later

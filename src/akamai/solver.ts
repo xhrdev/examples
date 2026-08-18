@@ -156,24 +156,24 @@ const stripScripts = (html: string): string =>
   html.replace(STRIP_SCRIPTS_RE, '');
 
 const PROFILE = {
-  deviceMemory: 8,
+  deviceMemory: 32,
   hardwareConcurrency: 10,
   languages: 'en-US,en',
   screen: {
-    availHeight: 944,
+    availHeight: 948,
     availLeft: 0,
-    availTop: 32,
+    availTop: 34,
     availWidth: 1512,
     colorDepth: 30,
     devicePixelRatio: 2,
     height: 982,
-    innerHeight: 761,
+    innerHeight: 817,
     innerWidth: 1200,
-    outerHeight: 900,
+    outerHeight: 904,
     outerWidth: 1200,
     pixelDepth: 30,
-    screenX: 0,
-    screenY: 32,
+    screenX: 22,
+    screenY: 56,
     width: 1512,
   },
   timezone: 'America/New_York',
@@ -256,7 +256,7 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
             type: 'init',
             ...data,
             profile: PROFILE,
-            profileId: 'chrome-146-macos',
+            profileId: 'chrome-151-macos',
             proxy,
           })
         );

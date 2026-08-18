@@ -23,9 +23,12 @@
  *      inside the browser, and `context.newCDPSession()`, which is how
  *      `comcast.ts` overrides it, crashes Playwright here.
  *   2. **The identity must be the one the Akamai solver models**
- *      (`chrome-146-macos`), not the proxy's DataDome default. Telemetry that
- *      says 146 under headers that say 149 is scored as a mismatch, and
- *      `_abck` sits at `~-1~` for as many rounds as you care to give it.
+ *      (`chrome-151-macos`). Telemetry under headers that name a different
+ *      Chrome is scored as a mismatch, and `_abck` sits at `~-1~` for as many
+ *      rounds as you care to give it. Both solvers now sit on 151, so the
+ *      proxy's DataDome default happens to agree — pin it anyway, because
+ *      the two registries are bumped independently and the agreement is a
+ *      coincidence of this moment, not a guarantee.
  *   3. **`fetchResponse`**, because Playwright's `route.fetch` never returns
  *      against Lightpanda: it runs in Playwright's request context, which
  *      syncs cookies with the browser, and once that stops answering every
@@ -69,19 +72,19 @@ const log = (msg: string, ...extra: unknown[]): void =>
 
 /**
  * What the MITM proxy claims upstream. This has to be the browser the *Akamai*
- * solver models — `profileId: 'chrome-146-macos'`, the same identity
- * `comcast.ts` installs with `Emulation.setUserAgentOverride`. The proxy's
- * default is the DataDome profile, which is a different Chrome: send that and
- * the telemetry says 146 while the headers say 149, and `_abck` sits at `~-1~`
- * however many rounds you give it.
+ * solver models — `profileId: 'chrome-151-macos'`, the same identity
+ * `comcast.ts` installs with `Emulation.setUserAgentOverride`. Let the proxy
+ * fall back to its own default and you are trusting two registries to stay in
+ * step; when they drift, the telemetry names one Chrome while the headers name
+ * another, and `_abck` sits at `~-1~` however many rounds you give it.
  */
 const IDENTITY = {
   'sec-ch-ua':
-    '"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"',
+    '"Chromium";v="151", "Not=A?Brand";v="99", "Google Chrome";v="151"',
   'sec-ch-ua-mobile': '?0',
   'sec-ch-ua-platform': '"macOS"',
   'user-agent':
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
 };
 
 const session = await start({ identity: IDENTITY, log, proxy });

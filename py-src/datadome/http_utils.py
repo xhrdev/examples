@@ -52,12 +52,12 @@ def solver_base_url(host):
 # navigation_headers() is the most common way to get a solve rejected.
 PROFILE = {
   'brands': [
-    {'brand': 'Google Chrome', 'version': '149'},
-    {'brand': 'Chromium', 'version': '149'},
-    {'brand': 'Not)A;Brand', 'version': '24'},
+    {'brand': 'Not=A?Brand', 'version': '99'},
+    {'brand': 'Google Chrome', 'version': '151'},
+    {'brand': 'Chromium', 'version': '151'},
   ],
-  'chromeFullVersion': '149.0.7827.201',
-  'chromeVersion': '149',
+  'chromeFullVersion': '151.0.7922.109',
+  'chromeVersion': '151',
   'deviceMemory': 32,
   'hardwareConcurrency': 10,
   'languages': 'en-US,en',
@@ -66,25 +66,25 @@ PROFILE = {
   'screen': {
     'availHeight': 948,
     'availLeft': 0,
-    'availTop': 0,
+    'availTop': 34,
     'availWidth': 1512,
     'colorDepth': 30,
     'devicePixelRatio': 2,
     'height': 982,
-    'innerHeight': 761,
+    'innerHeight': 817,
     'innerWidth': 1200,
     'outerHeight': 904,
     'outerWidth': 1200,
     'pixelDepth': 30,
-    'screenX': 0,
-    'screenY': 143,
+    'screenX': 22,
+    'screenY': 56,
     'width': 1512,
   },
   'timezone': 'America/New_York',
   'timezoneOffsetMinutes': 240,
   'userAgent': (
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
-    '(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
+    '(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36'
   ),
   'vendor': 'Google Inc.',
 }
