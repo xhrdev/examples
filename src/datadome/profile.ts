@@ -1,64 +1,16 @@
 /**
- * This is a helper library, not a script. It holds the browser identity and
- * the DataDome endpoints that every version of the example needs — the
- * Playwright bridge in solver.ts and the browser-free clients alike.
+ * DataDome's endpoints, plus the shared browser identity re-exported for the
+ * files that already import it from here.
  *
- * It exists so there is exactly one answer to "which Chrome are we claiming
- * to be". The identity is cross-checked by DataDome in several places at
- * once, so a copy that drifts does not fail loudly; it fails as a solve that
- * inexplicably stops being accepted.
+ * The identity itself moved to `src/profile.ts` so the Akamai examples and the
+ * MCP server can share it — it was never DataDome-specific, and keeping it
+ * under `datadome/` is why the Akamai scripts ended up carrying their own copy
+ * and drifting two major versions behind. Re-exported rather than relocated
+ * outright so `import { PROFILE } from '#src/datadome/profile.js'` keeps
+ * working across the client examples.
  */
+
+export { PROFILE, PROFILE_ID } from '#src/profile.js';
 
 export const GEO_HOST = 'geo.captcha-delivery.com';
 export const GEO_ORIGIN: string = `https://${GEO_HOST}`;
-
-/**
- * A coherent Chrome-on-macOS identity. Every field the solver receives has to
- * agree with the headers actually put on the wire — changing the user agent
- * without changing the client hints alongside it is the most common way to
- * get a solve rejected.
- */
-export const PROFILE = {
-  brands: [
-    { brand: 'Not=A?Brand', version: '99' },
-    { brand: 'Google Chrome', version: '151' },
-    { brand: 'Chromium', version: '151' },
-  ],
-  chromeFullVersion: '151.0.7922.109',
-  chromeVersion: '151',
-  deviceMemory: 32,
-  hardwareConcurrency: 10,
-  languages: 'en-US,en',
-  os: 'macos',
-  platformVersion: '26.5.2',
-  screen: {
-    availHeight: 948,
-    availLeft: 0,
-    availTop: 34,
-    availWidth: 1512,
-    colorDepth: 30,
-    devicePixelRatio: 2,
-    height: 982,
-    innerHeight: 817,
-    innerWidth: 1200,
-    outerHeight: 904,
-    outerWidth: 1200,
-    pixelDepth: 30,
-    screenX: 22,
-    screenY: 56,
-    width: 1512,
-  },
-  timezone: 'America/New_York',
-  timezoneOffsetMinutes: 240,
-  userAgent:
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
-  vendor: 'Google Inc.',
-} as const;
-
-/**
- * Derived, never written out by hand. The solver validates `profile.id`
- * against `js_profile.chromeVersion` and `js_profile.os`, so a literal here
- * would go stale the moment PROFILE is bumped and produce a 400 whose message
- * says nothing about the version.
- */
-export const PROFILE_ID: string = `chrome-${PROFILE.chromeVersion}-${PROFILE.os}`;

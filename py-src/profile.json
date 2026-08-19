@@ -1,0 +1,45 @@
+{
+  "id": "chrome-151-macos",
+  "brands": [
+    {
+      "brand": "Not=A?Brand",
+      "version": "99"
+    },
+    {
+      "brand": "Google Chrome",
+      "version": "151"
+    },
+    {
+      "brand": "Chromium",
+      "version": "151"
+    }
+  ],
+  "chromeFullVersion": "151.0.7922.109",
+  "chromeVersion": "151",
+  "deviceMemory": 32,
+  "hardwareConcurrency": 10,
+  "languages": "en-US,en",
+  "os": "macos",
+  "platformVersion": "26.5.2",
+  "screen": {
+    "availHeight": 948,
+    "availLeft": 0,
+    "availTop": 34,
+    "availWidth": 1512,
+    "colorDepth": 30,
+    "devicePixelRatio": 2,
+    "height": 982,
+    "innerHeight": 817,
+    "innerWidth": 1200,
+    "outerHeight": 904,
+    "outerWidth": 1200,
+    "pixelDepth": 30,
+    "screenX": 22,
+    "screenY": 56,
+    "width": 1512
+  },
+  "timezone": "America/New_York",
+  "timezoneOffsetMinutes": 240,
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+  "vendor": "Google Inc."
+}

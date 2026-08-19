@@ -20,6 +20,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "test": "node --test && node --env-file=.env dev-resources/smoke.js",
+    "mcp": "node --env-file=.env src/mcp.ts",
+    "emit:profile": "node dev-resources/emit-profile.mjs",
     "grainger": "node --env-file=.env src/datadome/grainger-undici.ts",
     "grainger:axios": "node --env-file=.env src/datadome/grainger-axios.ts",
     "grainger:fetch": "node --use-env-proxy --env-file=.env src/datadome/grainger-fetch.ts",
@@ -34,13 +36,15 @@
   },
   "author": "XHR Software Inc",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
     "axios": "1.19.0",
     "axios-cookiejar-support": "7.0.0",
     "http-cookie-agent": "8.0.0",
     "https-proxy-agent": "9.1.0",
     "playwright-core": "1.62.1",
     "tough-cookie": "6.0.2",
-    "undici": "8.9.0"
+    "undici": "8.9.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.1",
