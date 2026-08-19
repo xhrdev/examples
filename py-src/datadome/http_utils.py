@@ -46,50 +46,20 @@ def solver_base_url(host):
     return host.rstrip('/')
   return f'http://{host}:{SOLVER_PORT}'
 
-# A coherent Chrome-on-macOS identity. Every field the solver receives has
-# to agree with the headers you actually send — DataDome cross-checks
-# them, so changing the user agent here without changing
+# The browser identity, generated from src/profile.ts by
+# `npm run emit:profile`. Read rather than written out here so there is one
+# answer in this repo to "which Chrome are we claiming to be" — a second
+# hand-maintained copy is how the Akamai scripts once ended up two major
+# versions behind, drifting silently because nothing compared them.
+#
+# Every field the solver receives has to agree with the headers you actually
+# send: DataDome cross-checks them, so a user agent that disagrees with
 # navigation_headers() is the most common way to get a solve rejected.
-PROFILE = {
-  'brands': [
-    {'brand': 'Not=A?Brand', 'version': '99'},
-    {'brand': 'Google Chrome', 'version': '151'},
-    {'brand': 'Chromium', 'version': '151'},
-  ],
-  'chromeFullVersion': '151.0.7922.109',
-  'chromeVersion': '151',
-  'deviceMemory': 32,
-  'hardwareConcurrency': 10,
-  'languages': 'en-US,en',
-  'os': 'macos',
-  'platformVersion': '26.5.2',
-  'screen': {
-    'availHeight': 948,
-    'availLeft': 0,
-    'availTop': 34,
-    'availWidth': 1512,
-    'colorDepth': 30,
-    'devicePixelRatio': 2,
-    'height': 982,
-    'innerHeight': 817,
-    'innerWidth': 1200,
-    'outerHeight': 904,
-    'outerWidth': 1200,
-    'pixelDepth': 30,
-    'screenX': 22,
-    'screenY': 56,
-    'width': 1512,
-  },
-  'timezone': 'America/New_York',
-  'timezoneOffsetMinutes': 240,
-  'userAgent': (
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
-    '(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36'
-  ),
-  'vendor': 'Google Inc.',
-}
+_PROFILE_PATH = os.path.join(os.path.dirname(__file__), '..', 'profile.json')
+with open(_PROFILE_PATH, encoding='utf-8') as _f:
+  PROFILE = json.load(_f)
 
-PROFILE_ID = f'chrome-{PROFILE["chromeVersion"]}-{PROFILE["os"]}'
+PROFILE_ID = PROFILE['id']
 
 DD_BLOCK_RE = re.compile(r'var\s+dd\s*=\s*(\{[^}]*\})')
 TITLE_RE = re.compile(r'<title>([^<]*)', re.I)

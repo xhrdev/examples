@@ -36,6 +36,7 @@
 import type { BrowserContext, Frame, Page, Route } from 'playwright-core';
 import { fetch, WebSocket } from 'undici';
 
+import { PROFILE, PROFILE_ID } from '#src/profile.js';
 import { checkRateLimit, RateLimitError } from '#src/rate-limit.js';
 
 export type SolveOptions = {
@@ -155,28 +156,20 @@ const STRIP_SCRIPTS_RE = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gim;
 const stripScripts = (html: string): string =>
   html.replace(STRIP_SCRIPTS_RE, '');
 
-const PROFILE = {
-  deviceMemory: 32,
-  hardwareConcurrency: 10,
-  languages: 'en-US,en',
-  screen: {
-    availHeight: 948,
-    availLeft: 0,
-    availTop: 34,
-    availWidth: 1512,
-    colorDepth: 30,
-    devicePixelRatio: 2,
-    height: 982,
-    innerHeight: 817,
-    innerWidth: 1200,
-    outerHeight: 904,
-    outerWidth: 1200,
-    pixelDepth: 30,
-    screenX: 22,
-    screenY: 56,
-    width: 1512,
-  },
-  timezone: 'America/New_York',
+/**
+ * What the session socket declares about the browser on the other end.
+ *
+ * A subset of the shared identity rather than a copy of it: the solver merges
+ * this over the registry profile named by `profileId`, so anything written out
+ * here that disagrees with `src/profile.ts` overrides the real reading with a
+ * stale one and scores as a mismatch.
+ */
+const TELEMETRY_PROFILE = {
+  deviceMemory: PROFILE.deviceMemory,
+  hardwareConcurrency: PROFILE.hardwareConcurrency,
+  languages: PROFILE.languages,
+  screen: PROFILE.screen,
+  timezone: PROFILE.timezone,
 };
 
 export async function solve(page: Page, opts: SolveOptions): Promise<void> {
@@ -255,8 +248,8 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
           JSON.stringify({
             type: 'init',
             ...data,
-            profile: PROFILE,
-            profileId: 'chrome-151-macos',
+            profile: TELEMETRY_PROFILE,
+            profileId: PROFILE_ID,
             proxy,
           })
         );
