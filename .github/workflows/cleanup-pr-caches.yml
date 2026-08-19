@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: cleanup pr caches
 
 on:
@@ -7,6 +8,18 @@ on:
 
 jobs:
   cleanup-pr-caches:
-    uses: xhrdev/actions/.github/workflows/cleanup-pr-caches.yml@master
+    runs-on: ubuntu-slim
     permissions:
       actions: write
+    steps:
+      - name: Delete caches scoped to this PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          gh extension install actions/gh-actions-cache
+          set +e
+          gh actions-cache list -R "$REPO" -B "$BRANCH" -L 100 | cut -f 1 | while IFS= read -r cacheKey; do
+            gh actions-cache delete "$cacheKey" -R "$REPO" -B "$BRANCH" --confirm
+          done
