@@ -19,19 +19,26 @@ const LOADTEST_PATH = path.join(PROJECT_ROOT, 'src/loadtest.ts');
 // axios, fetch) and the Lightpanda ones (always headless, no flag) don't.
 // grainger-fetch uses node's built-in fetch, which silently ignores the
 // proxy unless node itself is started with --use-env-proxy.
+//
+// `attempts` overrides the three tries the examples default to. Only
+// grainger-lightpanda needs it: DataDome scores a solve computed from a
+// Lightpanda page as borderline and refuses roughly three cookies in four, so
+// three attempts leave the smoke gate failing about 40% of the time for a
+// reason that is not a regression. A failed attempt costs ~7s. See the
+// "status" section of src/datadome/grainger-lightpanda.ts.
 const SCRIPTS = [
   { script: 'src/datadome/grainger-undici' },
   { script: 'src/datadome/grainger-axios' },
   { script: 'src/datadome/grainger-fetch', useEnvProxy: true },
   { headless: true, script: 'src/datadome/grainger' },
-  { script: 'src/datadome/grainger-lightpanda' },
+  { attempts: 8, script: 'src/datadome/grainger-lightpanda' },
   { headless: true, script: 'src/datadome/idealista' },
   { headless: true, script: 'src/akamai/comcast' },
   { script: 'src/akamai/comcast-lightpanda' },
   { headless: true, script: 'src/akamai/ca-edd' },
 ];
 
-function runOne({ headless, script, useEnvProxy }) {
+function runOne({ attempts, headless, script, useEnvProxy }) {
   return new Promise((resolve) => {
     const args = [
       LOADTEST_PATH,
@@ -41,6 +48,7 @@ function runOne({ headless, script, useEnvProxy }) {
     ];
     if (headless) args.push('--headless');
     if (useEnvProxy) args.push('--use-env-proxy');
+    if (attempts) args.push(`--attempts=${attempts}`);
 
     console.log(`\n--- ${script} ---`);
     const child = spawn('node', ['--env-file=.env', ...args], {
