@@ -50,7 +50,9 @@
  * the line from one attempt to the next.
  *
  * Retry rather than expect it. Nothing below needs changing to make an
- * attempt work; a failed one costs about seven seconds.
+ * attempt work; a failed one costs about seven seconds — so pass
+ * `--attempts=8` when the run has to come back green, which is what the smoke
+ * suite in `dev-resources/smoke.js` does for this script and no other.
  *
  * ## what it does
  *
