@@ -50,9 +50,19 @@
  * the line from one attempt to the next.
  *
  * Retry rather than expect it. Nothing below needs changing to make an
- * attempt work; a failed one costs about seven seconds — so pass
- * `--attempts=8` when the run has to come back green, which is what the smoke
- * suite in `dev-resources/smoke.js` does for this script and no other.
+ * attempt work; a failed one costs about seven seconds.
+ *
+ * Retrying is worth less than that ratio suggests, and on CI it is worth
+ * nothing. Two reasons. The proxy string carries no session token, so
+ * `pinSession` cannot rotate the exit IP and every attempt in a run leaves
+ * from the same address — the attempts are not independent draws. And the
+ * GitHub runner downloads the **linux** Lightpanda build where a workstation
+ * gets the macos one; on the linux build the cookie has been refused on all
+ * 11 attempts observed across two runs, against a success inside five
+ * attempts locally on the same commit. Raising `--attempts` there just spends
+ * seven seconds a time to be told the same thing, which is why
+ * `dev-resources/smoke.js` marks this script advisory instead: it still runs
+ * and still reports, but it no longer decides whether master is green.
  *
  * ## what it does
  *
