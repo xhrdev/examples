@@ -41,6 +41,7 @@ from datadome.http_utils import (  # noqa: E402
 
 
 def attempt(proxy, api_key, solver_url, target_url):
+  # `proxy=None` is httpx's own default: a client that goes direct.
   with httpx.Client(
     follow_redirects=True, proxy=proxy, timeout=TIMEOUT_S
   ) as client:

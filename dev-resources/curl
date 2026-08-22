@@ -86,7 +86,7 @@ req() {
   local out status
   out="$1"; shift
   if ! status="$(curl -sS "$@" -o "$out" -w '%{http_code}' 2>"${work}/curl.err")"; then
-    fail "proxy session failed ($(tr -d '\n' <"${work}/curl.err" | head -c 120))"
+    fail "${transport_failure} ($(tr -d '\n' <"${work}/curl.err" | head -c 120))"
   fi
   printf '%s' "$status"
 }
@@ -95,16 +95,30 @@ command -v jq >/dev/null || fail 'jq is required (brew install jq)'
 
 # --- pin the proxy session ------------------------------------------------
 #
-# Clearance cookies are bound to the IP that earned them, so the pool must
-# not rotate between step 1 and step 4. Providers spell this differently;
-# see src/proxy.ts for the full set.
+# proxy= is optional: with none set, `via` is empty and every request below
+# goes out from this machine — which is all DataDome asks, as long as the
+# submission in step 4 comes from the same address as step 1.
+#
+# With one set, clearance cookies are bound to the IP that earned them, so the
+# pool must not rotate between step 1 and step 4. Providers spell this
+# differently; see src/proxy.ts for the full set.
 session="$RANDOM$RANDOM"
 case "$proxy" in
+  '')            pinned='' ;;
   *oxylabs.io*)  pinned="${proxy/:\/\//://}"
                  pinned="$(printf '%s' "$proxy" | sed -E "s|://([^:]+):|://\1-sessid-${session}:|")" ;;
   *rayobyte.com*) pinned="$(printf '%s' "$proxy" | sed -E "s|://([^:]+):([^@]+)@|://\1:\2-hardsession-${session}@|")" ;;
   *)             pinned="$proxy" ;;
 esac
+
+if [ -n "$pinned" ]; then
+  via=(-x "$pinned")
+  transport_failure='proxy session failed'
+else
+  via=()
+  transport_failure='network error'
+  log "no proxy= set — going out from this machine's address"
+fi
 
 ua='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
 nav=(
@@ -123,7 +137,7 @@ nav=(
 
 # --- 1. trip the challenge ------------------------------------------------
 log "GET ${target}"
-status="$(req "${work}/blocked.html" -m 60 -x "$pinned" "${nav[@]}" "$target")"
+status="$(req "${work}/blocked.html" -m 60 "${via[@]}" "${nav[@]}" "$target")"
 log "  <- HTTP ${status} ($(wc -c <"${work}/blocked.html" | tr -d ' ') bytes)"
 
 # The block page carries `var dd={'rt':'c',...}` — single-quoted, so swap the
@@ -159,7 +173,7 @@ doc_url="$(jq -rn --argjson dd "$dd" --arg geo "$geo" --arg ref "$target" '
   | $geo + $path + "?" + join("&")')"
 
 log 'GET challenge document'
-status="$(req "${work}/document.html" -m 60 -x "$pinned" "${nav[@]}" \
+status="$(req "${work}/document.html" -m 60 "${via[@]}" "${nav[@]}" \
   -H "referer: ${target}" \
   -H 'sec-fetch-dest: iframe' \
   -H 'sec-fetch-site: cross-site' \
@@ -218,10 +232,10 @@ jq -n \
         tlsClientHello: "",
         userAgent: $ua
       },
-      proxy: $proxy,
       timeout: 120000,
       url: $url
-    }' >"${work}/solve.json"
+    }
+  | (if $proxy == "" then . else . + { proxy: $proxy } end)' >"${work}/solve.json"
 
 log 'POST /dd/solve'
 status="$(req "${work}/prepared.json" -m 130 \
@@ -257,11 +271,11 @@ submit=(
 if [ -n "$body" ]; then
   log 'POST submission'
   printf '%s' "$body" >"${work}/submission.txt"
-  status="$(req "${work}/submitted.json" -m 60 -x "$pinned" "${submit[@]}" \
+  status="$(req "${work}/submitted.json" -m 60 "${via[@]}" "${submit[@]}" \
     --data-binary "@${work}/submission.txt" "$submit_url")"
 else
   log 'GET submission'
-  status="$(req "${work}/submitted.json" -m 60 -x "$pinned" "${submit[@]}" "$submit_url")"
+  status="$(req "${work}/submitted.json" -m 60 "${via[@]}" "${submit[@]}" "$submit_url")"
 fi
 log "  <- HTTP ${status}"
 
@@ -273,7 +287,7 @@ log "clearance cookie: datadome=${cookie}"
 
 # --- prove it -------------------------------------------------------------
 log 'verifying against the target'
-status="$(req "${work}/verified.html" -m 60 -x "$pinned" "${nav[@]}" \
+status="$(req "${work}/verified.html" -m 60 "${via[@]}" "${nav[@]}" \
   -H "cookie: datadome=${cookie}" "$target")"
 title="$(sed -n 's/.*<title>\([^<]*\).*/\1/p' "${work}/verified.html" | head -1)"
 log "  <- HTTP ${status} ($(wc -c <"${work}/verified.html" | tr -d ' ') bytes) \"${title}\""

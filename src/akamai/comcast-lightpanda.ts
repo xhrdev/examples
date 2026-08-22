@@ -63,7 +63,6 @@ const proxy = process.env['proxy'];
 const solverApiKey = process.env['api_key'];
 
 if (!solverHost) throw new Error('set host= in .env');
-if (!proxy) throw new Error('set proxy= in .env');
 
 const solverUrl = solverWsUrl(solverHost, '/akamai/session');
 const timeout = Number(process.env['AKAMAI_TIMEOUT_MS'] ?? 120_000);
@@ -86,7 +85,11 @@ const IDENTITY = {
   'user-agent': PROFILE.userAgent,
 };
 
-const session = await start({ identity: IDENTITY, log, proxy });
+const session = await start({
+  identity: IDENTITY,
+  log,
+  ...(proxy ? { proxy } : {}),
+});
 let exitCode = 0;
 
 process.once('SIGINT', () => {
@@ -113,7 +116,7 @@ try {
     // script — so the defaults (30s/15s) run out before the page settles.
     loadStateTimeout: 60_000,
     navigationTimeout: 90_000,
-    proxy,
+    ...(proxy ? { proxy } : {}),
     ...(solverApiKey ? { solverApiKey } : {}),
     solverUrl,
     timeout,

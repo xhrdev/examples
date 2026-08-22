@@ -26,13 +26,14 @@ const chromePath = process.env['CHROME_PATH'] || '';
 const browserHoldMs = 30_000;
 
 if (!solverHost) throw new Error('set host= in .env');
-if (!configuredProxy) throw new Error('set proxy= in .env');
 
 const solverUrl = solverBaseUrl(solverHost);
 const log = (msg: string, ...extra: unknown[]): void =>
   console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
 
-const { url: proxy } = pinSession(configuredProxy);
+// No proxy is a valid setup: the browser and the submission then both go
+// out from this machine, which is all DataDome asks — one address throughout.
+const proxy = configuredProxy ? pinSession(configuredProxy).url : undefined;
 
 const launchOptions: LaunchOptions = {
   args: [
@@ -43,7 +44,7 @@ const launchOptions: LaunchOptions = {
   ],
   headless: process.argv.includes('--headless'),
   ignoreDefaultArgs: ['--enable-automation', '--force-color-profile=srgb'],
-  proxy: toLaunchProxy(proxy),
+  ...(proxy ? { proxy: toLaunchProxy(proxy) } : {}),
 };
 
 // eslint-disable-next-line security/detect-non-literal-fs-filename
@@ -96,7 +97,7 @@ try {
   });
   const page = await context.newPage();
   const result = await solve(page, {
-    proxy,
+    ...(proxy ? { proxy } : {}),
     ...(solverApiKey ? { solverApiKey } : {}),
     solverUrl,
     url,

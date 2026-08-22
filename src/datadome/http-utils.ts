@@ -34,7 +34,8 @@ export const TIMEOUT_MS = 120_000;
 
 /** Everything an attempt needs, already resolved from the environment. */
 export type Context = {
-  proxy: string;
+  /** Undefined when `proxy=` is unset: go out from this machine's address. */
+  proxy: string | undefined;
   solverApiKey: string | undefined;
   solverUrl: string;
   targetUrl: string;
@@ -166,7 +167,7 @@ export const solveRequestBody = ({
   dd: DataDomeBlock;
   documentHtml: string;
   documentUrl: string;
-  proxy: string;
+  proxy: string | undefined;
   targetUrl: string;
 }): Record<string, unknown> => ({
   dd: {
@@ -204,7 +205,9 @@ export const solveRequestBody = ({
     tlsClientHello: '',
     userAgent: PROFILE.userAgent,
   },
-  proxy,
+  // Omit the field entirely when going direct — the solver reads its
+  // presence, not its emptiness.
+  ...(proxy ? { proxy } : {}),
   timeout: TIMEOUT_MS,
   url: targetUrl,
 });
@@ -259,8 +262,13 @@ const isTransport = (error: unknown): boolean =>
  * attempt, runs `attempt`, and reports the result the way every other example
  * in this repo does.
  *
- * There is one proxy pool, `proxy`. Each attempt pins a fresh session, so a
- * dead exit node is retried on a new IP rather than failing the run.
+ * `proxy=` is optional. With it, each attempt pins a fresh session, so a dead
+ * exit node is retried on a new IP rather than failing the run. Without it,
+ * everything — the challenge, the solve, the submission — goes out from this
+ * machine's own address, which is a fine way to try the flow from a laptop or
+ * from a box that already egresses where you want it to. The one rule that
+ * survives either way: the clearance cookie is bound to whichever address
+ * submitted it, so browse from the same place you solved from.
  *
  * `--require-challenge` turns "nothing challenged us" into a failure. CI passes
  * it so the smoke gate cannot go green without actually exercising a solve.
@@ -272,21 +280,24 @@ export const run = async (
   const solverHost = process.env['host'];
   const configuredProxy = process.env['proxy'];
   if (!solverHost) throw new Error('set host= in .env');
-  if (!configuredProxy) throw new Error('set proxy= in .env');
 
   const attempts = Number(readFlag('--attempts') ?? 3);
   const targetUrl = readFlag('--url') ?? DEFAULT_URL;
   const solverUrl = solverBaseUrl(solverHost);
   const requireChallenge = process.argv.includes('--require-challenge');
 
-  const label = 'PROXY';
+  const label = configuredProxy ? 'PROXY' : 'DIRECT';
+  if (!configuredProxy) {
+    log("no proxy= set — going out from this machine's address");
+  }
 
   let lastError: unknown;
   let sawNoChallenge = false;
 
   for (let i = 1; i <= attempts; i += 1) {
     // A fresh session per attempt: a new IP, and a clean slate with DataDome.
-    const { url: proxy } = pinSession(configuredProxy);
+    // Nothing to pin when going direct — every attempt is the same address.
+    const proxy = configuredProxy ? pinSession(configuredProxy).url : undefined;
     try {
       const outcome = await attempt({
         proxy,
@@ -326,7 +337,8 @@ export const run = async (
       lastError = error;
       if (isTransport(error)) {
         const more = i < attempts ? ', NOW RETRYING' : '';
-        log(`${label} = DEAD NODE (attempt ${i}/${attempts})${more}`);
+        const what = configuredProxy ? 'DEAD NODE' : 'NETWORK ERROR';
+        log(`${label} = ${what} (attempt ${i}/${attempts})${more}`);
       } else {
         const more = i < attempts ? ' — retrying' : '';
         log(
@@ -337,8 +349,11 @@ export const run = async (
   }
 
   process.exitCode = 1;
-  const reason = isTransport(lastError)
+  const transportReason = configuredProxy
     ? 'proxy session failed'
+    : 'network error';
+  const reason = isTransport(lastError)
+    ? transportReason
     : ((lastError as Error)?.message ??
       (sawNoChallenge ? 'no challenge' : 'unknown'));
   log(`RESULT: FAIL - ${reason}`);

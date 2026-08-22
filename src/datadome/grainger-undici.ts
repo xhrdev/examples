@@ -25,7 +25,8 @@
  * sending it. See http-utils.ts.
  */
 // undici's `fetch` is the same implementation Node exposes globally, but its
-// types expose `dispatcher`, which is how a per-request proxy is set.
+// types expose `dispatcher`, which is how a per-request proxy is set. Leaving
+// it undefined is how you go direct.
 import { fetch, ProxyAgent } from 'undici';
 
 import {
@@ -54,12 +55,14 @@ const attempt = async ({
   solverUrl,
   targetUrl,
 }: Context): Promise<null | Outcome> => {
-  const dispatcher = new ProxyAgent(proxy);
+  // Spread rather than assigned: an explicit `dispatcher: undefined` is not
+  // the same as leaving the option off, and undici wants it off.
+  const via = proxy ? { dispatcher: new ProxyAgent(proxy) } : {};
 
   // 1. Trip the challenge.
   log(`GET ${targetUrl}`);
   const blocked = await fetch(targetUrl, {
-    dispatcher,
+    ...via,
     headers: navigationHeaders(),
   });
   const blockedHtml = await blocked.text();
@@ -78,7 +81,7 @@ const attempt = async ({
   const documentUrl = challengeDocumentUrl(dd, targetUrl);
   log('GET challenge document');
   const document = await fetch(documentUrl, {
-    dispatcher,
+    ...via,
     headers: documentHeaders(targetUrl),
   });
   const documentHtml = await document.text();
@@ -113,7 +116,7 @@ const attempt = async ({
   log(`${prepared.body ? 'POST' : 'GET'} submission`);
   const submitted = await fetch(prepared.url, {
     ...(prepared.body === undefined ? {} : { body: prepared.body }),
-    dispatcher,
+    ...via,
     headers: submissionHeaders(prepared),
     method: prepared.body === undefined ? 'GET' : 'POST',
   });
@@ -124,7 +127,7 @@ const attempt = async ({
   // Prove it: the request that 403'd should now return the real page.
   log('verifying against the target');
   const verified = await fetch(targetUrl, {
-    dispatcher,
+    ...via,
     headers: { ...navigationHeaders(), cookie: `datadome=${cookie}` },
   });
   const html = await verified.text();
