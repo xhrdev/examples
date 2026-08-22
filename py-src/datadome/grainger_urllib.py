@@ -103,14 +103,19 @@ def _send(opener, url, headers, data=None, method=None):
 
 
 def attempt(proxy, api_key, solver_url, target_url):
-  # Credentials ride along in the proxy URL; urllib turns them into the
-  # Proxy-Authorization header on the CONNECT.
-  proxied = urllib.request.build_opener(
-    urllib.request.ProxyHandler({'http': proxy, 'https': proxy})
-  )
   # An empty ProxyHandler means "no proxy", which is how the solver call
   # stays on your own network.
   direct = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+  # Credentials ride along in the proxy URL; urllib turns them into the
+  # Proxy-Authorization header on the CONNECT. With no proxy configured
+  # the target traffic uses the same direct opener as the solver call.
+  proxied = (
+    urllib.request.build_opener(
+      urllib.request.ProxyHandler({'http': proxy, 'https': proxy})
+    )
+    if proxy
+    else direct
+  )
 
   # 1. Trip the challenge.
   log(f'GET {target_url}')

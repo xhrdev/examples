@@ -8,7 +8,9 @@
  * browser, and no dependencies at all. Same four requests as
  * grainger-undici.ts; see that file for the flow.
  *
- * Note the `--use-env-proxy` flag. Node's `fetch` takes its proxy from
+ * Note the `--use-env-proxy` flag, which matters only when `proxy=` is set —
+ * with no proxy the script just goes out from this machine and the flag is
+ * harmless either way. Node's `fetch` takes its proxy from
  * `HTTP_PROXY` / `HTTPS_PROXY` rather than a per-request option, and only
  * reads them when started with that flag (or `NODE_USE_ENV_PROXY=1`). This
  * script sets them from `proxy=` in your `.env`, and sets `NO_PROXY` so the
@@ -42,7 +44,10 @@ import {
 } from '#src/datadome/http-utils.js';
 import { checkRateLimit } from '#src/rate-limit.js';
 
+// Only a problem when there is a proxy to ignore. Without `proxy=` this script
+// is meant to go out from your own address, so the flag is beside the point.
 if (
+  process.env['proxy'] &&
   !process.execArgv.includes('--use-env-proxy') &&
   !process.env['NODE_USE_ENV_PROXY']
 ) {
@@ -59,14 +64,16 @@ const attempt = async ({
   solverUrl,
   targetUrl,
 }: Context): Promise<null | Outcome> => {
-  // Node reads these once per request, so setting them here is enough to pin
-  // this attempt's session.
-  process.env['HTTP_PROXY'] = proxy;
-  process.env['HTTPS_PROXY'] = proxy;
-  // Required: the solver is on your own network, and a datacenter proxy will
-  // refuse to tunnel to it. Node matches this against the bare host, so an IP
-  // works as well as a name.
-  process.env['NO_PROXY'] = new URL(solverUrl).hostname;
+  if (proxy) {
+    // Node reads these once per request, so setting them here is enough to pin
+    // this attempt's session.
+    process.env['HTTP_PROXY'] = proxy;
+    process.env['HTTPS_PROXY'] = proxy;
+    // Required: the solver is on your own network, and a datacenter proxy will
+    // refuse to tunnel to it. Node matches this against the bare host, so an
+    // IP works as well as a name.
+    process.env['NO_PROXY'] = new URL(solverUrl).hostname;
+  }
 
   // 1. Trip the challenge.
   log(`GET ${targetUrl}`);

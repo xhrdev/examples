@@ -42,15 +42,17 @@ async function main() {
   const solverHost = process.env.host;
   const solverUrl = solverHost ? `http://${solverHost}:3000` : undefined;
 
-  if (!process.env.proxy) throw new Error('set proxy= in .env');
-  const { url: proxy } = pinSession(process.env.proxy);
+  // proxy= is optional here too: unset, everything goes out from this box.
+  const proxy = process.env.proxy ? pinSession(process.env.proxy).url : undefined;
 
-  // Same client as grainger-axios.ts: the jar lives in the proxy agent.
+  // Same client as grainger-axios.ts: the jar lives in the agent.
   const HttpsProxyCookieAgent = cookieAgent.createCookieAgent(hpa.HttpsProxyAgent);
   const jar = new tough.CookieJar();
   const client = cookieSupport.wrapper(
     axios.create({
-      httpsAgent: new HttpsProxyCookieAgent(proxy, { cookies: { jar } }),
+      httpsAgent: proxy
+        ? new HttpsProxyCookieAgent(proxy, { cookies: { jar } })
+        : new cookieAgent.HttpsCookieAgent({ cookies: { jar } }),
       proxy: false,
       validateStatus: () => true,
     })
@@ -107,7 +109,7 @@ async function main() {
   };
 
   console.log(`xhr.dev playground — target ${target}`);
-  console.log(`  proxy  ${proxy.replace(/:[^:@]*@/, ':***@')}`);
+  console.log(`  proxy  ${proxy ? proxy.replace(/:[^:@]*@/, ':***@') : 'none (direct)'}`);
   console.log(`  solver ${solverUrl ?? 'NOT SET (set host= in .env)'}`);
   console.log('  try:   const dd = parseBlockPage(await get())\n');
 

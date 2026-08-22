@@ -26,7 +26,6 @@ const log = (msg: string, ...extra: unknown[]): void =>
   console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
 
 if (!solverHost) throw new Error('set host= in .env');
-if (!proxy) throw new Error('set proxy= in .env');
 
 const solverUrl = solverWsUrl(solverHost, '/akamai/session');
 
@@ -43,7 +42,7 @@ const launchOpts: Record<string, unknown> = {
     '--no-default-browser-check',
   ],
   headless: process.argv.includes('--headless'),
-  proxy: toLaunchProxy(proxy),
+  ...(proxy ? { proxy: toLaunchProxy(proxy) } : {}),
 };
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 if (CHROME_PATH && fs.existsSync(CHROME_PATH))
@@ -99,7 +98,7 @@ await applyIdentity(cdp);
 // Solve Akamai
 try {
   await solve(page, {
-    proxy,
+    ...(proxy ? { proxy } : {}),
     ...(solverApiKey ? { solverApiKey } : {}),
     solverUrl,
     url,

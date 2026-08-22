@@ -172,7 +172,7 @@ def solve_request_body(dd, document_html, document_url, proxy, target_url):
     if dd.get(key) is not None:
       challenge[key] = dd[key]
 
-  return {
+  body = {
     'dd': challenge,
     'ddCookie': dd['cookie'],
     'iframeData': {'html': document_html, 'url': document_url},
@@ -205,10 +205,14 @@ def solve_request_body(dd, document_html, document_url, proxy, target_url):
       'tlsClientHello': '',
       'userAgent': PROFILE['userAgent'],
     },
-    'proxy': proxy,
     'timeout': TIMEOUT_S * 1000,
     'url': target_url,
   }
+  # Omit the field entirely when going direct — the solver reads its
+  # presence, not its emptiness.
+  if proxy:
+    body['proxy'] = proxy
+  return body
 
 
 def check_prepared_submission(prepared):
@@ -329,28 +333,43 @@ def _is_transport(error):
   )
 
 
+def _transport_reason(configured_proxy, error):
+  """Name the failure the way the run was actually configured."""
+  if not _is_transport(error):
+    return str(error)
+  return 'proxy session failed' if configured_proxy else 'network error'
+
+
 def run(attempt):
   """Read the environment, pin a fresh session per attempt, report.
 
   `attempt` takes (proxy, api_key, solver_url, target_url) and
   returns a (cookie, status) pair, or None when there was no challenge.
+
+  `proxy=` is optional. Unset, `proxy` is None and everything — the
+  challenge, the solve, the submission — goes out from this machine's
+  own address. That is fine as long as it is the *same* address
+  throughout: DataDome binds the clearance cookie to whoever submitted
+  it.
   """
   solver_host = os.environ.get('host')
   configured_proxy = os.environ.get('proxy')
   if not solver_host:
     raise SystemExit('set host= in .env')
-  if not configured_proxy:
-    raise SystemExit('set proxy= in .env')
 
   attempts = int(read_flag('--attempts', '3'))
   target_url = read_flag('--url', DEFAULT_URL)
   solver_url = solver_base_url(solver_host)
   api_key = os.environ.get('api_key')
 
+  if not configured_proxy:
+    log("no proxy= set — going out from this machine's address")
+
   last_error = None
   for i in range(1, attempts + 1):
-    # A fresh session per attempt: a new IP, and a clean slate.
-    proxy, _pinned = pin_session(configured_proxy)
+    # A fresh session per attempt: a new IP, and a clean slate. Nothing
+    # to pin when going direct — every attempt is the same address.
+    proxy = pin_session(configured_proxy)[0] if configured_proxy else None
     try:
       outcome = attempt(proxy, api_key, solver_url, target_url)
       if outcome is None:
@@ -368,12 +387,10 @@ def run(attempt):
       raise SystemExit(RATE_LIMIT_EXIT_CODE) from error
     except Exception as error:  # noqa: BLE001 - report and retry
       last_error = error
-      reason = 'proxy session failed' if _is_transport(error) else str(error)
+      reason = _transport_reason(configured_proxy, error)
       if i < attempts:
         log(f'attempt {i}/{attempts} failed ({reason}) — retrying')
 
-  reason = (
-    'proxy session failed' if _is_transport(last_error) else str(last_error)
-  )
+  reason = _transport_reason(configured_proxy, last_error)
   log(f'RESULT: FAIL - {reason}')
   raise SystemExit(1)

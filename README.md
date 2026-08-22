@@ -24,7 +24,7 @@ worked.
 
 ```bash
 npm ci
-cp .env.example .env   # then fill in host= and proxy=
+cp .env.example .env   # then fill in host= (proxy= is optional)
 
 # only if you want the Python examples
 python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
@@ -288,7 +288,27 @@ the first three.
 
 ## proxies
 
-Clearance cookies are bound to the IP that earned them. Two things follow:
+`proxy=` is optional. Leave it unset and every example goes out from the
+machine it runs on — the challenge, the solve and the submission all from one
+address, which is the only thing the bot vendors actually require. That is the
+simplest way to try the flow, and it is a real deployment for a box that
+already egresses where you want it to. The scripts say `DIRECT` instead of
+`PROXY` in their log lines so you can tell which mode you are in.
+
+**DataDome captcha solves are the exception, for now.** With no `proxy` in the
+solve body the sandbox cannot fetch the captcha's own stylesheet
+(`static.captcha-delivery.com/captcha/assets/tpl/.../index.css`) and the solve
+ends as `HTTP 500 DD solve error`, which names nothing — so the examples add a
+hint when that lands on a proxy-less run. It is a solver-side fix, not
+something to work around here, and it is not the profile: the same challenge
+solves on the first try when a proxy is declared. DataDome interstitials
+(`rt:"i"`) and the whole Akamai flow already work with no proxy at all —
+Akamai relays its sensors through your own browser, so there is nothing to
+route.
+
+Set it when you need someone else's exit IP: a residential pool to exercise
+the solve path, or geography the target expects. Then clearance cookies are
+bound to the IP that earned them, and two things follow:
 
 1. **Pin a session.** If your proxy pool rotates mid-flow, the cookie you get
    back is already void. `src/proxy.ts` handles this for every provider we
@@ -348,6 +368,8 @@ Drop `--headless` to watch a browser-based script work.
 | `no challenge to solve` | the site let your IP through. Try a residential proxy. |
 | a fresh 403 right after a successful solve | the cookie was earned on a different IP — check session pinning, and that you sent the submission yourself |
 | `RESULT: FAIL - proxy session failed` | dead exit node. The examples retry three times; raise it with `--attempts=5` |
+| `RESULT: FAIL - network error` | same, with no `proxy=` set: the transport failed from this machine |
+| `HTTP 500 DD solve error` on a `DIRECT` run | DataDome captcha solves need a proxy; set `proxy=` in `.env` |
 | solver returns 400 | the profile and the headers you send disagree. Change both together, never one alone |
 | solver returns 500 with `queue_full` | the container is saturated; check `GET /akamai/queue-metrics` |
 | `RESULT: FAIL - rate limit hit` | the solver answered 429. See rate limits below |
