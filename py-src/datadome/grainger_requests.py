@@ -58,7 +58,8 @@ from datadome.http_utils import (  # noqa: E402
 
 def attempt(proxy, api_key, solver_url, target_url):
   session = requests.Session()
-  session.proxies = {'http': proxy, 'https': proxy}
+  if proxy:
+    session.proxies = {'http': proxy, 'https': proxy}
 
   # 1. Trip the challenge.
   log(f'GET {target_url}')

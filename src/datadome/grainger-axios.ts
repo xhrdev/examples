@@ -21,7 +21,7 @@
  */
 import axios from 'axios';
 import { wrapper } from 'axios-cookiejar-support';
-import { createCookieAgent } from 'http-cookie-agent/http';
+import { createCookieAgent, HttpsCookieAgent } from 'http-cookie-agent/http';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { CookieJar } from 'tough-cookie';
 
@@ -52,6 +52,9 @@ import { checkRateLimit } from '#src/rate-limit.js';
  * use with other http(s).Agent". Wrapping the proxy agent with
  * `createCookieAgent` gives you one object that both tunnels and stores
  * cookies.
+ *
+ * With no proxy set there is nothing to tunnel, and the package's own
+ * `HttpsCookieAgent` is the same idea over a plain `https.Agent`.
  */
 const HttpsProxyCookieAgent = createCookieAgent(HttpsProxyAgent);
 
@@ -68,7 +71,9 @@ const attempt = async ({
   const jar = new CookieJar();
   const client = wrapper(
     axios.create({
-      httpsAgent: new HttpsProxyCookieAgent(proxy, { cookies: { jar } }),
+      httpsAgent: proxy
+        ? new HttpsProxyCookieAgent(proxy, { cookies: { jar } })
+        : new HttpsCookieAgent({ cookies: { jar } }),
       // Let the agent handle the tunnel; axios's own proxy handling would
       // rewrite the request line and break CONNECT.
       proxy: false,

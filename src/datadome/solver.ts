@@ -1289,7 +1289,9 @@ async function callSolver(
       method: 'POST',
     },
     timeout
-  );
+  ).catch((error: unknown) => {
+    throw withProxylessHint(error, proxy);
+  });
   const result = validateSolverResult(raw, challenge.dd.rt);
   const referer = new URL(result.referer);
   const expectedPath = challenge.dd.rt === 'c' ? '/captcha/' : '/interstitial/';
@@ -1838,4 +1840,18 @@ async function waitForCookieRotation(
     await raceFatal(delay(50), fatal);
   }
   throw new Error('The target datadome cookie did not rotate');
+}
+
+/**
+ * A captcha solve with no `proxy` in the body currently fails inside the
+ * sandbox — it cannot fetch the captcha's own stylesheet asset — and surfaces
+ * as a bare `HTTP 500 DD solve error`, which names nothing. Name it here.
+ */
+function withProxylessHint(error: unknown, proxy: string | undefined): Error {
+  const err = asError(error);
+  if (proxy || !/DD solve error|dd\.solve\.failed/.test(err.message)) {
+    return err;
+  }
+  err.message = `${err.message} — no proxy= is set, and DataDome captcha solves currently fail without one`;
+  return err;
 }

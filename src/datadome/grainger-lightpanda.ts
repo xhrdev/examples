@@ -143,7 +143,7 @@ const attempt = async ({
         documents.set(url, body);
       }
     },
-    proxy,
+    ...(proxy ? { proxy } : {}),
   });
   try {
     // 1. Trip the challenge.

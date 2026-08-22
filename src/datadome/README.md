@@ -183,7 +183,9 @@ site-by-site results.
 ### picking a client
 
 All three are the same four requests, so copy whichever matches what you
-already use. Two differences worth knowing:
+already use. Every one of them treats `proxy=` as optional — unset, the client
+is built without a proxy and the whole flow goes out from this machine. Two
+differences worth knowing:
 
 - **axios** needs its proxy agent and its cookie jar to be *the same object*.
   Passing `jar` alongside a plain `HttpsProxyAgent` throws `does not support
