@@ -96,6 +96,7 @@ HTTP flow is far cheaper.
 | `grainger.ts` | the same target through the browser bridge |
 | `grainger-lightpanda.ts` | the flow driven by **Lightpanda** instead of Chrome — see below |
 | `idealista.ts` | an interstitial that escalates to a captcha |
+| `browser-target.ts` | the launch options, signal handling and screenshot capture every browser example shares |
 | `http-utils.ts` | request building and response parsing the three HTTP versions share |
 | `profile.ts` | the browser identity and DataDome endpoints, shared with `solver.ts` |
 
@@ -107,6 +108,53 @@ The same three, in Python, under `py-src/datadome/`:
 | `grainger_httpx.py` | the same flow with **httpx** |
 | `grainger_urllib.py` | the same flow with **only the standard library** |
 | `http_utils.py` | the Python port of `http-utils.ts` (identity included) |
+
+### the harder targets
+
+Everything above is a demonstration. These eight exist to be *measured* — they
+are the DataDome sites customers actually ask about, and they do not all clear
+reliably. The `rt` / `t` column is what an unauthenticated `curl` from a
+datacenter IP drew on 2026-08-25; a residential exit will often see something
+milder, and `bv` in particular is a property of the address rather than the
+site:
+
+| script | target | `rt` / `t` | notes |
+|---|---|---|---|
+| `alaska.ts` | `my.alaska.gov` | `c` / `fe` | the myAlaska login portal. `labor.alaska.gov` is not fronted and `www.alaska.gov` did not answer at all, so this is the alaska.gov worth pointing at |
+| `saks.ts` | `www.saksfifthavenue.com` | `c` / `bv` | captcha, and `bv` — banned visitor — from a datacenter address, which is a refusal rather than a puzzle. Needs residential |
+| `anthropologie.ts` | `www.anthropologie.com` | `i` | interstitial, on an origin that answers HTTP/1.1 while challenging |
+| `yelp.ts` | `www.yelp.com/signup` | none | no server-side block from a good IP — DataDome is present only as the client-side tag, so a clean address gets no challenge and the run times out rather than failing |
+| `etsy.ts` | `www.etsy.com` | `i` | scores first (`x-datadome-riskscore` on the block) and is the least forgiving here |
+| `github.ts` | `github.com/signup` | `c` / `fe` | only the signup path is fronted; the bare host is not |
+| `book-secure.ts` | `www.book-secure.com` | `c` / `fe` | the D-EDGE hotel booking engine. The apex does not resolve — keep the `www` |
+| `bestwestern.ts` | `www.bestwestern.com` | `c` / `fe` | a captcha from the first request, with no interstitial in front of it |
+
+They are deliberately **not** in `npm test`. Each is a headed browser run with
+a 30s hold, and several are expected to fail some fraction of the time, so
+gating master on them would be measuring the targets rather than the code.
+Measure them the way a comparison should be measured — a fixed number of runs
+each, verified by screenshot rather than by the solver's success flag:
+
+```bash
+npm run etsy -- --screenshot
+node --env-file=.env src/loadtest.ts --script=src/datadome/etsy --iterations=3 --concurrency=1
+```
+
+Three things that decide the outcome more than the script does:
+
+- **Headed, not headless.** `--headless` on these draws recurrent challenges
+  where the same identity headed clears first time. The flag is still there;
+  it is just the wrong default for this set.
+- **One residential exit IP per run, in the target's own country**, held for
+  the whole run. DataDome binds the clearance cookie to the submitting
+  address, so a rotating proxy invalidates the thing you just earned. Put your
+  provider's session token (or a `{session}` placeholder) in `proxy=` and
+  `pinSession` will hold it; without one the load-test runner warns that every
+  iteration shares an exit and the numbers mean nothing.
+- **A screenshot is the result.** A returned success flag is not proof the
+  page rendered — a soft block answers 200. `--screenshot` writes what the
+  page actually ended up showing to `target/screenshots/`, on failure as well
+  as success.
 
 ```bash
 npm run grainger          # undici

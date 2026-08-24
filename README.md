@@ -86,6 +86,7 @@ RESULT: SUCCESS
 | [`py-src/datadome/grainger_urllib.py`](py-src/datadome/grainger_urllib.py) | DataDome | captcha / interstitial | no — python, stdlib |
 | [`src/datadome/grainger.ts`](src/datadome/grainger.ts) | DataDome | captcha / interstitial | yes |
 | [`src/datadome/idealista.ts`](src/datadome/idealista.ts) | DataDome | interstitial → captcha | yes |
+| [`src/datadome/{alaska,saks,anthropologie,yelp,etsy,github,book-secure,bestwestern}.ts`](src/datadome/README.md#the-harder-targets) | DataDome | varies by target | yes |
 | [`src/akamai/comcast.ts`](src/akamai/comcast.ts) | Akamai Bot Manager | `_abck` sensor | yes |
 | [`src/akamai/ca-edd.ts`](src/akamai/ca-edd.ts) | Akamai Bot Manager | `_abck` sensor + login | yes |
 
@@ -100,6 +101,8 @@ npm run grainger:axios        # ...the same, with axios + a cookie jar
 npm run grainger:fetch        # ...the same, with zero dependencies
 npm run grainger:browser      # DataDome, via Playwright
 npm run idealista
+npm run etsy -- --screenshot  # ...and alaska, saks, anthropologie, yelp,
+                              #    github, book-secure, bestwestern
 npm run comcast
 npm run ca-edd                # needs username= and password=
 
@@ -156,7 +159,8 @@ the two disagree.
 JS-rendered page), or the challenge wants a genuine browser context. The
 solver computes the sensor payloads and your Chrome submits them, so the
 requests carry real TLS fingerprints and a real cookie jar. This is
-`grainger.ts`, `idealista.ts`, and both Akamai examples.
+`grainger.ts`, `idealista.ts`, the eight harder DataDome targets, and both
+Akamai examples.
 
 Start with plain HTTP. Reach for the browser bridge when the site forces you to.
 
