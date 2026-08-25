@@ -14,6 +14,7 @@
  */
 import { GEO_ORIGIN, PROFILE, PROFILE_ID } from '#src/datadome/profile.js';
 import { pinSession } from '#src/proxy.js';
+import type { StylesheetAsset } from '#src/datadome/stylesheets.js';
 import { solverBaseUrl } from '#src/solver-url.js';
 import {
   RATE_LIMIT_EXIT_CODE,
@@ -162,12 +163,19 @@ export const solveRequestBody = ({
   documentHtml,
   documentUrl,
   proxy,
+  stylesheetAssets,
   targetUrl,
 }: {
   dd: DataDomeBlock;
   documentHtml: string;
   documentUrl: string;
   proxy: string | undefined;
+  /**
+   * The challenge document's stylesheets, from `collectStylesheetAssets`.
+   * Optional, and omitted from the body when empty; sending them lets the
+   * solve model the page as it was served.
+   */
+  stylesheetAssets?: StylesheetAsset[];
   targetUrl: string;
 }): Record<string, unknown> => ({
   dd: {
@@ -180,7 +188,11 @@ export const solveRequestBody = ({
     ...(dd.t === undefined ? {} : { t: dd.t }),
   },
   ddCookie: dd.cookie,
-  iframeData: { html: documentHtml, url: documentUrl },
+  iframeData: {
+    html: documentHtml,
+    ...(stylesheetAssets?.length ? { stylesheetAssets } : {}),
+    url: documentUrl,
+  },
   js_profile: {
     brands: PROFILE.brands,
     chromeFullVersion: PROFILE.chromeFullVersion,
