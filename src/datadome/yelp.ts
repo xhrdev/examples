@@ -15,5 +15,5 @@ import { runBrowserTarget } from '#src/datadome/browser-target.js';
 
 await runBrowserTarget({
   name: 'yelp',
-  url: 'https://www.yelp.com/signup',
+  url: 'https://biz.yelp.com/signup',
 });
