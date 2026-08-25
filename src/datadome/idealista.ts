@@ -14,5 +14,5 @@ import { runBrowserTarget } from '#src/datadome/browser-target.js';
 
 await runBrowserTarget({
   name: 'idealista',
-  url: 'https://www.idealista.com/',
+  url: 'https://www.idealista.com/venta-viviendas/madrid-madrid/',
 });

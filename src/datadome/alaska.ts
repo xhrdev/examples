@@ -14,5 +14,5 @@ import { runBrowserTarget } from '#src/datadome/browser-target.js';
 
 await runBrowserTarget({
   name: 'alaska',
-  url: 'https://my.alaska.gov/',
+  url: 'https://commerce.alaska.gov/cbp/main/search/entities',
 });

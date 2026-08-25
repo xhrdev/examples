@@ -13,5 +13,5 @@ import { runBrowserTarget } from '#src/datadome/browser-target.js';
 
 await runBrowserTarget({
   name: 'etsy',
-  url: 'https://www.etsy.com/',
+  url: 'https://www.etsy.com/listing/4409872205/linen-sheer-cafe-curtains-farmhouse',
 });
