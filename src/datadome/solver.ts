@@ -63,6 +63,7 @@ import {
   PROFILE,
   PROFILE_ID,
 } from '#src/datadome/profile.js';
+import { BannedError } from '#src/datadome/ban.js';
 import { collectStylesheetAssets } from '#src/datadome/stylesheets.js';
 import { checkRateLimit } from '#src/rate-limit.js';
 
@@ -853,7 +854,7 @@ export async function solve(
         compactHtml.includes(token)
       )
     ) {
-      throw new Error('DataDome reports this IP is banned');
+      throw new BannedError();
     }
 
     const round = activeRound;

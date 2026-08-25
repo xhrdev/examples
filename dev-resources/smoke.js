@@ -67,19 +67,37 @@ function runOne({ advisory, headless, script, useEnvProxy }) {
   });
 }
 
+// Outcomes that are about where the request left from, not about whether the
+// code still works. Both are already reported as their own thing by the
+// scripts and by the load-test runner, and neither is reachable by changing
+// anything in this repo: a 429 is a spent budget, a ban is a burned exit IP.
+// Gating on them means master goes red for something no commit can fix, which
+// is the same reasoning that made grainger-lightpanda advisory.
+const RATE_LIMIT_EXIT_CODE = 3;
+const BANNED_EXIT_CODE = 4;
+const NOT_A_REGRESSION = new Map([
+  [BANNED_EXIT_CODE, 'BANNED'],
+  [RATE_LIMIT_EXIT_CODE, 'RATE LIMITED'],
+]);
+
 const results = [];
 for (const entry of SCRIPTS) {
   results.push(await runOne(entry));
 }
 
-const failed = results.filter((r) => r.code !== 0 && !r.advisory);
+const failed = results.filter(
+  (r) => r.code !== 0 && !r.advisory && !NOT_A_REGRESSION.has(r.code)
+);
 
 console.log('\n=== Smoke Test Summary ===');
 for (const { advisory, code, script } of results) {
+  const infrastructural = NOT_A_REGRESSION.get(code);
   const status =
     code === 0
       ? 'PASS'
-      : `FAIL (exit=${code})${advisory ? ', advisory — not failing the suite' : ''}`;
+      : infrastructural
+        ? `${infrastructural} (exit=${code}) — not a regression, not failing the suite`
+        : `FAIL (exit=${code})${advisory ? ', advisory — not failing the suite' : ''}`;
   console.log(`  ${status}  ${script}`);
 }
 
