@@ -22,23 +22,6 @@ const LOADTEST_PATH = path.join(PROJECT_ROOT, 'src/loadtest.ts');
 //
 // `advisory` runs a script and reports it without letting it fail the suite.
 //
-// idealista is advisory because there is nothing left in this repo to fix. It
-// serves a captcha, we solve it, the carrier GET returns 200 — and then the
-// next document it hands back is not a second captcha but DataDome's terminal
-// block page: "Se ha detectado un uso indebido", the blocked IP printed on it,
-// and a support form. 28KB against the captcha's 580KB, with no
-// `captcha__element` in it at all. The round loop reports that as a recurrent
-// challenge, which is a fair description of what it saw and a misleading one
-// of what happened: the solve was not rejected for being wrong, the address
-// was blocked after making it.
-//
-// So it is not a missing captcha variant and not a client bug. Two things
-// point at the browser interaction itself being scored: it happens from a
-// residential address and from CI runners alike, and the HTTP clients — which
-// never execute DataDome's script — solve the same target and are cleared.
-// That is solver work, tracked separately, not something a change here
-// reaches.
-//
 // grainger-lightpanda was advisory on the theory that DataDome refuses the
 // cookie a solve from a Lightpanda page earns — 11 attempts across two runs,
 // no successes, where the same commit verified locally. That note named its
@@ -59,7 +42,7 @@ const SCRIPTS = [
   { script: 'src/datadome/grainger-fetch', useEnvProxy: true },
   { headless: true, script: 'src/datadome/grainger' },
   { advisory: true, script: 'src/datadome/grainger-lightpanda' },
-  { advisory: true, headless: true, script: 'src/datadome/idealista' },
+  { headless: true, script: 'src/datadome/idealista' },
   { headless: true, script: 'src/akamai/comcast' },
   { script: 'src/akamai/comcast-lightpanda' },
   { headless: true, script: 'src/akamai/ca-edd' },
