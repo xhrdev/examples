@@ -33,7 +33,13 @@ import { chromium, type LaunchOptions, type Page } from 'playwright-core';
 
 import { pinSession, toLaunchProxy } from '#src/proxy.js';
 import { solverBaseUrl } from '#src/solver-url.js';
+import { ACCESS_DENIED_EXIT_CODE, isAccessDenied } from '#src/access-denied.js';
 import { solve } from '#src/datadome/solver.js';
+import {
+  BANNED_EXIT_CODE,
+  BannedError,
+  reportBanned,
+} from '#src/datadome/ban.js';
 import {
   RATE_LIMIT_EXIT_CODE,
   RateLimitError,
@@ -57,7 +63,8 @@ const log = (msg: string, ...extra: unknown[]): void =>
 /**
  * Solve DataDome on `url` in a real Chrome and report the outcome.
  *
- * Sets `process.exitCode` rather than throwing: 0 on an accepted solve, 3 on
+ * Sets `process.exitCode` rather than throwing: 0 on an accepted solve, 4 on
+ * a DataDome ban (`BANNED_EXIT_CODE`), 3 on
  * a rate limit (`RATE_LIMIT_EXIT_CODE`, which the load-test runner counts
  * separately because retrying cannot help), 1 on anything else.
  */
@@ -156,10 +163,18 @@ export async function runBrowserTarget({
     if (error instanceof RateLimitError) {
       process.exitCode = RATE_LIMIT_EXIT_CODE;
       reportRateLimit(error);
+    } else if (error instanceof BannedError) {
+      // Same reasoning as the 429 above: DataDome decided about this address
+      // before offering a challenge, so there is nothing here that a retry or
+      // a code change reaches.
+      process.exitCode = BANNED_EXIT_CODE;
+      reportBanned(error);
     } else if (page && (await servedDirectly(page, url, error))) {
       log('RESULT: NO CHALLENGE - the target served the page directly');
     } else {
-      process.exitCode = 1;
+      // A target that refuses a completed solve is its own outcome, counted
+      // as a denial rather than as a crash — see #src/access-denied.js.
+      process.exitCode = isAccessDenied(error) ? ACCESS_DENIED_EXIT_CODE : 1;
       log(`RESULT: FAIL - ${(error as Error).message}`);
     }
   } finally {

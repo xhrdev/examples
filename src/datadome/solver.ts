@@ -63,6 +63,8 @@ import {
   PROFILE,
   PROFILE_ID,
 } from '#src/datadome/profile.js';
+import { BannedError } from '#src/datadome/ban.js';
+import { collectStylesheetAssets } from '#src/datadome/stylesheets.js';
 import { checkRateLimit } from '#src/rate-limit.js';
 
 type CaptchaRelayContext = {
@@ -852,7 +854,7 @@ export async function solve(
         compactHtml.includes(token)
       )
     ) {
-      throw new Error('DataDome reports this IP is banned');
+      throw new BannedError();
     }
 
     const round = activeRound;
@@ -1229,6 +1231,23 @@ async function callSolver(
   solverApiKey: string | undefined
 ): Promise<PreparedSubmission> {
   const connection = document.surfaces.connection;
+
+  // The challenge document's stylesheets. Fetched from inside the challenge
+  // frame itself — same origin, same cookies, same proxy as the document —
+  // which is as close to what the browser actually loaded as this client can
+  // get. Sent on both challenge types; a document that links nothing costs
+  // nothing to ask about.
+  const stylesheetAssets = await collectStylesheetAssets({
+    documentHtml: document.html,
+    documentUrl: document.url,
+    fetchAsset: async (assetUrl) =>
+      document.frame.evaluate(async (href: string) => {
+        const response = await fetch(href);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.text();
+      }, assetUrl),
+  });
+
   const raw = await fetchJson(
     new URL('/dd/solve', solverBaseUrl),
     {
@@ -1243,6 +1262,7 @@ async function callSolver(
           finalNavigationResponseBodySizes:
             document.finalNavigationResponseBodySizes,
           html: document.html,
+          ...(stylesheetAssets.length ? { stylesheetAssets } : {}),
           url: document.url,
         },
         js_profile: {

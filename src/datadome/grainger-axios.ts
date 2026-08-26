@@ -43,6 +43,7 @@ import {
   submissionHeaders,
   TIMEOUT_MS,
 } from '#src/datadome/http-utils.js';
+import { collectStylesheetAssets } from '#src/datadome/stylesheets.js';
 import { checkRateLimit } from '#src/rate-limit.js';
 
 /**
@@ -108,6 +109,23 @@ const attempt = async ({
   });
   log(`  <- HTTP ${document.status} (${document.data.length} bytes)`);
 
+  // 2b. Fetch the challenge document's stylesheets. /dd/solve does not fetch
+  //     them for you, and sending them lets the solve model the page as it
+  //     was served. Same session as the document above, so they arrive under
+  //     the same clearance.
+  const stylesheetAssets = await collectStylesheetAssets({
+    documentHtml: document.data,
+    documentUrl,
+    fetchAsset: async (url) => {
+      const asset = await client.get<string>(url, {
+        headers: documentHeaders(targetUrl),
+        responseType: 'text',
+      });
+      return asset.data;
+    },
+  });
+  log(`  stylesheets: ${stylesheetAssets.length}`);
+
   // 3. Ask xhr.dev to build the submission — but not to send it. This one call
   //    goes to your own solver, so it must not use the proxy agent.
   log('POST /dd/solve');
@@ -118,6 +136,7 @@ const attempt = async ({
       documentHtml: document.data,
       documentUrl,
       proxy,
+      stylesheetAssets,
       targetUrl,
     }),
     {

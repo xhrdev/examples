@@ -13,6 +13,7 @@ import path from 'node:path';
 
 import { pinSession } from '#src/proxy.js';
 import { RATE_LIMIT_EXIT_CODE } from '#src/rate-limit.js';
+import { BANNED_EXIT_CODE } from '#src/datadome/ban.js';
 
 const args = process.argv.slice(2);
 
@@ -171,6 +172,7 @@ console.log(
 console.log();
 
 const results = {
+  banned: 0,
   completed: 0,
   denied: 0,
   error: 0,
@@ -186,6 +188,14 @@ const results = {
  */
 let rateLimited = false;
 
+/**
+ * Set the moment any iteration exits with BANNED_EXIT_CODE. Same reasoning as
+ * the rate limit above, and a stronger version of it: a ban is about the
+ * address every remaining iteration would leave from, so there is nothing left
+ * to measure until it changes.
+ */
+let banned = false;
+
 function recordResult(i: number, code: number, elapsed: string): void {
   results.completed++;
   let status: string;
@@ -199,6 +209,12 @@ function recordResult(i: number, code: number, elapsed: string): void {
     status = 'RATE LIMITED';
     results.rateLimited++;
     rateLimited = true;
+  } else if (code === BANNED_EXIT_CODE) {
+    // Not counted as an error: the exit IP is banned, so every remaining
+    // iteration would leave from the same place and get the same verdict.
+    status = 'BANNED';
+    results.banned++;
+    banned = true;
   } else {
     status = `ERROR (exit=${code})`;
     results.error++;
@@ -211,7 +227,7 @@ function recordResult(i: number, code: number, elapsed: string): void {
 
 if (CONCURRENCY <= 1) {
   for (let i = 0; i < ITERATIONS; i++) {
-    if (rateLimited) break;
+    if (rateLimited || banned) break;
     if (!QUIET) console.log(`[${i + 1}/${ITERATIONS}] Starting...`);
     const { code, elapsed } = await runIteration(i);
     recordResult(i, code, elapsed);
@@ -248,6 +264,17 @@ console.log(
 console.log(
   `  Error (timeout/crash):   ${results.error} (${pct(results.error)}%)`
 );
+if (results.banned > 0) {
+  console.log(
+    `  Banned:                  ${results.banned} (${pct(results.banned)}%)`
+  );
+  console.log(
+    `\n  Stopped early after ${results.completed}/${total} iterations: DataDome` +
+      ' reports this exit IP is banned. Rotate the proxy, move to a residential' +
+      ' or ISP pool, or unset proxy= to go out directly.'
+  );
+}
+
 if (results.rateLimited > 0) {
   console.log(
     `  Rate limited:            ${results.rateLimited} (${pct(results.rateLimited)}%)`
@@ -260,4 +287,5 @@ if (results.rateLimited > 0) {
 }
 
 if (results.rateLimited > 0) process.exit(RATE_LIMIT_EXIT_CODE);
+if (results.banned > 0) process.exit(BANNED_EXIT_CODE);
 process.exit(results.denied > 0 || results.error > 0 ? 1 : 0);

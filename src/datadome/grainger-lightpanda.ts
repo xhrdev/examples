@@ -101,6 +101,7 @@ import {
   TIMEOUT_MS,
 } from '#src/datadome/http-utils.js';
 import { checkRateLimit } from '#src/rate-limit.js';
+import { BannedError } from '#src/datadome/ban.js';
 import { GEO_HOST } from '#src/datadome/profile.js';
 import { outerHtml, start } from '#src/lightpanda.js';
 
@@ -167,11 +168,11 @@ const attempt = async ({
     // decided about this client, and the solver will reject the request. Say
     // that here, where the reason is still visible.
     if (dd.t === 'bv') {
-      throw new Error(
-        'DataDome served t="bv" (banned visitor) — it rejected Lightpanda on ' +
-          'sight. The user agent is Lightpanda/1.0 and the TLS fingerprint is ' +
-          "Lightpanda's; nothing downstream can recover from that. Compare " +
-          'grainger-undici.ts on the same proxy, which gets t="fe".'
+      throw new BannedError(
+        'it rejected Lightpanda on sight. The user agent is Lightpanda/1.0 ' +
+          "and the TLS fingerprint is Lightpanda's; nothing downstream can " +
+          'recover from that. Compare grainger-undici.ts on the same proxy, ' +
+          'which gets t="fe".'
       );
     }
 
