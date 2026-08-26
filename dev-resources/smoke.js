@@ -21,23 +21,45 @@ const LOADTEST_PATH = path.join(PROJECT_ROOT, 'src/loadtest.ts');
 // proxy unless node itself is started with --use-env-proxy.
 //
 // `advisory` runs a script and reports it without letting it fail the suite.
-// grainger-lightpanda is the only one: DataDome refuses the cookie a solve
-// from a Lightpanda page earns, and on this runner it refuses every one of
-// them — 11 attempts across two runs, no successes, where the same commit
-// verifies locally. The two differ in the browser (CI downloads the linux
-// build, a workstation the macos one), and the one thing retrying is supposed
-// to vary is pinned shut: the proxy carries no session token, so `pinSession`
-// leaves every attempt on one exit IP. Raising the attempt count therefore
-// buys nothing here, and gating on it means master is red for a reason that
-// is not a regression. See the "status" section of
-// src/datadome/grainger-lightpanda.ts.
+//
+// idealista is advisory because there is nothing left in this repo to fix. It
+// serves a captcha, we solve it, the carrier GET returns 200 — and then the
+// next document it hands back is not a second captcha but DataDome's terminal
+// block page: "Se ha detectado un uso indebido", the blocked IP printed on it,
+// and a support form. 28KB against the captcha's 580KB, with no
+// `captcha__element` in it at all. The round loop reports that as a recurrent
+// challenge, which is a fair description of what it saw and a misleading one
+// of what happened: the solve was not rejected for being wrong, the address
+// was blocked after making it.
+//
+// So it is not a missing captcha variant and not a client bug. Two things
+// point at the browser interaction itself being scored: it happens from a
+// residential address and from CI runners alike, and the HTTP clients — which
+// never execute DataDome's script — solve the same target and are cleared.
+// That is solver work, tracked separately, not something a change here
+// reaches.
+//
+// grainger-lightpanda was advisory on the theory that DataDome refuses the
+// cookie a solve from a Lightpanda page earns — 11 attempts across two runs,
+// no successes, where the same commit verified locally. That note named its
+// own confound: the proxy carried no session token, so `pinSession` left every
+// attempt on one exit IP and retrying could not vary the one thing that
+// mattered.
+//
+// The confound was the cause. Since CI stopped setting `proxy=`, it has solved
+// on both runs, `DIRECT = SOLVED` each time, on a fresh runner address. Two
+// runs against a recorded eleven is not enough to promote it back to blocking
+// on its own, so it stays advisory for now — but the reason written here is no
+// longer the reason, and it should be made blocking once a few more runs hold.
+// See the "status" section of src/datadome/grainger-lightpanda.ts, which needs
+// the same correction.
 const SCRIPTS = [
   { script: 'src/datadome/grainger-undici' },
   { script: 'src/datadome/grainger-axios' },
   { script: 'src/datadome/grainger-fetch', useEnvProxy: true },
   { headless: true, script: 'src/datadome/grainger' },
   { advisory: true, script: 'src/datadome/grainger-lightpanda' },
-  { headless: true, script: 'src/datadome/idealista' },
+  { advisory: true, headless: true, script: 'src/datadome/idealista' },
   { headless: true, script: 'src/akamai/comcast' },
   { script: 'src/akamai/comcast-lightpanda' },
   { headless: true, script: 'src/akamai/ca-edd' },
