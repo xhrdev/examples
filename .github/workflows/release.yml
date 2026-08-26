@@ -58,9 +58,17 @@ jobs:
           ENV_USERNAME: ${{ secrets.USERNAME }}
           ENV_PASSWORD: ${{ secrets.PASSWORD }}
         run: |
+          # proxy= is optional, and deliberately not written here while we
+          # measure how the suite does going direct. The runner's own address
+          # is a fresh one per job; the proxy is a single static ISP IP shared
+          # by all nine scripts in sequence, with no session token to rotate,
+          # so a target that turns against it stays turned for the whole run.
+          #
+          # To put it back, drop the `false &&` below. The line stays wired to
+          # the secret so that is a one-word change.
           {
             echo "host=$ENV_HOST"
-            echo "proxy=$ENV_PROXY"
+            if false && [ -n "$ENV_PROXY" ]; then echo "proxy=$ENV_PROXY"; fi
             echo "api_key=$ENV_API_KEY"
             echo "username=$ENV_USERNAME"
             echo "password=$ENV_PASSWORD"
