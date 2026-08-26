@@ -13,6 +13,7 @@
  * the client you already use; see src/datadome/README.md for the flow.
  */
 import { GEO_ORIGIN, PROFILE, PROFILE_ID } from '#src/datadome/profile.js';
+import { ACCESS_DENIED_EXIT_CODE, isAccessDenied } from '#src/access-denied.js';
 import { pinSession } from '#src/proxy.js';
 import type { StylesheetAsset } from '#src/datadome/stylesheets.js';
 import { solverBaseUrl } from '#src/solver-url.js';
@@ -360,7 +361,9 @@ export const run = async (
     }
   }
 
-  process.exitCode = 1;
+  // The target refusing a solve we completed is a measurement, not a fault —
+  // see #src/access-denied.js. Everything else here is exit 1.
+  process.exitCode = isAccessDenied(lastError) ? ACCESS_DENIED_EXIT_CODE : 1;
   const transportReason = configuredProxy
     ? 'proxy session failed'
     : 'network error';

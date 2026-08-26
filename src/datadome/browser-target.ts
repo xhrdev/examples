@@ -33,6 +33,7 @@ import { chromium, type LaunchOptions, type Page } from 'playwright-core';
 
 import { pinSession, toLaunchProxy } from '#src/proxy.js';
 import { solverBaseUrl } from '#src/solver-url.js';
+import { ACCESS_DENIED_EXIT_CODE, isAccessDenied } from '#src/access-denied.js';
 import { solve } from '#src/datadome/solver.js';
 import {
   BANNED_EXIT_CODE,
@@ -171,7 +172,9 @@ export async function runBrowserTarget({
     } else if (page && (await servedDirectly(page, url, error))) {
       log('RESULT: NO CHALLENGE - the target served the page directly');
     } else {
-      process.exitCode = 1;
+      // A target that refuses a completed solve is its own outcome, counted
+      // as a denial rather than as a crash — see #src/access-denied.js.
+      process.exitCode = isAccessDenied(error) ? ACCESS_DENIED_EXIT_CODE : 1;
       log(`RESULT: FAIL - ${(error as Error).message}`);
     }
   } finally {
