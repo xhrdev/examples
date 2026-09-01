@@ -20,9 +20,10 @@
  *                 Chrome whatever the payloads look like, so a run that lands
  *                 on round 5 headed sits at `~-1~` past round 30 headless.
  *                 This is also why the example is not in the CI smoke suite.
- *   `proxy=`      going direct works until the address earns a reputation,
- *                 after which the payloads stop mattering. Residential or ISP,
- *                 not datacenter — see the top-level README.
+ *   a fresh exit  `proxy=` is optional, but the address matters and it wears
+ *                 out. One desktop address measured 2/4 direct, then 0/2 after
+ *                 another handful of runs; an ISP proxy held 4/4 across the
+ *                 same window. Suspect the exit before the payloads.
  */
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';

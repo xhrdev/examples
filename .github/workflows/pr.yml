@@ -56,22 +56,20 @@ jobs:
       - name: Write .env for the live example/smoke suite
         env:
           ENV_HOST: ${{ secrets.HOST }}
-          ENV_PROXY: ${{ secrets.PROXY }}
           ENV_API_KEY: ${{ secrets.API_KEY }}
           ENV_USERNAME: ${{ secrets.USERNAME }}
           ENV_PASSWORD: ${{ secrets.PASSWORD }}
         run: |
-          # proxy= is optional, and deliberately not written here while we
-          # measure how the suite does going direct. The runner's own address
-          # is a fresh one per job; the proxy is a single static ISP IP shared
-          # by all nine scripts in sequence, with no session token to rotate,
-          # so a target that turns against it stays turned for the whole run.
+          # No proxy= line. The suite runs direct from the runner's own
+          # address, which is a fresh one per job — better for these targets
+          # than one static IP shared by every script in sequence with no
+          # session token to rotate, where a target that turns against it stays
+          # turned for the whole run.
           #
-          # To put it back, drop the `false &&` below. The line stays wired to
-          # the secret so that is a one-word change.
+          # The scripts all still take proxy= if you set one locally; it is
+          # optional everywhere and required nowhere.
           {
             echo "host=$ENV_HOST"
-            if false && [ -n "$ENV_PROXY" ]; then echo "proxy=$ENV_PROXY"; fi
             echo "api_key=$ENV_API_KEY"
             echo "username=$ENV_USERNAME"
             echo "password=$ENV_PASSWORD"

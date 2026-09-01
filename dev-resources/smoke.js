@@ -51,11 +51,12 @@ const SCRIPTS = [
   // that lands on round 5 headed sits at `~-1~` past round 30 headless — so it
   // runs against a virtual display instead (see needsVirtualDisplay).
   //
-  // Advisory because this suite writes no `proxy=`, and hilton is the one
-  // target here that reliably needs one: direct runs measured 2/4 from a
-  // single repeatedly-used address against 4/4 through an ISP proxy. Make it
-  // blocking once the suite has a proxy again, or once a run of green direct
-  // ones says it does not need one.
+  // Advisory because hilton is the target here most sensitive to the exit
+  // address, and that sensitivity is cumulative: one desktop address measured
+  // 2/4 direct, then 0/2 after another handful of runs, while an ISP proxy held
+  // 4/4 across the same window. CI gets a fresh address per job, which is the
+  // good end of that range — so this may well be steady. Promote it to blocking
+  // once a run of green ones says so, rather than assuming either way.
   { advisory: true, headed: true, script: 'src/akamai/sbsd/hilton' },
 ];
 

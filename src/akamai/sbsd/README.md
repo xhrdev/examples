@@ -127,10 +127,16 @@ headed sits at `~-1~` past round 30 headless. That is also why this example is
 can only ever be advisory is worse than an absent one. `sensor/comcast.ts` is
 the Akamai example CI gates on.
 
-**Set `proxy=` in `.env`.** Going direct works and then stops working: the
-address gets a reputation, and once it has one the payloads stop mattering.
-Give it the residential or ISP proxy the top-level [README](../../../README.md)
-describes. A datacenter pool is not a substitute.
+**It is sensitive to the address you leave from**, and the sensitivity is
+cumulative. Not to whether you use a proxy — `proxy=` is optional here as
+everywhere in this repo — but to how much that address has already been used.
+Measured over one afternoon from a single desktop address: direct runs went
+2/4, and after another handful of runs from the same address, 0/2. Through an
+ISP proxy across the same window, 4/4. Nothing about the payloads changed.
+
+So if it starts failing where it used to pass, suspect the exit before the
+solve. A fresh address is the cheapest fix; a residential or ISP proxy is the
+durable one, and a datacenter pool is not a substitute for either.
 
 ### why there is no HTTP, Python or Lightpanda variant
 
