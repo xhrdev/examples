@@ -46,17 +46,32 @@ const SCRIPTS = [
   { headless: true, script: 'src/akamai/sensor/comcast' },
   { script: 'src/akamai/sensor/comcast-lightpanda' },
   { headless: true, script: 'src/akamai/sensor/ca-edd' },
+  // The SBSD channel. `headed` rather than `headless: true` because hilton
+  // refuses a headless Chrome however good the payloads are — the same solve
+  // that lands on round 5 headed sits at `~-1~` past round 30 headless — so it
+  // runs against a virtual display instead (see needsVirtualDisplay).
+  //
+  // Advisory because this suite writes no `proxy=`, and hilton is the one
+  // target here that reliably needs one: direct runs measured 2/4 from a
+  // single repeatedly-used address against 4/4 through an ISP proxy. Make it
+  // blocking once the suite has a proxy again, or once a run of green direct
+  // ones says it does not need one.
+  { advisory: true, headed: true, script: 'src/akamai/sbsd/hilton' },
 ];
 
-// src/akamai/sbsd/hilton is deliberately absent, and should stay absent unless
-// the runner gains a display. hilton.com refuses a headless Chrome regardless
-// of how good the payloads are — the same run that reaches `~0~` on round 5
-// headed sits at `~-1~` past round 30 headless — and this runner has no
-// display to give it. An example that cannot pass here is worse than no entry:
-// it would be advisory forever and nobody would read the reason. The Akamai
-// coverage CI does gate on is src/akamai/sensor/comcast.
+/**
+ * Whether a headed script has to be wrapped in a virtual display.
+ *
+ * CI runners have no X display, so a headed Chrome dies at launch with
+ * "Missing X server or $DISPLAY" — which reads as a failed solve rather than a
+ * missing display. Locally there is a real desktop and xvfb-run generally is
+ * not installed, so the wrapper is applied only where it is both needed and
+ * available.
+ */
+const needsVirtualDisplay =
+  process.platform === 'linux' && !process.env['DISPLAY'];
 
-function runOne({ advisory, headless, script, useEnvProxy }) {
+function runOne({ advisory, headed, headless, script, useEnvProxy }) {
   return new Promise((resolve) => {
     const args = [
       LOADTEST_PATH,
@@ -67,8 +82,14 @@ function runOne({ advisory, headless, script, useEnvProxy }) {
     if (headless) args.push('--headless');
     if (useEnvProxy) args.push('--use-env-proxy');
 
+    const nodeArgs = ['--env-file=.env', ...args];
+    const [command, commandArgs] =
+      headed && needsVirtualDisplay
+        ? ['xvfb-run', ['-a', 'node', ...nodeArgs]]
+        : ['node', nodeArgs];
+
     console.log(`\n--- ${script} ---`);
-    const child = spawn('node', ['--env-file=.env', ...args], {
+    const child = spawn(command, commandArgs, {
       cwd: PROJECT_ROOT,
       stdio: 'inherit',
     });

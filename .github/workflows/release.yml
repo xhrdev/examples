@@ -39,6 +39,13 @@ jobs:
       - name: Install Chromium
         run: sudo snap install chromium
 
+      # For the SBSD smoke entry, which has to run headed — dev-resources/
+      # smoke.js wraps it in xvfb-run. Without a display a headed Chrome dies
+      # at launch with "Missing X server or $DISPLAY", which reads as a failed
+      # solve rather than a missing display.
+      - name: Install xvfb
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc

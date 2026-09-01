@@ -102,6 +102,11 @@ async function cleanup(exitCode = 0): Promise<void> {
   }, 5000);
   forceKill.unref();
   try {
+    // Retire the route handler before the browser goes. Closing underneath an
+    // in-flight route makes Playwright print the whole intercepted response
+    // back as an unhandled "route callback" error, which buries the actual
+    // result in CI logs under a few hundred lines of headers.
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
     await browser.close();
   } catch {
     // ignore
