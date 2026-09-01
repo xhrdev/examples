@@ -1,9 +1,10 @@
 # Akamai SBSD
 
 SBSD is Akamai's second scoring channel. A property that uses it serves a
-bundle from `/.well-known/sbsd`, and that bundle POSTs its own bodies back to
-the same path — separately from, and in addition to, the `_abck` sensor the
-[`sensor/`](../sensor/README.md) examples solve.
+bundle script, and that bundle POSTs its own bodies back to the path it was
+served from — separately from, and in addition to, the `_abck` sensor the
+[`sensor/`](../sensor/README.md) examples solve. Where that path is varies by
+property; see [finding the bundle](#finding-the-bundle).
 
 - API reference: <https://docs.xhr.dev/api-akamai-sbsd.html>
 - The other channel: [`src/akamai/sensor`](../sensor/README.md)
@@ -19,9 +20,47 @@ The sensor lane is a conversation. SBSD is a single request:
 | bound to | the origin | **one document**, for five minutes |
 | your job | relay each submission through the browser | rewrite the page's own carrier POSTs |
 
-You do not send anything new. The page already POSTs to `/.well-known/sbsd` on
-its own; the integration intercepts those requests and swaps the body for the
-next row of the ledger. Ordering is FIFO and is not negotiable.
+You do not send anything new. The page already POSTs to the bundle's own path;
+the integration intercepts those requests and swaps the body for the next row
+of the ledger. Ordering is FIFO and is not negotiable.
+
+## finding the bundle
+
+`/.well-known/sbsd` is one convention, not the rule. The common alternative is
+an obfuscated per-property path sitting right next to the `_abck` sensor script
+under the same random prefix, with nothing in either path naming the channel:
+
+```
+hilton.com     /78jHEHB-.../6LncB                          sensor
+               /.well-known/sbsd/953343??v=<uuid>          bundle
+
+aa.com         /bJ21n/.../fQUZPAE/Q01H/JFVIT0YB            sensor
+               /bJ21n/.../K0ciPAE/NQdp/VyRmPU8Y?v=<uuid>   bundle
+
+aircanada.com  /OfdcKMrdr/.../AHckAWsB/Cz/dXI1ASFTwB       sensor
+               /OfdcKMrdr/.../MWEsAWsB/Az/hjXWlQUFQY?v=…   bundle
+```
+
+`solver.ts` discovers it rather than being told: what identifies the bundle,
+wherever it lives, is the **UUID `v=`** on its `src`. That value seeds the
+bundle's codec rather than versioning a file, so an ordinary `?v=3.5.6`
+cache-buster — and every site ships dozens — does not look like it. Carrier
+POSTs then go to the same pathname, with a different query or none. Pass
+`sbsdPath` to `attach()` if you meet a property that hides it better.
+
+Two things this changes about how you survey a target:
+
+- **`bm_s`, `bm_so`, `bm_sc` and `bm_lso` in the jar mean SBSD is running**,
+  even if you never saw a `/.well-known/sbsd` request. All three properties
+  above set them; only one of the three uses the conventional path.
+- **A site that looks unprotected at its apex may not be.**
+  `www.aircanada.com/` is a region chooser and serves to anyone;
+  `/ca/en/aco/home.html` behind it is challenged.
+
+And one that runs the channel without challenging: `store.playstation.com`
+serves an SBSD bundle from an obfuscated path and sets `bm_s`, but its public
+store pages render for an ordinary browser. There is no example for it because
+there is nothing to assert — a run there passes with or without a solver.
 
 ## the ledger
 
@@ -92,15 +131,54 @@ payload already on the wire.
 On a property that runs **only** SBSD, do not call `solveAbck()`; it rejects,
 because no `_abck` sensor script was ever captured.
 
+`attach()` takes two more options, both for the awkward cases:
+
+| option | what it does |
+|---|---|
+| `sbsdPath` | pin the bundle's pathname instead of discovering it |
+| `sensor` | `'solver'` (default) captures the `_abck` script and stubs it out, waiting for `solveAbck()`. `'page'` leaves it alone and lets the page answer `_abck` itself — use it when SBSD is the only channel you need answered. |
+
+`sensor: 'page'` is worth knowing about: the default *replaces* the sensor
+script, so a page that was solving `_abck` on its own stops doing so the moment
+you attach. If you only came for SBSD, say so.
+
 ## examples
 
-| file | what it shows |
-|---|---|
-| `hilton.ts` | both channels on one page, then a real hotel search behind the challenge |
+| file | what it shows | status |
+|---|---|---|
+| `hilton.ts` | both channels on one page, then a real hotel search behind the challenge | solves end to end |
+| `aa.ts` | the bundle on an obfuscated path, discovered rather than configured | SBSD lane verified; see below |
+| `aircanada.ts` | the same, plus a protected document behind an unprotected apex | SBSD lane verified; see below |
 
 ```bash
 npm run hilton
+npm run aa
+npm run aircanada
 ```
+
+### what "SBSD lane verified" means on aa and aircanada
+
+On both, the bundle is discovered at its obfuscated path, the ledger is issued,
+and the carriers are rewritten in order with no refusal from the solver. What
+has not been observed is the end of the run: `_abck` stayed at `~-1~` and the
+page behind the challenge was never reached.
+
+The cause is undetermined, and worth stating carefully because the obvious
+readings are both wrong:
+
+- **Not the solver, and not the identity.** In the same window, from the same
+  address, `sensor/comcast.ts` reached `~0~` on round 5 and `hilton.ts` — which
+  runs both channels, through this same file — solved end to end.
+- **Not simply a burned address either**, for the same reason. Though aa.com
+  specifically was serving that address a flat `403` for an *uninstrumented*
+  Chrome at the time: no bootstrap, no challenge, nothing to solve. Reputation
+  is per-property, and on that property it was already spent.
+
+So what is left is either those properties' own tolerance for this exit, or
+something in their sensor lane that hilton does not exercise. Distinguishing
+the two needs a run from an address they have no history with. Until then the
+`_abck` half is unconfirmed, which is also why both are advisory in the smoke
+suite.
 
 It solves, and the check at the end is a results page rather than a cookie
 value:
@@ -191,6 +269,11 @@ the same identity as each other, which is the property that actually matters.
 
 ## gotchas
 
+- **One ledger per document, not per page.** The bootstrap reloads itself, and
+  the document that replaces it is a new snapshot: its own HTML, cookies,
+  timings and readings. `solver.ts` retires the ledger on every main-frame
+  document and lets the next carrier ask for a fresh one. Carrying rows across
+  the reload describes a visitor who was on neither document.
 - **Two ledgers for one document** — carriers fire concurrently, so a naive
   `if (!rows) rows = await generate()` lets two of them both start a request.
   The second ledger replaces the first and the cursor walks into it, so the

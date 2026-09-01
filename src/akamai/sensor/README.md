@@ -7,7 +7,10 @@ do it badly and you stay blocked no matter how many times you retry.
 
 - API reference: <https://docs.xhr.dev/api-akamai-sensor.html>
 - The other channel: [`src/akamai/sbsd`](../sbsd/README.md) — some properties
-  run both, and a page that serves `/.well-known/sbsd` needs that one too.
+  run both, and a page that loads an SBSD bundle needs that one too. The bundle
+  is often served from a path alongside the sensor script rather than from
+  `/.well-known/sbsd`, so it is easy to miss: see
+  [finding the bundle](../sbsd/README.md#finding-the-bundle).
 
 ## reading `_abck`
 
@@ -172,6 +175,14 @@ login.xfinity.com. business.comcast.com stays at `~-1~` in a Chrome run too.
 - **`sbsd`** — some properties run Akamai's SBSD channel as well as (or
   instead of) the classic sensor. It has its own endpoint and its own client:
   see [`src/akamai/sbsd`](../sbsd/README.md).
+- **Submissions answered `200` with an empty body** — the session is posting to
+  the SBSD bundle instead of the sensor script. On a property that runs both,
+  the two are the same size, mention the same symbols and sit under the same
+  random prefix, and the bundle is often the one that appears first in the
+  HTML; the sensor answers `201` with a short body, the bundle answers `200`
+  with none, and `_abck` stays at `~-1~` either way. `solve()` skips bundles
+  now — see [`src/akamai/sbsd-bundle.ts`](../sbsd-bundle.ts) for how they are
+  told apart — but the symptom is worth recognising in your own client.
 - **500 with `queue_full` or `queue_wait_timeout`** — the container is
   saturated. It runs 8 concurrent solves with a queue depth of 32 by default;
   `GET /akamai/queue-metrics` shows live numbers before you scale up.

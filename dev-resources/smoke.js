@@ -58,6 +58,20 @@ const SCRIPTS = [
   // good end of that range — so this may well be steady. Promote it to blocking
   // once a run of green ones says so, rather than assuming either way.
   { advisory: true, headed: true, script: 'src/akamai/sbsd/hilton' },
+  // The same channel on properties that serve the bundle from an obfuscated
+  // path rather than /.well-known/sbsd, which is what these two are here to
+  // exercise: the path is discovered from the bundle's UUID `v=`, and if that
+  // detection ever breaks, the ledger is never requested and these fail loudly.
+  //
+  // Advisory, and for a weaker reason than hilton's: neither has been seen
+  // through to the end. The SBSD half works on both, but `_abck` did not reach
+  // ~0~ in any local run, while comcast and hilton solved from the same address
+  // in the same window — so it is not the solver, and not obviously the exit
+  // either. CI runs from an address these properties have no history with,
+  // which is the missing control; let these report for a while and read the
+  // results before deciding what they mean.
+  { advisory: true, headed: true, script: 'src/akamai/sbsd/aa' },
+  { advisory: true, headed: true, script: 'src/akamai/sbsd/aircanada' },
 ];
 
 /**

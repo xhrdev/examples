@@ -36,6 +36,7 @@
 import type { BrowserContext, Frame, Page, Route } from 'playwright-core';
 import { fetch, WebSocket } from 'undici';
 
+import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
 import { PROFILE, PROFILE_ID } from '#src/profile.js';
 import { checkRateLimit, RateLimitError } from '#src/rate-limit.js';
 
@@ -125,13 +126,20 @@ const extractAkamaiScriptUrl = (
   let match = /akam\/13.*?top:\s?-999px.*?src="(.*?)"/gm.exec(html);
   if (match) return new URL(match[1] ?? '', baseUrl).href;
 
-  // Pattern 2: Long random-looking path (5–10 segments)
+  // Pattern 2: Long random-looking path (5–10 segments).
+  //
+  // On a property that also runs SBSD there are two scripts of this shape,
+  // and the SBSD bundle is often the one that appears first. Posting sensor
+  // submissions to it fails quietly — 200 with an empty body, and `_abck`
+  // never leaves `~-1~` — so bundles are skipped rather than matched.
   /* eslint-disable security/detect-unsafe-regex */
   const longPathRe =
-    /<script[^>]+src=["']((?:\/[a-zA-Z0-9\-_]+){5,10}(?:\?v=[^"']*)?)["']/im;
+    /<script[^>]+src=["']((?:\/[a-zA-Z0-9\-_]+){5,10}(?:\?v=[^"']*)?)["']/gim;
   /* eslint-enable security/detect-unsafe-regex */
-  match = longPathRe.exec(html);
-  if (match) return new URL(match[1] ?? '', baseUrl).href;
+  for (const candidate of html.matchAll(longPathRe)) {
+    const href = new URL(candidate[1] ?? '', baseUrl);
+    if (!isSbsdBundle(href)) return href.href;
+  }
 
   // Pattern 3: Known Akamai keywords in path
   match = /<script[^>]+src=["']([^"']*\/(?:akam|_abck|bm-)[^"']+)["']/im.exec(
@@ -143,7 +151,9 @@ const extractAkamaiScriptUrl = (
 };
 
 const isLikelyAkamaiScriptUrl = (url: string): boolean => {
-  const p = new URL(url).pathname;
+  const parsed = new URL(url);
+  if (isSbsdBundle(parsed)) return false;
+  const p = parsed.pathname;
   // eslint-disable-next-line security/detect-unsafe-regex
   return /^(\/[a-zA-Z0-9\-_]+){5,}$/.test(p) || /\/(?:akam|_abck|bm-)/.test(p);
 };

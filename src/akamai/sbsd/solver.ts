@@ -6,10 +6,12 @@
  * Akamai SBSD browser bridge.
  *
  * SBSD is Akamai's second scoring channel. A property that uses it serves a
- * bundle from `/.well-known/sbsd`, and that bundle POSTs its own bodies back
- * to the same path — separately from, and in addition to, the `_abck` sensor
- * the `sensor/` examples solve. A page can run one lane, the other, or both;
- * hilton.com runs both, which is why this file handles both.
+ * bundle — from `/.well-known/sbsd` on some properties, from a per-property
+ * obfuscated path on others — and that bundle POSTs its own bodies back to the
+ * same path, separately from and in addition to the `_abck` sensor the
+ * `sensor/` examples solve. Either path is discovered rather than assumed; see
+ * `src/akamai/sbsd-bundle.ts`. A page can run one lane, the other, or both,
+ * and every example in this directory happens to run both.
  *
  * The two lanes work differently, and the difference is the whole design:
  *
@@ -50,6 +52,7 @@
 import type { APIResponse, BrowserContext, Page, Route } from 'playwright-core';
 import { WebSocket } from 'undici';
 
+import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
 import { PROFILE, PROFILE_ID } from '#src/profile.js';
 import { checkRateLimit } from '#src/rate-limit.js';
 import { solverBaseUrl, solverWsUrl } from '#src/solver-url.js';
@@ -57,11 +60,16 @@ import { solverBaseUrl, solverWsUrl } from '#src/solver-url.js';
 /** The request schema this client speaks. The server rejects anything else. */
 const LEDGER_REQUEST_SCHEMA = 'akamai-sbsd-ledger-request/v3';
 
-/** Where a protected property serves and receives its SBSD bundle. */
-const SBSD_PATH_PREFIX = '/.well-known/sbsd';
-
 /** What `attach` hands back. */
 export type AkamaiHandle = {
+  /**
+   * How many SBSD carrier POSTs have been answered with a ledger row so far.
+   *
+   * Useful as a settle signal: on a property whose bootstrap reloads itself
+   * once its carrier is answered, this going above zero is what says the
+   * reload is coming, and `solveAbck()` should wait for it.
+   */
+  carriersAnswered: () => number;
   /**
    * Resolves when `_abck` is accepted. Call it once the document you actually
    * want is loaded — not during the bootstrap. Rejects if the `_abck` sensor
@@ -82,6 +90,27 @@ export type AttachOptions = {
    * this origin are intercepted; third-party assets are left alone.
    */
   origin: string;
+  /**
+   * Pin the SBSD path instead of discovering it.
+   *
+   * Discovery is by the bundle's UUID `v=` and covers every property tried so
+   * far; this is the escape hatch for one that hides it better. Pathname only,
+   * no query — the carrier POSTs to the same path the bundle was served from,
+   * but with a different query string or none at all.
+   */
+  sbsdPath?: string;
+  /**
+   * Who answers the `_abck` sensor on a property that runs both channels.
+   *
+   * `'solver'` (the default) captures the sensor script, replaces it with a
+   * stub so the page cannot post its own telemetry alongside ours, and waits
+   * for `solveAbck()`. `'page'` leaves the sensor script alone and lets it run
+   * natively, which is what you want when SBSD is the channel you need
+   * answered and the page's own `_abck` is already being accepted — the two
+   * are scored separately. `solveAbck()` rejects under `'page'`, because no
+   * script was captured to solve.
+   */
+  sensor?: 'page' | 'solver';
   /**
    * Sent as `x-api-key` on both the ledger POST and the WebSocket upgrade.
    * Required when the solver sits behind an API-key gate — the gate matches
@@ -321,7 +350,7 @@ const readRealm = (page: Page): Promise<RealmSnapshot> =>
   }) as Promise<RealmSnapshot>;
 
 export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
-  const { host, origin, solverApiKey } = opts;
+  const { host, origin, sensor = 'solver', solverApiKey } = opts;
   const context: BrowserContext = page.context();
   const ledgerUrl = new URL(
     '/akamai/sbsd/generate-session',
@@ -334,6 +363,13 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
   /** The raw `src` attribute, `?v=` included: it seeds the bundle's codec. */
   let sbsdSrc: null | string = null;
   let sbsdBody: null | string = null;
+  /**
+   * The path the bundle was served from, which is also the path its carriers
+   * POST to. Learned from the bundle request unless `opts.sbsdPath` pins it,
+   * and there is no race in learning it late: a carrier cannot fire before the
+   * bundle that emits it has loaded.
+   */
+  let sbsdPath: null | string = opts.sbsdPath ?? null;
   /** Kept across the bootstrap's self-reload, so the second load can use it. */
   let bmMain: { body: string; url: string } | null = null;
   /**
@@ -355,6 +391,8 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
    */
   let carrierQueue: Promise<unknown> = Promise.resolve();
   let cursor = 0;
+  /** Carriers answered with a row, across every document on this page. */
+  let answered = 0;
   /** The one sensor body the solver authored; anything else is the native one. */
   let authorizedSensorBody: null | string = null;
 
@@ -376,6 +414,13 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     const request = response.request();
     if (request.resourceType() !== 'document') return;
     if (request.frame() !== page.mainFrame()) return;
+    // A new main-frame document is a new snapshot, so the ledger issued for
+    // the last one is retired here rather than carried across the bootstrap's
+    // self-reload. The rows are computed from a document's HTML, cookies,
+    // timings and runtime readings; feeding leftovers to the carriers of the
+    // page that replaced it describes a visitor that was never on either.
+    ledger = null;
+    cursor = 0;
     void response.text().then(
       (text) => {
         servedHtml = text;
@@ -462,7 +507,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     // SBSD carrier. The first one is held while the ledger is generated, which
     // is also what makes the snapshot legal: `sessionStorage.ak_bm_tab_id`
     // only exists once the bundle has run.
-    if (post && url.pathname.startsWith(SBSD_PATH_PREFIX)) {
+    if (post && sbsdPath !== null && url.pathname === sbsdPath) {
       const mine = carrierQueue.then(async () => {
         ledger ??= generateLedger();
         const rows = await ledger;
@@ -471,6 +516,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         // hand Akamai a payload from an uninstrumented page alongside ours.
         if (!row) return route.abort();
         log(`[sbsd] Row ${row.index}: ${row.bytes} bytes`);
+        answered++;
         return route.continue({ postData: row.body });
       });
       // The queue must not stay rejected, or every later carrier inherits the
@@ -481,7 +527,12 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
 
     // `_abck` sensor POST. Only the body the solver just authored gets
     // through; anything else is the native sensor talking, and is dropped.
-    if (post && bmMain && url.pathname === new URL(bmMain.url).pathname) {
+    if (
+      post &&
+      sensor === 'solver' &&
+      bmMain &&
+      url.pathname === new URL(bmMain.url).pathname
+    ) {
       if (request.postData() === authorizedSensorBody) {
         authorizedSensorBody = null;
         return route.continue();
@@ -493,11 +544,22 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     if (request.resourceType() === 'script') {
       const response = await route.fetch();
       const body = await response.text();
-      if (url.pathname.startsWith(SBSD_PATH_PREFIX)) {
+      if (isSbsdBundle(url)) {
+        sbsdPath = url.pathname;
         sbsdBody = body;
         sbsdSrc = `${url.pathname}${url.search}`;
+        log(
+          `[sbsd] Bundle captured: ${body.length} bytes from ${url.pathname}`
+        );
+        // Handed back rather than stubbed, unlike the sensor below. The bundle
+        // has to run: it is what emits the carrier POSTs this file rewrites.
+        return handBack(route, response, body);
       }
-      if (body.length > 50_000 && /\bbmak\b/.test(body)) {
+      if (
+        sensor === 'solver' &&
+        body.length > 50_000 &&
+        /\bbmak\b/.test(body)
+      ) {
         bmMain = { body, url: request.url() };
         log(
           `[abck] Sensor script captured: ${body.length} bytes ` +
@@ -516,12 +578,68 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     return route.continue();
   });
 
+  /**
+   * Send one sensor submission from inside the page.
+   *
+   * Playwright's own request context is not usable here: the submission has to
+   * travel on the browser's connection, with its TLS fingerprint and its
+   * cookie jar, or it is scored as a different visitor than the one the
+   * telemetry describes.
+   *
+   * A navigation mid-session destroys the execution context this runs in.
+   * Retrying cannot help — the session belongs to a document that no longer
+   * exists — so the error is passed on as-is, with a line saying what it
+   * actually means: `solveAbck()` ran against a document that was still going
+   * to reload.
+   */
+  const sendFromPage = async (args: {
+    body: string;
+    headers: Record<string, string> | undefined;
+    url: string;
+  }): Promise<{ body: string; status: number }> => {
+    try {
+      return await page.evaluate(
+        ({ body, headers, url }: typeof args) =>
+          new Promise<{ body: string; status: number }>((done) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', url, true);
+            xhr.withCredentials = true;
+            for (const [name, value] of Object.entries(headers ?? {})) {
+              try {
+                xhr.setRequestHeader(name, value);
+              } catch {
+                // Forbidden header names are the browser's to set.
+              }
+            }
+            xhr.onload = () =>
+              done({ body: xhr.responseText, status: xhr.status });
+            xhr.onerror = () => done({ body: '', status: 0 });
+            xhr.send(body);
+          }),
+        args
+      );
+    } catch (error) {
+      if (/Execution context was destroyed/u.test((error as Error).message)) {
+        log(
+          '[abck] The page navigated mid-session. On a property that runs ' +
+            'SBSD the first document is a bootstrap that reloads itself once ' +
+            'its carrier is answered — wait for the document you actually ' +
+            'want before calling solveAbck().'
+        );
+      }
+      throw error;
+    }
+  };
+
   /** Stateful lane: init, then answer every submission out of the page. */
   async function solveAbck(): Promise<void> {
     if (!bmMain) {
       throw new Error(
-        'no _abck sensor script was captured on this page — ' +
-          'if the property only runs SBSD, do not call solveAbck()'
+        sensor === 'page'
+          ? 'attach() was given sensor: "page", so the sensor script was ' +
+              'never captured — the page is answering _abck itself'
+          : 'no _abck sensor script was captured on this page — ' +
+              'if the property only runs SBSD, do not call solveAbck()'
       );
     }
     const captured = bmMain;
@@ -563,43 +681,12 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         ) as SolverMessage;
 
         if (message.type === 'submission') {
-          // Sent from inside the page, not from Playwright's request context:
-          // the submission has to travel on the browser's own connection, with
-          // its TLS fingerprint and its cookie jar, or it is scored as a
-          // different visitor than the one the telemetry describes.
           authorizedSensorBody = message.body ?? '';
-          const result = await page.evaluate(
-            ({
-              body,
-              headers,
-              url,
-            }: {
-              body: string;
-              headers: Record<string, string> | undefined;
-              url: string;
-            }) =>
-              new Promise<{ body: string; status: number }>((done) => {
-                const xhr = new XMLHttpRequest();
-                xhr.open('POST', url, true);
-                xhr.withCredentials = true;
-                for (const [name, value] of Object.entries(headers ?? {})) {
-                  try {
-                    xhr.setRequestHeader(name, value);
-                  } catch {
-                    // Forbidden header names are the browser's to set.
-                  }
-                }
-                xhr.onload = () =>
-                  done({ body: xhr.responseText, status: xhr.status });
-                xhr.onerror = () => done({ body: '', status: 0 });
-                xhr.send(body);
-              }),
-            {
-              body: message.body ?? '',
-              headers: message.headers,
-              url: message.url ?? '',
-            }
-          );
+          const result = await sendFromPage({
+            body: message.body ?? '',
+            headers: message.headers,
+            url: message.url ?? '',
+          });
           log(
             `[abck] Submission ${message.id}: ${result.status} ` +
               `(${result.body.length} bytes) -> ${message.url}`
@@ -643,5 +730,5 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     });
   }
 
-  return { solveAbck };
+  return { carriersAnswered: () => answered, solveAbck };
 }

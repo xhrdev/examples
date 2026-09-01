@@ -7,17 +7,22 @@ the same way the channels are:
 | directory | channel | what it is |
 |---|---|---|
 | [`sensor/`](sensor/README.md) | `_abck` | the classic obfuscated sensor script, solved over a stateful WebSocket session |
-| [`sbsd/`](sbsd/README.md) | SBSD | a bundle served from `/.well-known/sbsd`, answered with a one-shot ledger of bodies |
+| [`sbsd/`](sbsd/README.md) | SBSD | a bundle script the page POSTs back to, answered with a one-shot ledger of bodies |
 
 - API reference: <https://docs.xhr.dev/api-akamai.html>
 
 ## which one do I need?
 
-Look at the page, not at the docs. A property that serves a script from
-`/.well-known/sbsd` runs the SBSD channel; one whose HTML carries a long
-random-looking script path (`/78jHEHB-.../6LncB`) runs the `_abck` sensor.
-Plenty of properties run both — hilton.com does, which is why
-[`sbsd/hilton.ts`](sbsd/hilton.ts) solves both and
+Look at the page, not at the docs. A property whose HTML carries a long
+random-looking script path (`/78jHEHB-.../6LncB`) runs the `_abck` sensor; one
+that loads a script whose `src` carries a UUID `v=` runs SBSD. That query, not
+the path, is the tell — some properties serve the bundle from
+`/.well-known/sbsd` and others from an obfuscated path right next to the sensor
+script, and [`sbsd/README.md`](sbsd/README.md#finding-the-bundle) has the
+worked comparison.
+
+Plenty of properties run both — hilton.com, aa.com and aircanada.com all do,
+which is why the `sbsd/` examples solve both and
 [`sbsd/solver.ts`](sbsd/solver.ts) is the library that handles the pair.
 
 If you are only shown `_abck`, start from [`sensor/`](sensor/README.md): it is
