@@ -1,8 +1,8 @@
 /**
  * Run with:
  *
- * node --env-file=.env src/akamai/ca-edd.ts
- * node --env-file=.env src/akamai/ca-edd.ts --headless
+ * node --env-file=.env src/akamai/sensor/ca-edd.ts
+ * node --env-file=.env src/akamai/sensor/ca-edd.ts --headless
  *
  * Needs username= and password= in .env for the sign-in step.
  */
@@ -12,7 +12,7 @@ import { chromium } from 'playwright-core';
 import { toLaunchProxy } from '#src/proxy.js';
 import { solverWsUrl } from '#src/solver-url.js';
 import { applyIdentity, USER_AGENT, VIEWPORT } from '#src/akamai/identity.js';
-import { solve } from '#src/akamai/solver.js';
+import { solve } from '#src/akamai/sensor/solver.js';
 import {
   RATE_LIMIT_EXIT_CODE,
   RateLimitError,

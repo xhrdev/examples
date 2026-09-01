@@ -1,7 +1,7 @@
 /**
  * This is a helper library, not a script. It starts a Lightpanda process and
  * hands back a Playwright page attached to it, for
- * `src/datadome/grainger-lightpanda.ts` and `src/akamai/comcast-lightpanda.ts`.
+ * `src/datadome/grainger-lightpanda.ts` and `src/akamai/sensor/comcast-lightpanda.ts`.
  *
  * Lightpanda (<https://lightpanda.io>) is a headless browser that speaks CDP
  * and runs V8, with no renderer and no graphics stack — a ~70MB binary that

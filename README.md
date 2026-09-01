@@ -87,11 +87,17 @@ RESULT: SUCCESS
 | [`src/datadome/grainger.ts`](src/datadome/grainger.ts) | DataDome | captcha / interstitial | yes |
 | [`src/datadome/idealista.ts`](src/datadome/idealista.ts) | DataDome | interstitial → captcha | yes |
 | [`src/datadome/{alaska,saks,anthropologie,yelp,etsy,github,book-secure,bestwestern}.ts`](src/datadome/README.md#the-harder-targets) | DataDome | varies by target | yes |
-| [`src/akamai/comcast.ts`](src/akamai/comcast.ts) | Akamai Bot Manager | `_abck` sensor | yes |
-| [`src/akamai/ca-edd.ts`](src/akamai/ca-edd.ts) | Akamai Bot Manager | `_abck` sensor + login | yes |
+| [`src/akamai/sensor/comcast.ts`](src/akamai/sensor/comcast.ts) | Akamai Bot Manager | `_abck` sensor | yes |
+| [`src/akamai/sensor/ca-edd.ts`](src/akamai/sensor/ca-edd.ts) | Akamai Bot Manager | `_abck` sensor + login | yes |
+| [`src/akamai/sbsd/hilton.ts`](src/akamai/sbsd/hilton.ts) | Akamai Bot Manager | SBSD + `_abck` sensor | yes — headed only |
 
 Each vendor directory has its own README with the protocol details:
 [**src/akamai**](src/akamai/README.md) · [**src/datadome**](src/datadome/README.md)
+
+Akamai scores on two independent channels and the examples are split to match:
+[**sensor**](src/akamai/sensor/README.md) is the classic `_abck` lane,
+[**sbsd**](src/akamai/sbsd/README.md) is the bundle served from
+`/.well-known/sbsd`. Properties that run both — hilton.com does — need both.
 
 Run any of them directly, or use the npm aliases:
 
@@ -103,8 +109,9 @@ npm run grainger:browser      # DataDome, via Playwright
 npm run idealista
 npm run etsy -- --screenshot  # ...and alaska, saks, anthropologie, yelp,
                               #    github, book-secure, bestwestern
-npm run comcast
-npm run ca-edd                # needs username= and password=
+npm run comcast               # Akamai, _abck sensor
+npm run ca-edd                # ...and a login; needs username= and password=
+npm run hilton                # Akamai, SBSD + _abck; headed only
 
 # any script takes flags after --
 node --env-file=.env src/datadome/grainger-undici.ts --url=https://www.idealista.com/
@@ -275,7 +282,7 @@ request.
 ### what it does under the hood
 
 `akamai_solve` launches a real Chrome and relays each sensor request through
-it, which is the same browser bridge [`src/akamai/comcast.ts`](src/akamai/comcast.ts)
+it, which is the same browser bridge [`src/akamai/sensor/comcast.ts`](src/akamai/sensor/comcast.ts)
 uses. That is deliberate: `POST /akamai/solve` solves server-side, so the
 sensor requests carry the container's TLS fingerprint rather than a browser's,
 and against a target that checks the submitting client the payload is built
@@ -344,12 +351,12 @@ docker build -t examples .
 
 docker run --rm --env-file .env examples \
   node --env-file=.env src/loadtest.ts \
-    --script=src/akamai/comcast --headless --iterations=200 --concurrency=20
+    --script=src/akamai/sensor/comcast --headless --iterations=200 --concurrency=20
 ```
 
 | flag | default | description |
 |---|---|---|
-| `--script` | `src/akamai/ca-edd` | script to run, as a path relative to the project root |
+| `--script` | `src/akamai/sensor/ca-edd` | script to run, as a path relative to the project root |
 | `--iterations` | `100` | total attempts |
 | `--concurrency` | `1` | parallel workers |
 | `--headless` | off | pass `--headless` through to the child script |

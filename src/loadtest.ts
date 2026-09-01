@@ -2,7 +2,7 @@
  * Run with:
  *
  * node --env-file=.env src/loadtest.ts --script=src/datadome/grainger-undici --iterations=20 --concurrency=3
- * node --env-file=.env src/loadtest.ts --script=src/akamai/ca-edd --headless --iterations=50 --concurrency=5
+ * node --env-file=.env src/loadtest.ts --script=src/akamai/sensor/ca-edd --headless --iterations=50 --concurrency=5
  *
  * Spawns any src/ script repeatedly with a rotating proxy session per
  * iteration and reports pass/fail/error rates. Pass --help for every flag.
@@ -39,7 +39,7 @@ const ATTEMPTS = readFlag('--attempts');
 const QUIET = args.includes('--quiet');
 const USE_ENV_PROXY = args.includes('--use-env-proxy');
 const PROXY_RAW = readFlag('--proxy') || process.env['proxy'] || '';
-const SCRIPT = readFlag('--script') || 'src/akamai/ca-edd';
+const SCRIPT = readFlag('--script') || 'src/akamai/sensor/ca-edd';
 
 const BASE_SESSION = Math.floor(Math.random() * 900000) + 100000;
 

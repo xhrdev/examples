@@ -1,7 +1,7 @@
 /**
  * Run with:
  *
- * node --env-file=.env src/akamai/comcast-lightpanda.ts
+ * node --env-file=.env src/akamai/sensor/comcast-lightpanda.ts
  *
  * `comcast.ts` with **Lightpanda** in place of Chrome — a headless browser
  * with no renderer, a ~70MB binary that starts in milliseconds. See
@@ -48,7 +48,7 @@
  * 30s/15s navigation defaults, which a page this heavy overruns.
  */
 import { PROFILE, SEC_CH_UA } from '#src/profile.js';
-import { solve } from '#src/akamai/solver.js';
+import { solve } from '#src/akamai/sensor/solver.js';
 import { solverWsUrl } from '#src/solver-url.js';
 import { outerHtml, start } from '#src/lightpanda.js';
 import {

@@ -43,10 +43,18 @@ const SCRIPTS = [
   { headless: true, script: 'src/datadome/grainger' },
   { advisory: true, script: 'src/datadome/grainger-lightpanda' },
   { headless: true, script: 'src/datadome/idealista' },
-  { headless: true, script: 'src/akamai/comcast' },
-  { script: 'src/akamai/comcast-lightpanda' },
-  { headless: true, script: 'src/akamai/ca-edd' },
+  { headless: true, script: 'src/akamai/sensor/comcast' },
+  { script: 'src/akamai/sensor/comcast-lightpanda' },
+  { headless: true, script: 'src/akamai/sensor/ca-edd' },
 ];
+
+// src/akamai/sbsd/hilton is deliberately absent, and should stay absent unless
+// the runner gains a display. hilton.com refuses a headless Chrome regardless
+// of how good the payloads are — the same run that reaches `~0~` on round 5
+// headed sits at `~-1~` past round 30 headless — and this runner has no
+// display to give it. An example that cannot pass here is worse than no entry:
+// it would be advisory forever and nobody would read the reason. The Akamai
+// coverage CI does gate on is src/akamai/sensor/comcast.
 
 function runOne({ advisory, headless, script, useEnvProxy }) {
   return new Promise((resolve) => {

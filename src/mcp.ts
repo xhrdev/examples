@@ -28,7 +28,7 @@ import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { z } from 'zod';
 
 import { applyIdentity, USER_AGENT, VIEWPORT } from '#src/akamai/identity.js';
-import { solve } from '#src/akamai/solver.js';
+import { solve } from '#src/akamai/sensor/solver.js';
 import { toLaunchProxy } from '#src/proxy.js';
 import { RateLimitError } from '#src/rate-limit.js';
 
@@ -279,7 +279,7 @@ server.registerTool(
      * the payload is built correctly and then simply never accepted, and the
      * solve ends `timeout`/`deadline_exceeded` with nothing naming the cause.
      *
-     * So this drives the same browser bridge `src/akamai/comcast.ts` does:
+     * So this drives the same browser bridge `src/akamai/sensor/comcast.ts` does:
      * Chrome relays each sensor request over the session socket, and `_abck`
      * reaches `~0~`. The cost is a browser per call and tens of seconds.
      */

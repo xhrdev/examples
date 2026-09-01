@@ -36,9 +36,10 @@
     "github": "node --env-file=.env src/datadome/github.ts",
     "book-secure": "node --env-file=.env src/datadome/book-secure.ts",
     "bestwestern": "node --env-file=.env src/datadome/bestwestern.ts",
-    "comcast": "node --env-file=.env src/akamai/comcast.ts",
-    "comcast:lightpanda": "node --env-file=.env src/akamai/comcast-lightpanda.ts",
-    "ca-edd": "node --env-file=.env src/akamai/ca-edd.ts",
+    "comcast": "node --env-file=.env src/akamai/sensor/comcast.ts",
+    "comcast:lightpanda": "node --env-file=.env src/akamai/sensor/comcast-lightpanda.ts",
+    "ca-edd": "node --env-file=.env src/akamai/sensor/ca-edd.ts",
+    "hilton": "node --env-file=.env src/akamai/sbsd/hilton.ts",
     "loadtest": "node --env-file=.env src/loadtest.ts",
     "prepare": "husky"
   },

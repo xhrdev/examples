@@ -188,7 +188,7 @@ export type Mitm = {
   caCertPath: string;
   /**
    * Make a request through this proxy without a browser involved — same
-   * dispatcher, same identity, same exit IP. `src/akamai/comcast-lightpanda.ts`
+   * dispatcher, same identity, same exit IP. `src/akamai/sensor/comcast-lightpanda.ts`
    * hands this to the solver in place of Playwright's `route.fetch`, which
    * stalls against Lightpanda.
    */

@@ -1,7 +1,7 @@
 /**
  * This is a Playwright library file, not a script. It exposes a `solve`
  * function you add to Playwright scripts to integrate with the xhr.dev
- * on-prem solver for anti-bot solving. See src/akamai/comcast.ts for a
+ * on-prem solver for anti-bot solving. See src/akamai/sensor/comcast.ts for a
  * runnable example.
  *
  * Akamai Bot Manager browser bridge.
@@ -44,7 +44,7 @@ export type SolveOptions = {
    * Fetch intercepted requests with this instead of Playwright's
    * `route.fetch`. Only needed for browsers where route.fetch is unreliable —
    * `src/mitm.ts` exposes exactly this shape, and
-   * `src/akamai/comcast-lightpanda.ts` passes it. Whatever you give it must
+   * `src/akamai/sensor/comcast-lightpanda.ts` passes it. Whatever you give it must
    * come from the same address the browser uses, or the telemetry will be
    * scored against the wrong client.
    */

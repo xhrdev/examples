@@ -1,15 +1,15 @@
 /**
  * Run with:
  *
- * node --env-file=.env src/akamai/comcast.ts
- * node --env-file=.env src/akamai/comcast.ts --headless
+ * node --env-file=.env src/akamai/sensor/comcast.ts
+ * node --env-file=.env src/akamai/sensor/comcast.ts --headless
  */
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';
 import { toLaunchProxy } from '#src/proxy.js';
 import { solverWsUrl } from '#src/solver-url.js';
 import { applyIdentity, USER_AGENT, VIEWPORT } from '#src/akamai/identity.js';
-import { solve } from '#src/akamai/solver.js';
+import { solve } from '#src/akamai/sensor/solver.js';
 import {
   RATE_LIMIT_EXIT_CODE,
   RateLimitError,

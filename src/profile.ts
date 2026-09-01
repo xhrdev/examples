@@ -15,11 +15,12 @@
  * it, so the Akamai scripts carried their own literals and drifted a full two
  * major versions behind. Everything now derives from here:
  *
- *   src/datadome/profile.ts   re-exports it with the DataDome endpoints
- *   src/akamai/solver.ts      the telemetry sent over the session socket
- *   src/akamai/*.ts           the CDP overrides installed on the real browser
- *   src/mcp.ts                what the MCP tools declare on every solve
- *   py-src/profile.json       generated from here; see `npm run emit:profile`
+ *   src/datadome/profile.ts      re-exports it with the DataDome endpoints
+ *   src/akamai/sensor/solver.ts  the telemetry sent over the session socket
+ *   src/akamai/sbsd/solver.ts    the profile overrides sent with the ledger
+ *   src/akamai/identity.ts       the CDP overrides installed on the real browser
+ *   src/mcp.ts                   what the MCP tools declare on every solve
+ *   py-src/profile.json          generated from here; see `npm run emit:profile`
  *
  * The Python clients cannot import TypeScript, so they read a generated JSON
  * copy instead. It is committed so `pip install` alone is enough to run them,
