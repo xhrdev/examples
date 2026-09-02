@@ -268,13 +268,18 @@ the same identity as each other, which is the property that actually matters.
 - **`document.cookieHeader` is `document.cookie`**, despite the name — the
   JavaScript-visible jar, not the HTTP header. The `httpOnly` cookies are
   deliberately not part of what the page can see.
-- **422 `invalid-carrier`, only on fast machines** — the snapshot was taken
-  before the bundle wrote `sessionStorage.ak_bm_tab_id`, and a document without
-  one could not have emitted a carrier. Holding the first carrier is usually
-  enough, because the bundle writes the key before it posts — but on a CI
-  runner the ledger request left ~2s after the bundle loaded and was refused
-  every time, where the same code on a desktop left ~6s in and was fine.
-  `solver.ts` now waits for the key explicitly.
+- **422 `invalid-carrier` on a machine with no speech engine** — this is the
+  one difference between a CI runner and a desktop that the SBSD channel
+  notices. `speechSynthesis.getVoices()` returns nothing on a Linux box with no
+  speech-dispatcher installed, and a snapshot claiming a desktop Chrome with no
+  voices at all describes a browser that cannot exist. It reproduces exactly:
+  stub `getVoices` to return `[]` on a machine that works, and the very next
+  ledger request is refused. Install a speech engine on the runner —
+  `apt-get install speech-dispatcher` — rather than inventing the reading.
+- **422 `invalid-carrier` on a fast machine** — same code, different cause: the
+  snapshot beat one of the asynchronous readings. Voices are empty for the
+  first few hundred milliseconds of any page, and `ak_bm_tab_id` appears only
+  once the bundle has run. `solver.ts` waits for both, bounded.
 - **422 with any refusal code** — read the `receipt` in the body, not
   `error.message`: the message is the same sentence for every code, while the
   receipt names the input that could not be reconciled. `solver.ts` puts it in

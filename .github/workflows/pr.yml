@@ -35,12 +35,20 @@ jobs:
       - name: Install Chromium
         run: sudo snap install chromium
 
-      # For the SBSD smoke entry, which has to run headed — dev-resources/
-      # smoke.js wraps it in xvfb-run. Without a display a headed Chrome dies
-      # at launch with "Missing X server or $DISPLAY", which reads as a failed
-      # solve rather than a missing display.
-      - name: Install xvfb
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+      # Two things the SBSD smoke entries need that a runner does not have.
+      #
+      # xvfb, because they have to run headed — dev-resources/smoke.js wraps
+      # them in xvfb-run. Without a display a headed Chrome dies at launch with
+      # "Missing X server or $DISPLAY", which reads as a failed solve rather
+      # than a missing display.
+      #
+      # speech-dispatcher, because without it speechSynthesis.getVoices() is
+      # empty forever, and the ledger request is refused 422 invalid-carrier: a
+      # browser claiming to be a desktop Chrome with no voices at all is not a
+      # browser that exists. This is the one difference between a runner and a
+      # developer's machine that the SBSD channel actually notices.
+      - name: Install xvfb and a speech engine
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb speech-dispatcher
 
       - uses: actions/setup-node@v7
         with:

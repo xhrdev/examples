@@ -242,41 +242,62 @@ const TELEMETRY_PROFILE = {
 };
 
 /**
- * Wait for the bundle to write its tab id before the realm is snapshotted.
+ * Wait for the realm's asynchronous readings before snapshotting.
  *
- * `sessionStorage.ak_bm_tab_id` only exists once the bundle has run, and the
- * server rejects a snapshot without it — `422 invalid-carrier`, because a
- * document that has not got one is not a document that could have emitted a
- * carrier. Holding the first carrier is *usually* enough on its own: the
- * bundle writes the key before it posts. Usually is not always. On a slower
- * machine the ledger request goes out several seconds after the bundle loads
- * and the key is always there; on a fast CI runner the same request left ~2s
- * in and was refused every time.
+ * Two of them are not there the instant the document is:
  *
- * Bounded, and failure here is deliberately not fatal: if the key really never
- * arrives, the server's refusal names the reason better than a guess made
- * here would.
+ *   ak_bm_tab_id  the bundle writes it shortly after it loads, and the server
+ *                 refuses a snapshot without one — a document that has not got
+ *                 one could not have emitted a carrier. Holding the first
+ *                 carrier is usually enough time on its own; usually is not
+ *                 always, and on a fast machine the request can leave ~2s in.
+ *   voices        `speechSynthesis.getVoices()` is empty for the first few
+ *                 hundred milliseconds of any page, on every platform. A macOS
+ *                 Chrome reports 180 local voices half a second after load and
+ *                 none at all before that, and a snapshot claiming a macOS
+ *                 Chrome with no voices describes a browser that cannot exist
+ *                 — the same class of mismatch as the screen metrics.
+ *
+ * Both waits are bounded and neither is fatal: the server's refusal names the
+ * reason better than a guess made here would. Note what this deliberately does
+ * not do — a machine with no speech engine installed genuinely has no voices,
+ * and no amount of waiting invents them. The answer there is to install one,
+ * not to send a number the page cannot back up.
  */
-const waitForTabId = async (page: Page): Promise<void> => {
-  try {
-    await page.waitForFunction(
-      () => {
-        /* eslint-disable n/no-unsupported-features/node-builtins */
-        /* eslint-disable no-unused-vars -- function-type parameters */
-        const session = (
-          globalThis as unknown as {
-            sessionStorage: { getItem: (key: string) => null | string };
-          }
-        ).sessionStorage;
-        /* eslint-enable no-unused-vars */
-        /* eslint-enable n/no-unsupported-features/node-builtins */
-        return typeof session.getItem('ak_bm_tab_id') === 'string';
-      },
-      { polling: 100, timeout: 10_000 }
-    );
-  } catch {
-    // Bounded wait elapsed. Let the request go and be refused on its merits.
-  }
+const waitForRealmReadings = async (page: Page): Promise<void> => {
+  const settle = async (
+    predicate: () => boolean,
+    timeout: number
+  ): Promise<void> => {
+    try {
+      await page.waitForFunction(predicate, { polling: 100, timeout });
+    } catch {
+      // Bounded wait elapsed. Send it and let it be judged on its merits.
+    }
+  };
+
+  await settle(() => {
+    /* eslint-disable n/no-unsupported-features/node-builtins */
+    /* eslint-disable no-unused-vars -- function-type parameters */
+    const session = (
+      globalThis as unknown as {
+        sessionStorage: { getItem: (key: string) => null | string };
+      }
+    ).sessionStorage;
+    /* eslint-enable no-unused-vars */
+    /* eslint-enable n/no-unsupported-features/node-builtins */
+    return typeof session.getItem('ak_bm_tab_id') === 'string';
+  }, 10_000);
+
+  await settle(
+    () =>
+      (
+        globalThis as unknown as {
+          speechSynthesis: { getVoices: () => unknown[] };
+        }
+      ).speechSynthesis.getVoices().length > 0,
+    3000
+  );
 };
 
 /**
@@ -473,7 +494,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
 
   /** One POST, `expectedCap` rows, for the document that is live right now. */
   async function generateLedger(): Promise<LedgerRow[]> {
-    await waitForTabId(page);
+    await waitForRealmReadings(page);
     const realm = await readRealm(page);
     const response = await fetch(ledgerUrl, {
       body: JSON.stringify({
