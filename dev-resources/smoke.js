@@ -58,18 +58,20 @@ const SCRIPTS = [
   // good end of that range — so this may well be steady. Promote it to blocking
   // once a run of green ones says so, rather than assuming either way.
   { advisory: true, headed: true, script: 'src/akamai/sbsd/hilton' },
-  // The same channel on properties that serve the bundle from an obfuscated
-  // path rather than /.well-known/sbsd, which is what these two are here to
-  // exercise: the path is discovered from the bundle's UUID `v=`, and if that
-  // detection ever breaks, the ledger is never requested and these fail loudly.
+  // The same channel on two properties that serve the bundle from an
+  // obfuscated path rather than /.well-known/sbsd, which is what these are here
+  // to exercise: the path is discovered from the bundle's UUID `v=`, and if
+  // that detection breaks, no ledger is ever requested and both fail loudly.
   //
-  // Advisory, and for a weaker reason than hilton's: neither has been seen
-  // through to the end. The SBSD half works on both, but `_abck` did not reach
-  // ~0~ in any local run, while comcast and hilton solved from the same address
-  // in the same window — so it is not the solver, and not obviously the exit
-  // either. CI runs from an address these properties have no history with,
-  // which is the missing control; let these report for a while and read the
-  // results before deciding what they mean.
+  // Both solve end to end locally. Advisory for the same exit-address reason as
+  // hilton — aa.com in particular serves "Access Denied" to an uninstrumented
+  // browser from an address it has seen too much of, which is what makes its
+  // pass meaningful and also what makes it worth watching before it gates CI.
+  //
+  // aircanada is the SBSD-only one: it does not score that document on _abck,
+  // so the example runs sensor: 'page' and asserts on the booking page. If it
+  // ever starts failing, check whether the property has started gating on the
+  // sensor before assuming the SBSD lane broke.
   { advisory: true, headed: true, script: 'src/akamai/sbsd/aa' },
   { advisory: true, headed: true, script: 'src/akamai/sbsd/aircanada' },
 ];

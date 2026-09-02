@@ -147,8 +147,8 @@ you attach. If you only came for SBSD, say so.
 | file | what it shows | status |
 |---|---|---|
 | `hilton.ts` | both channels on one page, then a real hotel search behind the challenge | solves end to end |
-| `aa.ts` | the bundle on an obfuscated path, discovered rather than configured | SBSD lane verified; see below |
-| `aircanada.ts` | the same, plus a protected document behind an unprotected apex | SBSD lane verified; see below |
+| `aa.ts` | the bundle on an obfuscated path, discovered rather than configured | solves end to end |
+| `aircanada.ts` | SBSD only, on a property that does not gate on `_abck` | solves end to end |
 
 ```bash
 npm run hilton
@@ -156,42 +156,24 @@ npm run aa
 npm run aircanada
 ```
 
-### what "SBSD lane verified" means on aa and aircanada
+### the two channels are scored separately, and it shows
 
-On both, the bundle is discovered at its obfuscated path, the ledger is issued,
-and the carriers are rewritten in order with no refusal from the solver. What
-has not been observed is the end of the run: `_abck` stayed at `~-1~` and the
-page behind the challenge was never reached.
+These three targets disagree about what the sensor is for, which is the most
+useful thing about having them side by side:
 
-The cause is undetermined, and worth stating carefully because the obvious
-readings are both wrong:
+| | gates on `_abck`? | what the example does |
+|---|---|---|
+| hilton.com | yes | solves both |
+| aa.com | yes — the URL is "Access Denied" without it | solves both |
+| aircanada.com | **no** | answers SBSD, `sensor: 'page'` |
 
-- **Not the solver, and not the identity.** In the same window, from the same
-  address, `sensor/comcast.ts` reached `~0~` on round 5 and `hilton.ts` — which
-  runs both channels, through this same file — solved end to end.
-- **Not simply a burned address either**, for the same reason. Though aa.com
-  specifically was serving that address a flat `403` for an *uninstrumented*
-  Chrome at the time: no bootstrap, no challenge, nothing to solve. Reputation
-  is per-property, and on that property it was already spent.
-
-So what is left is either those properties' own tolerance for this exit, or
-something in their sensor lane that hilton does not exercise. Distinguishing
-the two needs a run from an address they have no history with. Until then the
-`_abck` half is unconfirmed, which is also why both are advisory in the smoke
-suite.
-
-It solves, and the check at the end is a results page rather than a cookie
-value:
-
-```
-[abck] Opening session against https://www.hilton.com/78jHEHB-.../6LncB (_abck=-1)
-[sbsd] Ledger issued: cap=3 nonce=b6278f3f-8160-4df7-ab42-b2aeb3bce4c6
-[sbsd] Row 0: 965 bytes
-[sbsd] Row 1: 1177 bytes
-[sbsd] Row 2: 3472 bytes
-[abck] Cookie update: round=5 rval=0 accepted=true
-RESULT: SUCCESS - Akamai solved, reached "Orlando, Florida, US Hotel Search - Hilton"
-```
+aircanada serves its booking page to an ordinary Chrome carrying `_abck=~-1~`,
+and it keeps serving it: 35 rounds of solving the sensor moved neither the
+cookie nor the page. There is nothing wrong there — that property is not
+scoring on that channel at that URL, and `~-1~` is its steady state, not a
+stuck solve. Check what a plain browser gets before deciding a target needs the
+sensor lane; on a page like that, the default `sensor: 'solver'` replaces a
+script that was doing no harm and waits for an acceptance that is not coming.
 
 ### headed, and behind a proxy
 

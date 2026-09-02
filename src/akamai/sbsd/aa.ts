@@ -19,20 +19,10 @@
  * served as "Access Denied" to an ordinary browser, so reaching the form at
  * all is the result; an unsolved run does not get a partial version of it.
  *
- * ## status
- *
- * The SBSD half of this is verified: the bundle is found at its obfuscated
- * path, the ledger is issued, and the carriers are rewritten in order. The end
- * of the run is not — `_abck` stayed at `~-1~` in every local run.
- *
- * That is not the solver and not the identity: in the same window, from the
- * same address, comcast reached `~0~` on round 5 and hilton — both channels,
- * same library — solved end to end. It is also not simply a spent address, for
- * the same reason, though aa.com specifically was serving this one a flat 403
- * for an uninstrumented Chrome at the time, which is its own answer.
- *
- * Run it from an address aa.com has no history with before concluding
- * anything. It is advisory in the smoke suite until those numbers exist.
+ * Verified end to end: `_abck` accepted on round 6, and the search form
+ * behind it. The control that makes that mean something is that aa.com serves
+ * this same URL as "Access Denied" to an uninstrumented Chrome from the same
+ * machine, minutes either side of the run.
  */
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';
@@ -196,8 +186,11 @@ try {
   // was accepted, and a page that renders from cache proves nothing.
   await page.goto(url, { timeout: 90_000, waitUntil: 'domcontentloaded' });
 
-  const form = page.locator('#reservationFlightSearchForm, #flightSearchForm');
-  await form.waitFor({ timeout: 60_000 });
+  // The search form's own <form> has no id, so the landmark is the first field
+  // on it. Both are checked because the denial page is not empty — it renders
+  // a header and a footer — and matching one stray input would pass on it.
+  await page.locator('#matOriginAirport').waitFor({ timeout: 60_000 });
+  await page.locator('#matDestinationAirport').waitFor({ timeout: 60_000 });
 
   const title = await page.title();
   log(`Final URL: ${page.url()}`);
