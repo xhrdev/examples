@@ -83,6 +83,14 @@ jobs:
             echo "password=$ENV_PASSWORD"
           } > .env
 
+      # What voices the runner's browser can actually see. The SBSD lane sends
+      # these counts and the sandbox refuses a desktop Chrome reporting none,
+      # so when SBSD fails in CI and passes everywhere else, this is the first
+      # thing to read. Never gates the job.
+      - name: Speech-synthesis voice probe
+        continue-on-error: true
+        run: xvfb-run -a node dev-resources/voice-probe.mjs
+
       - name: make test
         env:
           CHROME_PATH: /snap/bin/chromium

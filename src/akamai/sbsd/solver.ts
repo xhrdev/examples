@@ -296,7 +296,10 @@ const waitForRealmReadings = async (page: Page): Promise<void> => {
           speechSynthesis: { getVoices: () => unknown[] };
         }
       ).speechSynthesis.getVoices().length > 0,
-    3000
+    // Ten seconds, not three: on a machine where a speech daemon has to be
+    // spawned on first use the list can take several seconds to arrive, and
+    // the cost of waiting is paid once per document.
+    10_000
   );
 };
 
