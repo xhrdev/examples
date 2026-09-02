@@ -268,6 +268,14 @@ the same identity as each other, which is the property that actually matters.
 - **`document.cookieHeader` is `document.cookie`**, despite the name — the
   JavaScript-visible jar, not the HTTP header. The `httpOnly` cookies are
   deliberately not part of what the page can see.
-- **422 with a refusal code** — the sandbox declined to produce a complete
-  ledger for that snapshot. The `receipt` in the body says which input it could
-  not reconcile; the usual answer is a snapshot taken before the bundle had run.
+- **422 `invalid-carrier`, only on fast machines** — the snapshot was taken
+  before the bundle wrote `sessionStorage.ak_bm_tab_id`, and a document without
+  one could not have emitted a carrier. Holding the first carrier is usually
+  enough, because the bundle writes the key before it posts — but on a CI
+  runner the ledger request left ~2s after the bundle loaded and was refused
+  every time, where the same code on a desktop left ~6s in and was fine.
+  `solver.ts` now waits for the key explicitly.
+- **422 with any refusal code** — read the `receipt` in the body, not
+  `error.message`: the message is the same sentence for every code, while the
+  receipt names the input that could not be reconciled. `solver.ts` puts it in
+  the thrown error for that reason.

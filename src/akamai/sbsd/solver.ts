@@ -124,6 +124,8 @@ type LedgerResponse = {
   complete: boolean;
   error?: { code?: string; message?: string };
   expectedCap?: number;
+  /** On a refusal, which input the sandbox could not reconcile. */
+  receipt?: unknown;
   runNonce?: string;
   submissions?: LedgerRow[];
 };
@@ -237,6 +239,44 @@ const TELEMETRY_PROFILE = {
   screen: PROFILE.screen,
   timezone: PROFILE.timezone,
   timezoneOffsetMinutes: PROFILE.timezoneOffsetMinutes,
+};
+
+/**
+ * Wait for the bundle to write its tab id before the realm is snapshotted.
+ *
+ * `sessionStorage.ak_bm_tab_id` only exists once the bundle has run, and the
+ * server rejects a snapshot without it — `422 invalid-carrier`, because a
+ * document that has not got one is not a document that could have emitted a
+ * carrier. Holding the first carrier is *usually* enough on its own: the
+ * bundle writes the key before it posts. Usually is not always. On a slower
+ * machine the ledger request goes out several seconds after the bundle loads
+ * and the key is always there; on a fast CI runner the same request left ~2s
+ * in and was refused every time.
+ *
+ * Bounded, and failure here is deliberately not fatal: if the key really never
+ * arrives, the server's refusal names the reason better than a guess made
+ * here would.
+ */
+const waitForTabId = async (page: Page): Promise<void> => {
+  try {
+    await page.waitForFunction(
+      () => {
+        /* eslint-disable n/no-unsupported-features/node-builtins */
+        /* eslint-disable no-unused-vars -- function-type parameters */
+        const session = (
+          globalThis as unknown as {
+            sessionStorage: { getItem: (key: string) => null | string };
+          }
+        ).sessionStorage;
+        /* eslint-enable no-unused-vars */
+        /* eslint-enable n/no-unsupported-features/node-builtins */
+        return typeof session.getItem('ak_bm_tab_id') === 'string';
+      },
+      { polling: 100, timeout: 10_000 }
+    );
+  } catch {
+    // Bounded wait elapsed. Let the request go and be refused on its merits.
+  }
 };
 
 /**
@@ -433,6 +473,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
 
   /** One POST, `expectedCap` rows, for the document that is live right now. */
   async function generateLedger(): Promise<LedgerRow[]> {
+    await waitForTabId(page);
     const realm = await readRealm(page);
     const response = await fetch(ledgerUrl, {
       body: JSON.stringify({
@@ -466,9 +507,14 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     checkRateLimit(response.status, response.headers);
     const ledger = (await response.json()) as LedgerResponse;
     if (!ledger.complete) {
+      // The receipt is the useful half of a refusal: `error.message` is the
+      // same sentence for every code, while the receipt names the input that
+      // could not be reconciled. Without it a CI failure is unactionable.
       throw new Error(
         `SBSD ledger refused (${response.status}): ` +
-          `${ledger.error?.code ?? 'unknown'} — ${ledger.error?.message ?? ''}`
+          `${ledger.error?.code ?? 'unknown'} — ` +
+          `${ledger.error?.message ?? ''} ` +
+          `receipt=${JSON.stringify(ledger.receipt ?? null).slice(0, 600)}`
       );
     }
     log(
