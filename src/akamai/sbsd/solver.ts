@@ -528,6 +528,13 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     checkRateLimit(response.status, response.headers);
     const ledger = (await response.json()) as LedgerResponse;
     if (!ledger.complete) {
+      // The refusal itself says almost nothing: `error.message` is one generic
+      // sentence for every code and `receipt` is null on this path. So the
+      // readings most likely to be at fault are reported from here instead —
+      // they are the ones that differ between a desktop and a CI runner, and
+      // without them a refusal in CI is unactionable.
+      const voices = realm.runtime['speechSynthesisVoices'];
+      const session = realm.runtime['sessionStorage'];
       // The receipt is the useful half of a refusal: `error.message` is the
       // same sentence for every code, while the receipt names the input that
       // could not be reconciled. Without it a CI failure is unactionable.
@@ -535,7 +542,11 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         `SBSD ledger refused (${response.status}): ` +
           `${ledger.error?.code ?? 'unknown'} — ` +
           `${ledger.error?.message ?? ''} ` +
-          `receipt=${JSON.stringify(ledger.receipt ?? null).slice(0, 600)}`
+          `receipt=${JSON.stringify(ledger.receipt ?? null).slice(0, 400)} ` +
+          `voices=${JSON.stringify(voices)} ` +
+          `session=${JSON.stringify(session)} ` +
+          `resourceEntries=${realm.resourceEntries.length} ` +
+          `html=${servedHtml.length}b cookie=${realm.documentCookie.length}b`
       );
     }
     log(
