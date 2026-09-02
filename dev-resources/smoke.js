@@ -63,7 +63,10 @@ const SCRIPTS = [
   // to exercise: the path is discovered from the bundle's UUID `v=`, and if
   // that detection breaks, no ledger is ever requested and both fail loudly.
   //
-  // Both solve end to end locally. Advisory for the same exit-address reason as
+  // Both solve end to end locally. On a runner they report SKIP instead: the
+  // SBSD channel needs speech-synthesis voices and a headless runner has none
+  // (see NO_VOICES_EXIT_CODE above), so what runs here is the discovery and
+  // setup path, not a solve. Advisory for the same exit-address reason as
   // hilton — aa.com in particular serves "Access Denied" to an uninstrumented
   // browser from an address it has seen too much of, which is what makes its
   // pass meaningful and also what makes it worth watching before it gates CI.
@@ -126,8 +129,15 @@ function runOne({ advisory, headed, headless, script, useEnvProxy }) {
 // is the same reasoning that made grainger-lightpanda advisory.
 const RATE_LIMIT_EXIT_CODE = 3;
 const BANNED_EXIT_CODE = 4;
+// src/akamai/sbsd/environment.ts: the machine has no speech-synthesis voices,
+// so the SBSD channel cannot be exercised here at all. A runner cannot be made
+// to have them — package, unconfined browser and a dbus-spawned daemon were
+// each tried — so this is reported as the environment gap it is rather than as
+// three failing solves.
+const NO_VOICES_EXIT_CODE = 5;
 const NOT_A_REGRESSION = new Map([
   [BANNED_EXIT_CODE, 'BANNED'],
+  [NO_VOICES_EXIT_CODE, 'SKIP (no speech voices on this host)'],
   [RATE_LIMIT_EXIT_CODE, 'RATE LIMITED'],
 ]);
 

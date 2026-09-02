@@ -268,14 +268,24 @@ the same identity as each other, which is the property that actually matters.
 - **`document.cookieHeader` is `document.cookie`**, despite the name — the
   JavaScript-visible jar, not the HTTP header. The `httpOnly` cookies are
   deliberately not part of what the page can see.
-- **422 `invalid-carrier` on a machine with no speech engine** — this is the
-  one difference between a CI runner and a desktop that the SBSD channel
-  notices. `speechSynthesis.getVoices()` returns nothing on a Linux box with no
-  speech-dispatcher installed, and a snapshot claiming a desktop Chrome with no
-  voices at all describes a browser that cannot exist. It reproduces exactly:
-  stub `getVoices` to return `[]` on a machine that works, and the very next
-  ledger request is refused. Install a speech engine on the runner —
-  `apt-get install speech-dispatcher` — rather than inventing the reading.
+- **422 `invalid-carrier` with no speech voices** — the single biggest
+  environment trap, and the reason these examples need a real desktop.
+  `speechSynthesis.getVoices()` is empty on a headless runner, and a snapshot
+  claiming a desktop Chrome with no voices describes a browser that cannot
+  exist. It reproduces exactly: stub `getVoices` to return `[]` on a machine
+  that works, and the very next ledger request is refused.
+
+  A CI runner cannot be talked into having them. On a GitHub runner, installing
+  `speech-dispatcher`, replacing the confined snap browser with an unconfined
+  Chrome, and giving the daemon a D-Bus session were each tried, and the count
+  stayed at zero through all three. So the examples check up front and exit
+  `NO_VOICES_EXIT_CODE` (5), which the smoke suite reports as SKIP rather than
+  as a failed solve — see [`environment.ts`](environment.ts).
+
+  What they do **not** do is send the counts a desktop would have had.
+  Inventing a reading the page cannot back up is the identity mismatch this
+  channel exists to punish, and it would trade a loud environment problem for
+  a silent `~-1~` somewhere else.
 - **422 `invalid-carrier` on a fast machine** — same code, different cause: the
   snapshot beat one of the asynchronous readings. Voices are empty for the
   first few hundred milliseconds of any page, and `ak_bm_tab_id` appears only

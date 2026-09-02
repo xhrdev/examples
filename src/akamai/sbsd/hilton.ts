@@ -29,6 +29,11 @@ import fs from 'node:fs';
 import { chromium } from 'playwright-core';
 
 import { applyIdentity, USER_AGENT, VIEWPORT } from '#src/akamai/identity.js';
+import {
+  NO_VOICES_EXIT_CODE,
+  NoVoicesError,
+  requireVoices,
+} from '#src/akamai/sbsd/environment.js';
 import { attach } from '#src/akamai/sbsd/solver.js';
 import { PROFILE } from '#src/profile.js';
 import { toLaunchProxy } from '#src/proxy.js';
@@ -135,6 +140,19 @@ process.on('unhandledRejection', (reason) => {
 const cdp = await context.newCDPSession(page);
 await applyIdentity(cdp);
 
+// Checked before anything is attempted: an environment without speech voices
+// cannot produce a ledger the sandbox will accept, and a run that discovers
+// that at the refusal looks like a failed solve. See sbsd/environment.ts.
+try {
+  await page.goto('about:blank');
+  await requireVoices(page);
+} catch (e) {
+  if (e instanceof NoVoicesError) {
+    log(`SKIP: ${e.message}`);
+    await cleanup(NO_VOICES_EXIT_CODE);
+  } else throw e;
+}
+
 // Installed before the first navigation: the SBSD carrier fires during the
 // bootstrap document, and a router attached afterwards would miss it.
 const akamai = attach(page, {
@@ -212,7 +230,10 @@ try {
 } catch (e) {
   // A 429 is not a failed solve and retrying cannot help, so report it as its
   // own outcome with its own exit code.
-  if (e instanceof RateLimitError) {
+  if (e instanceof NoVoicesError) {
+    log(`SKIP: ${e.message}`);
+    await cleanup(NO_VOICES_EXIT_CODE);
+  } else if (e instanceof RateLimitError) {
     reportRateLimit(e);
     await cleanup(RATE_LIMIT_EXIT_CODE);
   } else {

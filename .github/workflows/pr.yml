@@ -32,30 +32,17 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
 
-      # Two things the SBSD smoke entries need that a runner does not have.
+      # A display for the headed SBSD entries: dev-resources/smoke.js wraps
+      # them in xvfb-run, and without one a headed Chrome dies at launch with
+      # "Missing X server or $DISPLAY", which reads as a failed solve.
       #
-      # xvfb, because they have to run headed — dev-resources/smoke.js wraps
-      # them in xvfb-run. Without a display a headed Chrome dies at launch with
-      # "Missing X server or $DISPLAY", which reads as a failed solve rather
-      # than a missing display.
-      #
-      # speech-dispatcher, because without it speechSynthesis.getVoices() is
-      # empty forever, and the ledger request is refused 422 invalid-carrier: a
-      # browser claiming to be a desktop Chrome with no voices at all is not a
-      # browser that exists. This is the one difference between a runner and a
-      # developer's machine that the SBSD channel actually notices.
-      - name: Install xvfb and a speech engine
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb speech-dispatcher espeak-ng dbus-x11
-          # Installing the engine is not enough: Chrome asks speech-dispatcher
-          # over a socket, and with no daemon listening it reports zero voices
-          # exactly as if nothing were installed. The daemon in turn wants a
-          # session bus, hence dbus-x11 and the dbus-run-session wrapper on the
-          # steps below. "dummy" output because a runner has no sound device
-          # and we only ever read the voice list, never speak.
-          mkdir -p ~/.config/speech-dispatcher
-          printf 'AudioOutputMethod "dummy"\n' > ~/.config/speech-dispatcher/speechd.conf
+      # No speech engine here, though the SBSD channel needs one. Installing
+      # speech-dispatcher, switching off the confined snap browser and giving
+      # the daemon a dbus session were each tried on this runner and the voice
+      # count stayed at zero through all three. The entries detect that and
+      # report SKIP instead — see src/akamai/sbsd/environment.ts.
+      - name: Install xvfb
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
 
       - uses: actions/setup-node@v7
         with:
@@ -107,7 +94,7 @@ jobs:
       - name: Speech-synthesis voice probe
         if: always()
         continue-on-error: true
-        run: dbus-run-session -- xvfb-run -a node dev-resources/voice-probe.mjs
+        run: xvfb-run -a node dev-resources/voice-probe.mjs
 
       - uses: cycjimmy/semantic-release-action@v6.0.0
         id: semantic # need an `id` for output variables
