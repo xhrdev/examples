@@ -32,9 +32,6 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Install Chromium
-        run: sudo snap install chromium
-
       # Two things the SBSD smoke entries need that a runner does not have.
       #
       # xvfb, because they have to run headed — dev-resources/smoke.js wraps
@@ -83,9 +80,13 @@ jobs:
             echo "password=$ENV_PASSWORD"
           } > .env
 
+      # No CHROME_PATH: the scripts fall back to Playwright's own Chrome, which
+      # `npm ci` installs via the postinstall hook. That used to be a snap
+      # instead, and the snap was wrong twice over — `snap install chromium`
+      # failed the whole job on an HTTP 408 from the snap store, and a confined
+      # browser reports no speech-synthesis voices however many are installed
+      # on the host, which the SBSD lane refuses a ledger for.
       - name: make test
-        env:
-          CHROME_PATH: /snap/bin/chromium
         run: make test
 
       # What voices the runner's browser can actually see. The SBSD lane sends
