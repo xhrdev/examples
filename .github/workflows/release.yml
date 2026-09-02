@@ -49,7 +49,17 @@ jobs:
       # browser that exists. This is the one difference between a runner and a
       # developer's machine that the SBSD channel actually notices.
       - name: Install xvfb and a speech engine
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb speech-dispatcher
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb speech-dispatcher espeak-ng dbus-x11
+          # Installing the engine is not enough: Chrome asks speech-dispatcher
+          # over a socket, and with no daemon listening it reports zero voices
+          # exactly as if nothing were installed. The daemon in turn wants a
+          # session bus, hence dbus-x11 and the dbus-run-session wrapper on the
+          # steps below. "dummy" output because a runner has no sound device
+          # and we only ever read the voice list, never speak.
+          mkdir -p ~/.config/speech-dispatcher
+          printf 'AudioOutputMethod "dummy"\n' > ~/.config/speech-dispatcher/speechd.conf
 
       - uses: actions/setup-node@v7
         with:
@@ -101,7 +111,7 @@ jobs:
       - name: Speech-synthesis voice probe
         if: always()
         continue-on-error: true
-        run: xvfb-run -a node dev-resources/voice-probe.mjs
+        run: dbus-run-session -- xvfb-run -a node dev-resources/voice-probe.mjs
 
       - uses: cycjimmy/semantic-release-action@v6.0.0
         id: semantic # need an `id` for output variables
