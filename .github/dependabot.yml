@@ -1,15 +1,11 @@
 version: 2
 
-registries:
-  npm-github:
-    type: npm-registry
-    url: https://npm.pkg.github.com
-    token: ${{ secrets.READ_ONLY_PAT }}
-
+# No `registries:` block. Everything here resolves from the public npm
+# registry — 457 of 457 entries in package-lock.json — so declaring a
+# GitHub Packages registry only made Dependabot demand a token for a
+# registry nothing is fetched from.
 updates:
   - package-ecosystem: npm
-    registries:
-      - npm-github
     directory: /
     schedule:
       interval: weekly
