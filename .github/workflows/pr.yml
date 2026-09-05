@@ -77,6 +77,21 @@ jobs:
             echo "password=$ENV_PASSWORD"
           } > .env
 
+          # GitHub withholds repository secrets from runs it triggers for
+          # Dependabot, so on those `host=` is empty and every script in the
+          # suite dies on `set host= in .env`. That is twelve failures saying
+          # nothing about the bump under test, and it is what kept every
+          # Dependabot PR red and its auto-merge job skipped.
+          #
+          # Keyed on the secret being absent rather than on the actor being
+          # dependabot, because the thing that actually stops the suite running
+          # is the missing host, and anything else that removes it should take
+          # the same path rather than fail confusingly.
+          if [[ -z "$ENV_HOST" ]]; then
+            echo 'no host= available for this run: skipping the live smoke suite' >&2
+            echo 'skip_live_checks=1' >> "$GITHUB_ENV"
+          fi
+
       # No CHROME_PATH: the scripts fall back to Playwright's own Chrome, which
       # `npm ci` installs via the postinstall hook. That used to be a snap
       # instead, and the snap was wrong twice over — `snap install chromium`
