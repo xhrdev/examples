@@ -5,6 +5,19 @@ SHELL := bash
 
 is_ci := $(shell if [ ! -z "$(CODEBUILD_BUILD_ARN)" ] || [ ! -z "$(GITHUB_ACTIONS)" ]; then echo 'true'; else echo 'false'; fi)
 
+# The smoke suite drives real sites through a solver and needs `host=` and
+# `api_key=` in .env. Set this where those are not available and only the unit
+# tests run.
+#
+# The case that made it necessary: GitHub withholds repository secrets from
+# workflow runs triggered by Dependabot, so .env comes out empty and every
+# script in the suite dies on `set host= in .env` — twelve failures that say
+# nothing about the bump being tested. Secrets for those runs live in a
+# separate Dependabot store; putting the solver host and api key there would
+# also work and is a worse trade, since a dependency bump does not need a live
+# third-party solve to be worth merging.
+skip_live_checks ?=
+
 very-clean: clean
 	rm -rf dist target node_modules/ package-lock.json
 .PHONY: very-clean
@@ -45,8 +58,13 @@ ifeq ($(is_ci), true)
 	@if ls test/*.test.ts >/dev/null 2>&1; then \
 		node --test --experimental-test-coverage --test-reporter=spec --test-reporter=lcov --test-reporter-destination=stdout --test-reporter-destination=target/lcov.info test/*.test.ts; \
 	fi
+ifeq ($(skip_live_checks),)
 	npm run lightpanda:download
 	npm test
+else
+	@echo 'skip_live_checks is set: running the unit tests only, not the smoke suite'
+	npm run test:unit
+endif
 else
 	npm test
 endif
