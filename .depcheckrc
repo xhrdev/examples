@@ -12,5 +12,11 @@ ignores: [
   '@skilbjo/config-rc',
   'husky',
 
+  # transitive dependency of @skilbjo/config-rc's eslint config; nothing here
+  # imports it by name, but a fresh `npm ci` no longer hoists it to the top
+  # level so it has to be declared explicitly to keep lint's import resolver
+  # working (see 2c65942)
+  'eslint-import-resolver-typescript',
+
   'nodemon',
 ]

@@ -59,8 +59,6 @@ jobs:
         env:
           ENV_HOST: ${{ secrets.HOST }}
           ENV_API_KEY: ${{ secrets.API_KEY }}
-          ENV_USERNAME: ${{ secrets.USERNAME }}
-          ENV_PASSWORD: ${{ secrets.PASSWORD }}
         run: |
           # No proxy= line. The suite runs direct from the runner's own
           # address, which is a fresh one per job — better for these targets
@@ -73,8 +71,6 @@ jobs:
           {
             echo "host=$ENV_HOST"
             echo "api_key=$ENV_API_KEY"
-            echo "username=$ENV_USERNAME"
-            echo "password=$ENV_PASSWORD"
           } > .env
 
           # GitHub withholds repository secrets from runs it triggers for

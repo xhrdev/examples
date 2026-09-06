@@ -110,7 +110,7 @@ npm run idealista
 npm run etsy -- --screenshot  # ...and alaska, saks, anthropologie, yelp,
                               #    github, book-secure, bestwestern
 npm run comcast               # Akamai, _abck sensor
-npm run ca-edd                # ...and a login; needs username= and password=
+npm run ca-edd                # Akamai, _abck sensor, up to the real login page
 npm run hilton                # Akamai, SBSD + _abck; headed only
 
 # any script takes flags after --

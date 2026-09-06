@@ -4,7 +4,9 @@
  * node --env-file=.env src/akamai/sensor/ca-edd.ts
  * node --env-file=.env src/akamai/sensor/ca-edd.ts --headless
  *
- * Needs username= and password= in .env for the sign-in step.
+ * Checks that the solver gets us past Akamai to the real login page — it does
+ * not sign in. Signing in would exercise CA EDD's own auth, not the solver,
+ * and risks the account (lockout, rate limits) for no extra signal.
  */
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';
@@ -23,16 +25,12 @@ const url = 'https://eddservices.edd.ca.gov/tap/secure/eservices';
 const solverHost = process.env['host'];
 const proxy = process.env['proxy'];
 const solverApiKey = process.env['api_key'];
-const username = process.env['username'];
-const password = process.env['password'];
 let closing = false;
 
 const log = (msg: string, ...extra: unknown[]): void =>
   console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
 
 if (!solverHost) throw new Error('set host= in .env');
-if (!username) throw new Error('set username= in .env');
-if (!password) throw new Error('set password= in .env');
 
 const solverUrl = solverWsUrl(solverHost, '/akamai/session');
 
@@ -123,20 +121,6 @@ try {
 }
 
 await sleep(7000);
-
-// Login
-try {
-  await page.fill('#user-name-input', username);
-  await page.fill('#password-input', password);
-  await page.locator('#login-button').click();
-  log('Clicked Log In');
-  await page.waitForLoadState('load', { timeout: 30000 }).catch(() => {});
-} catch (e) {
-  log(`ERROR: Sign-in actions failed: ${(e as Error).message}`);
-  await cleanup(1);
-}
-
-await sleep(3000);
 
 // Check result
 const html = await page.content();

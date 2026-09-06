@@ -93,7 +93,7 @@ the origin you actually need has to reach `~0~`.
 | file | what it shows |
 |---|---|
 | `comcast.ts` | solving across two origins during an OAuth redirect chain, up to the login form |
-| `ca-edd.ts` | the same, then an actual login — needs `username=` and `password=` in `.env` |
+| `ca-edd.ts` | the same, up to the real login page |
 | `comcast-lightpanda.ts` | the same target driven by **Lightpanda** instead of Chrome — see below |
 
 ```bash
