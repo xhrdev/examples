@@ -9,9 +9,11 @@
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
 /** The public deployment. Override with `mcp_url=` to test a dev copy. */
-export const MCP_URL = process.env['mcp_url'] ?? 'https://mcp.xhr.dev/mcp';
+export const MCP_URL: string =
+  process.env['mcp_url'] ?? 'https://mcp.xhr.dev/mcp';
 
 export const log = (message: string, ...extra: unknown[]): void =>
   console.log(`[${new Date().toISOString()}] ${message}`, ...extra);
@@ -31,10 +33,14 @@ export const connect = async (
 ): Promise<Client> => {
   const client = new Client({ name: 'xhrdev-examples', version: '1.0.0' });
 
+  // The SDK's own `sessionId` getter returns `string | undefined`, which
+  // `exactOptionalPropertyTypes` treats as incompatible with the `Transport`
+  // interface's `sessionId?: string` — a strictness mismatch in the SDK's own
+  // types, not a real incompatibility.
   await client.connect(
     new StreamableHTTPClientTransport(new URL(MCP_URL), {
       requestInit: { headers },
-    })
+    }) as Transport
   );
 
   return client;

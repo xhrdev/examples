@@ -9,7 +9,7 @@
     "node_modules"
   ],
   "compilerOptions": {
-    "lib": ["DOM"],
+    "lib": ["ES2025", "DOM"],
     "rootDir": "./src",
     "paths": {
       "#src/*": ["./src/*"]
