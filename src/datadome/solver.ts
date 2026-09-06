@@ -1654,8 +1654,7 @@ async function sampleChallengeFrame(
         }
       ).connection;
       const navigation = performance.getEntriesByType('navigation')[0] as
-        | PerformanceNavigationTiming
-        | undefined;
+        PerformanceNavigationTiming | undefined;
       return {
         ...(connection
           ? {

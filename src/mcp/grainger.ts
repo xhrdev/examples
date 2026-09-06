@@ -3,7 +3,6 @@
  *
  *   npm run mcp:grainger
  *   npm run mcp:grainger -- --url=https://www.idealista.com/
- *   npm run mcp:grainger -- --send-proxy
  *
  * The same clearance-cookie flow as src/datadome/grainger-undici.ts, but with
  * the middle of it done by the hosted MCP server instead of by this process.
@@ -17,13 +16,12 @@
  *   3. Send that submission yourself. DataDome returns the clearance cookie.
  *   4. Retry the original request with it.
  *
- * Steps 1, 3 and 4 leave from this machine (through `proxy=` if you set one).
- * Step 2 is the hosted server's, and what it does inside is the thing worth
- * watching: it fetches the challenge document itself, which means that one
- * request leaves from *its* address rather than yours. `--send-proxy` passes
- * `proxy=` through so that fetch takes the same route the rest of the flow
- * does; running it both ways is how you find out whether the difference
- * matters for a given target.
+ * Steps 1, 3 and 4 leave from this machine, through `proxy=` if you set one,
+ * and they are the ones that have to agree: DataDome binds the clearance
+ * cookie to whoever sends the submission. Step 2 is the hosted server's, and
+ * the request it makes inside — fetching the challenge document — leaves from
+ * *its* address rather than yours. That is not the binding that matters, and
+ * it is tested: this script passes against live grainger.com 403s.
  */
 import { fetch, ProxyAgent } from 'undici';
 
@@ -42,7 +40,6 @@ const readFlag = (name: string): string | undefined =>
   process.argv.find((arg) => arg.startsWith(`${name}=`))?.split('=')[1];
 
 const targetUrl = readFlag('--url') ?? 'https://www.grainger.com/';
-const sendProxy = process.argv.includes('--send-proxy');
 const configuredProxy = process.env['proxy'];
 const apiKey = process.env['api_key'];
 const solverHost = process.env['host'];
@@ -88,7 +85,6 @@ const started = Date.now();
 const prepared = (await callTool(client, 'datadome_solve', {
   blockedHtml,
   url: targetUrl,
-  ...(sendProxy && proxy ? { proxy } : {}),
 })) as PreparedSubmission;
 log(`  <- prepared submission in ${Date.now() - started}ms`);
 

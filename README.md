@@ -198,7 +198,6 @@ real targets:
 npm run mcp:smoke      # protocol, tool list, and the caller headers
 npm run mcp:grainger   # a full DataDome clearance flow through the tool
 npm run mcp:grainger -- --url=https://www.idealista.com/
-npm run mcp:grainger -- --send-proxy
 ```
 
 `mcp:smoke` needs no configuration: with no headers the hosted server uses the
@@ -215,11 +214,11 @@ the blocked request and you still send the submission — because DataDome binds
 the clearance cookie to whoever sends it — and everything between is a tool
 call taking a URL and the 403 body you already have.
 
-`--send-proxy` passes `proxy=` to the tool. The only thing that changes is
-where the *challenge document* is fetched from: the hosted server fetches it
-for you, and without this it leaves from the server's address rather than
-yours. It does not affect the solve, which makes no outbound request at all,
-and it does not affect your submission.
+The hosted server takes no proxy, and does not need one. A DataDome solve
+makes no outbound request — `iframeData` is required because the container
+cannot fetch the challenge document itself — and the one fetch the server does
+make on your behalf is that document, which is not what DataDome binds a
+cookie to. Your submission is, and this script sends it, through `proxy=`.
 
 ### akamai is not on the hosted server
 
