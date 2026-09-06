@@ -19,7 +19,7 @@
  *   src/akamai/sensor/solver.ts  the telemetry sent over the session socket
  *   src/akamai/sbsd/solver.ts    the profile overrides sent with the ledger
  *   src/akamai/identity.ts       the CDP overrides installed on the real browser
- *   src/mcp.ts                   what the MCP tools declare on every solve
+ *   xhrdev/mcp                   what the hosted MCP tools declare on every solve
  *   py-src/profile.json          generated from here; see `npm run emit:profile`
  *
  * The Python clients cannot import TypeScript, so they read a generated JSON

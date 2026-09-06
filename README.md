@@ -179,123 +179,61 @@ for that one site. An LLM agent doing its own browsing does not know which page
 will block it until the 403 arrives, so it cannot have the handling written in
 advance.
 
-[`src/mcp.ts`](src/mcp.ts) exposes the solver over
-[MCP](https://modelcontextprotocol.io) so an agent can solve a challenge inside
-its own loop and retry the request:
+The MCP server that closes that gap is **hosted**, at
+`https://mcp.xhr.dev/mcp` — there is nothing here to run:
 
 ```bash
-npm run mcp
+claude mcp add --transport http xhrdev https://mcp.xhr.dev/mcp
 ```
 
-It speaks stdio and reads `host=`, `api_key=` and `proxy=` from `.env`, exactly
-like every other script here. Started by hand it will just sit there waiting for
-a client on stdin — that is correct; the client is what launches it.
+It used to live in this repo as `src/mcp.ts`, a stdio server every user had to
+clone, install and point a client at. It is now
+[xhrdev/mcp](https://github.com/xhrdev/mcp), and the docs for it are
+[Via MCP](https://docs.xhr.dev/integrate-mcp).
 
-| tool | what it does |
-|---|---|
-| `health_check` | `GET /hc` — is the solver reachable |
-| `solver_stats` | your own solve rate |
-| `akamai_queue_metrics` | queue depth, for backpressure |
-| `akamai_solve` | solve an Akamai `_abck` challenge for a URL, returning clearance cookies |
-| `datadome_solve` | solve a DataDome captcha or interstitial |
-
-The browser identity is filled in from [`src/profile.ts`](src/profile.ts), so an agent calls these
-with a URL rather than having to invent a coherent `profile` and `js_profile` —
-which it cannot do, since those fields are cross-checked against each other and
-against the headers actually sent.
-
-`datadome_solve` takes the HTML body of the 403 you just received, parses the
-challenge out of it, and returns a **prepared submission** rather than a cookie.
-Your agent has to send that itself, from the same exit IP it will browse from —
-DataDome binds the clearance cookie to whoever submitted it, so a submission
-made by anything else earns a cookie that is void where you need it.
-
-### client config
-
-Claude Code:
+What remains here is what this repo is for — scripts that exercise it against
+real targets:
 
 ```bash
-claude mcp add xhrdev -- npm --prefix /path/to/examples run mcp
+npm run mcp:smoke      # protocol, tool list, and the caller headers
+npm run mcp:grainger   # a full DataDome clearance flow through the tool
+npm run mcp:grainger -- --url=https://www.idealista.com/
+npm run mcp:grainger -- --send-proxy
 ```
 
-Anything that reads the standard `mcpServers` block — Claude Desktop, Cursor,
-Windsurf, Zed:
+`mcp:smoke` needs no configuration: with no headers the hosted server uses the
+shared trial box, which is what a new user gets. With `host=` and `api_key=`
+in `.env` it also checks that those headers survive the trip through
+CloudFront and actually reach the origin — if an origin request policy ever
+stops forwarding them, every caller silently falls back to the trial box and
+nothing else would tell you.
 
-```json
-{
-  "mcpServers": {
-    "xhrdev": {
-      "command": "npm",
-      "args": ["--prefix", "/path/to/examples", "run", "mcp"]
-    }
-  }
-}
-```
+`mcp:grainger` is [`grainger-undici.ts`](src/datadome/grainger-undici.ts) with
+its middle two requests replaced by one tool call. Comparing the two files is
+the clearest statement of what the MCP server actually does: you still make
+the blocked request and you still send the submission — because DataDome binds
+the clearance cookie to whoever sends it — and everything between is a tool
+call taking a URL and the 403 body you already have.
 
-Use an absolute path — the client does not launch it from this directory. `.env`
-is read relative to `--prefix`, so the same `.env` the examples use applies.
+`--send-proxy` passes `proxy=` to the tool. The only thing that changes is
+where the *challenge document* is fetched from: the hosted server fetches it
+for you, and without this it leaves from the server's address rather than
+yours. It does not affect the solve, which makes no outbound request at all,
+and it does not affect your submission.
 
-### an example prompt
+### akamai is not on the hosted server
 
-Give the agent a target and tell it what to do when the target says no:
+`akamai_solve` is not among its tools, and this is a property of Akamai rather
+than an unfinished port. An `_abck` solve has to be submitted by a real
+browser — the solver computes the sensor payloads and Chrome relays each one,
+so the requests carry a genuine TLS fingerprint — and what comes back is bound
+to the address that earned it. A server solving in someone else's cloud
+satisfies neither half.
 
-> Fetch `https://business.comcast.com/account/` and tell me the page title.
-> Make the request through the proxy in `.env`, following redirects. If you get
-> a `403` or an "Access Denied" page, use the **xhrdev** MCP server to get past
-> it, then retry the same request with whatever cookies it gives you — through
-> that same proxy.
+For Akamai, drive the browser bridge directly, from the machine doing the
+browsing: [`src/akamai/sensor/comcast.ts`](src/akamai/sensor/comcast.ts) and
+the [walkthrough](src/akamai/sensor/README.md) beside it.
 
-That is the whole shape of it. The agent makes its request, and only if it is
-actually blocked does it reach for a tool:
-
-```
-1. GET https://business.comcast.com/account/   (through the proxy)
-   -> HTTP 403, "Access Denied"
-
-2. akamai_solve { url: "https://business.comcast.com/account/" }
-   -> { accepted: true, cookie_header: "_abck=...~0~...; bm_sz=...", ... }
-
-3. GET the same URL again, same proxy, sending that cookie header
-   -> HTTP 200, "Dashboard"
-```
-
-**All three steps have to leave from the same address.** The cookies are bound
-to the IP that earned them, so an agent that solves through the proxy and then
-retries with a built-in web-fetch tool from somewhere else gets a fresh 403
-that looks exactly like a failed solve. Whatever your agent makes requests
-with, it has to honour the proxy — which is worth stating in the prompt, as
-above, rather than hoping.
-
-For a DataDome target the middle step differs, because the solver hands back a
-submission rather than a cookie:
-
-> Fetch `https://www.grainger.com/` through the proxy in `.env`. If the
-> response is a `403` whose body contains `var dd =`, pass that whole body to
-> the xhrdev MCP server's `datadome_solve`, send the prepared submission it
-> returns — same proxy — and retry with the `datadome` cookie you get back.
-
-`akamai_solve` answers `challenged: false` when the target serves the page
-without a challenge, which is the common case when an IP is already warm. That
-is not a failure and takes about a second — the agent should just make its
-request.
-
-### what it does under the hood
-
-`akamai_solve` launches a real Chrome and relays each sensor request through
-it, which is the same browser bridge [`src/akamai/sensor/comcast.ts`](src/akamai/sensor/comcast.ts)
-uses. That is deliberate: `POST /akamai/solve` solves server-side, so the
-sensor requests carry the container's TLS fingerprint rather than a browser's,
-and against a target that checks the submitting client the payload is built
-correctly and then never accepted — the solve ends `timeout` /
-`deadline_exceeded` with nothing naming the cause. Driving a browser costs a
-launch and 20–60s per call, and it gets `_abck` to `~0~`.
-
-Two things follow. **Raise your client's request timeout** past its default —
-60s in most clients, which a cold solve can outrun. And **retry through the
-same proxy**, since the cookies are bound to the exit IP that earned them.
-
-`datadome_solve` needs no browser: it is four HTTP requests, and the tool makes
-the first three.
 
 ## proxies
 
