@@ -32,15 +32,10 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
 
-      # A display for the headed SBSD entries: dev-resources/smoke.js wraps
-      # them in xvfb-run, and without one a headed Chrome dies at launch with
-      # "Missing X server or $DISPLAY", which reads as a failed solve.
-      #
-      # No speech engine here, though the SBSD channel needs one. Installing
-      # speech-dispatcher, switching off the confined snap browser and giving
-      # the daemon a dbus session were each tried on this runner and the voice
-      # count stayed at zero through all three. The entries detect that and
-      # report SKIP instead — see src/akamai/sbsd/environment.ts.
+      # A display for the one headed entry: hilton refuses a headless Chrome,
+      # so dev-resources/smoke.js wraps it in xvfb-run, and without a display a
+      # headed Chrome dies at launch with "Missing X server or $DISPLAY", which
+      # reads as a failed solve. The other two SBSD entries run headless.
       - name: Install xvfb
         run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
 
@@ -90,22 +85,10 @@ jobs:
 
       # No CHROME_PATH: the scripts fall back to Playwright's own Chrome, which
       # `npm ci` installs via the postinstall hook. That used to be a snap
-      # instead, and the snap was wrong twice over — `snap install chromium`
-      # failed the whole job on an HTTP 408 from the snap store, and a confined
-      # browser reports no speech-synthesis voices however many are installed
-      # on the host, which the SBSD lane refuses a ledger for.
+      # instead, and `snap install chromium` failed the whole job on an HTTP 408
+      # from the snap store.
       - name: make test
         run: make test
-
-      # What voices the runner's browser can actually see. The SBSD lane sends
-      # these counts and the sandbox refuses a desktop Chrome reporting none,
-      # so when SBSD fails in CI and passes everywhere else, this is the first
-      # thing to read. Runs after the suite because it needs its node_modules,
-      # and `always()` because the run it explains is the failing one.
-      - name: Speech-synthesis voice probe
-        if: always()
-        continue-on-error: true
-        run: xvfb-run -a node dev-resources/voice-probe.mjs
 
       - uses: cycjimmy/semantic-release-action@v6.0.0
         id: semantic # need an `id` for output variables

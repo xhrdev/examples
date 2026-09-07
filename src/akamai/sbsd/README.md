@@ -86,13 +86,16 @@ Three things about it are worth internalising, because each one fails quietly:
   fourth. Letting the native body through hands Akamai a payload from an
   uninstrumented page alongside yours, which is worse than sending nothing.
 - **The ledger belongs to one document.** The bodies are computed from a
-  snapshot of the live page: its HTML, its cookies, its resource timings, its
-  runtime readings. Replaying them against a second document, a second tab or a
-  later load is a mismatch. The server will not issue one for a snapshot older
-  than five minutes.
+  snapshot of the live page: its DOM, its cookies, its tab id. Replaying them
+  against a second document, a second tab or a later load is a mismatch. The
+  server will not issue one for a snapshot older than five minutes.
 - **The first carrier has to be held.** The snapshot reads
   `sessionStorage.ak_bm_tab_id`, which only exists once the bundle has run. So
   the request that triggers generation is also the one that waits for it.
+- **`document.html` is `page.content()`, not the served bytes.** With no
+  `domResourceInventory` in the request the server extracts one from the HTML
+  you send, so it has to be the DOM the page is actually running — the bundle
+  injects into the document after it is served.
 
 ## ordering, on a page that runs both channels
 
@@ -198,30 +201,33 @@ So if it starts failing where it used to pass, suspect the exit before the
 solve. A fresh address is the cheapest fix; a residential or ISP proxy is the
 durable one, and a datacenter pool is not a substitute for either.
 
-### why there is no HTTP, Python or Lightpanda variant
+### HTTP, Python and Lightpanda
 
-The other lanes in this repo all have one. SBSD does not, and this is a
-property of the channel rather than a gap.
+The other lanes in this repo all have a browserless variant. SBSD's used to be
+impossible for two reasons, and only one of them still holds.
 
-**No HTTP-client or Python flow.** The integration does not send a request of
-its own — it rewrites the body of a POST *the page makes*. With no page there
-is no carrier to rewrite, and no realm to snapshot: `document.runtime` is a set
-of readings that only a live document has.
+**What changed.** `document.runtime` was a set of readings only a live document
+could take — `performance.memory`, `navigator.connection`, `speechSynthesis`.
+Every one of them is now optional and defaulted server-side, so the request no
+longer needs a realm to measure. A browserless flow was measured working end to
+end against aircanada.com: fetch the document, fetch the bundle, ask for a
+ledger, POST the three rows to the bundle's own path. The ledger came back
+`complete`, the carriers answered `200 / 200 / 202`, and the SBSD cookies
+(`bm_s`, `bm_so`) landed in the jar.
 
-**No Lightpanda flow.** `document.runtime` requires `performance.memory`,
-`navigator.connection` and `speechSynthesis`, and the server rejects the
-request if any of them is missing. Lightpanda has none of the three:
+**What still holds: the transport.** Getting the document at all is the
+problem, and it is not an SBSD problem. The same script against aa.com never
+reaches a challenge — the edge answers a bare Node `fetch` with `403` before
+any bundle is served, because the TLS and HTTP/2 fingerprint is Node's. So a
+browserless SBSD flow works exactly where your HTTP client is one the property
+already accepts, which is why there is no example here yet: aircanada serves an
+ordinary client anyway, so passing on it proves nothing about the channel.
 
-```
-$ lightpanda> typeof performance.memory, navigator.connection, speechSynthesis
-undefined undefined undefined
-```
-
-That is not something a client-side shim can fix — inventing the readings is
-exactly the mismatch the [identity trap](#the-identity-trap-worked-through)
-section is about. If Lightpanda grows them, the same `attach()` should work
-unchanged; `sensor/comcast-lightpanda.ts` already shows the `_abck` lane
-running there.
+**No Lightpanda flow either**, for a smaller reason than before. Nothing in the
+request needs it any more, but `attach()` drives the channel through Playwright
+route interception, and the rows still have to reach the page's own carrier
+POSTs. If Lightpanda grows the interception surface the same `attach()` should
+work; `sensor/comcast-lightpanda.ts` already shows the `_abck` lane there.
 
 ## the identity trap, worked through
 
@@ -268,28 +274,13 @@ the same identity as each other, which is the property that actually matters.
 - **`document.cookieHeader` is `document.cookie`**, despite the name — the
   JavaScript-visible jar, not the HTTP header. The `httpOnly` cookies are
   deliberately not part of what the page can see.
-- **422 `invalid-carrier` with no speech voices** — the single biggest
-  environment trap, and the reason these examples need a real desktop.
-  `speechSynthesis.getVoices()` is empty on a headless runner, and a snapshot
-  claiming a desktop Chrome with no voices describes a browser that cannot
-  exist. It reproduces exactly: stub `getVoices` to return `[]` on a machine
-  that works, and the very next ledger request is refused.
-
-  A CI runner cannot be talked into having them. On a GitHub runner, installing
-  `speech-dispatcher`, replacing the confined snap browser with an unconfined
-  Chrome, and giving the daemon a D-Bus session were each tried, and the count
-  stayed at zero through all three. So the examples check up front and exit
-  `NO_VOICES_EXIT_CODE` (5), which the smoke suite reports as SKIP rather than
-  as a failed solve — see [`environment.ts`](environment.ts).
-
-  What they do **not** do is send the counts a desktop would have had.
-  Inventing a reading the page cannot back up is the identity mismatch this
-  channel exists to punish, and it would trade a loud environment problem for
-  a silent `~-1~` somewhere else.
-- **422 `invalid-carrier` on a fast machine** — same code, different cause: the
-  snapshot beat one of the asynchronous readings. Voices are empty for the
-  first few hundred milliseconds of any page, and `ak_bm_tab_id` appears only
-  once the bundle has run. `solver.ts` waits for both, bounded.
+- **422 `invalid-carrier` on a fast machine** — the snapshot beat
+  `ak_bm_tab_id`, which appears only once the bundle has run. `solver.ts` waits
+  for it, bounded. This used to have a second cause — empty
+  `speechSynthesis.getVoices()`, which made the examples desktop-only — and
+  that one is gone: the counts are no longer part of the request, and the
+  server defaults them from the profile. aa.com solves headless with
+  `getVoices` stubbed to `[]`.
 - **422 with any refusal code** — read the `receipt` in the body, not
   `error.message`: the message is the same sentence for every code, while the
   receipt names the input that could not be reconciled. `solver.ts` puts it in

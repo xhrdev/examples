@@ -46,10 +46,11 @@ const SCRIPTS = [
   { headless: true, script: 'src/akamai/sensor/comcast' },
   { script: 'src/akamai/sensor/comcast-lightpanda' },
   { headless: true, script: 'src/akamai/sensor/ca-edd' },
-  // The SBSD channel. `headed` rather than `headless: true` because hilton
-  // refuses a headless Chrome however good the payloads are — the same solve
-  // that lands on round 5 headed sits at `~-1~` past round 30 headless — so it
-  // runs against a virtual display instead (see needsVirtualDisplay).
+  // The SBSD channel. hilton alone is `headed`, and for a target reason
+  // rather than a channel one: it refuses a headless Chrome however good the
+  // payloads are — the same solve that lands on round 5 headed sits at `~-1~`
+  // past round 30 headless — so it runs against a virtual display instead (see
+  // needsVirtualDisplay). aa and aircanada below run headless.
   //
   // Advisory because hilton is the target here most sensitive to the exit
   // address, and that sensitivity is cumulative: one desktop address measured
@@ -63,20 +64,21 @@ const SCRIPTS = [
   // to exercise: the path is discovered from the bundle's UUID `v=`, and if
   // that detection breaks, no ledger is ever requested and both fail loudly.
   //
-  // Both solve end to end locally. On a runner they report SKIP instead: the
-  // SBSD channel needs speech-synthesis voices and a headless runner has none
-  // (see NO_VOICES_EXIT_CODE above), so what runs here is the discovery and
-  // setup path, not a solve. Advisory for the same exit-address reason as
-  // hilton — aa.com in particular serves "Access Denied" to an uninstrumented
-  // browser from an address it has seen too much of, which is what makes its
-  // pass meaningful and also what makes it worth watching before it gates CI.
+  // Both solve end to end, headless included — the ledger request no longer
+  // carries speech-synthesis voice counts, which is what used to make these
+  // desktop-only. Verified against aa.com headless with `getVoices` stubbed to
+  // return [], which is a runner exactly. Advisory for the exit-address reason
+  // hilton has — aa.com in particular serves "Access Denied" to an
+  // uninstrumented browser from an address it has seen too much of, which is
+  // what makes its pass meaningful and also what makes it worth watching
+  // before it gates CI.
   //
   // aircanada is the SBSD-only one: it does not score that document on _abck,
   // so the example runs sensor: 'page' and asserts on the booking page. If it
   // ever starts failing, check whether the property has started gating on the
   // sensor before assuming the SBSD lane broke.
-  { advisory: true, headed: true, script: 'src/akamai/sbsd/aa' },
-  { advisory: true, headed: true, script: 'src/akamai/sbsd/aircanada' },
+  { advisory: true, headless: true, script: 'src/akamai/sbsd/aa' },
+  { advisory: true, headless: true, script: 'src/akamai/sbsd/aircanada' },
 ];
 
 /**
@@ -129,15 +131,8 @@ function runOne({ advisory, headed, headless, script, useEnvProxy }) {
 // is the same reasoning that made grainger-lightpanda advisory.
 const RATE_LIMIT_EXIT_CODE = 3;
 const BANNED_EXIT_CODE = 4;
-// src/akamai/sbsd/environment.ts: the machine has no speech-synthesis voices,
-// so the SBSD channel cannot be exercised here at all. A runner cannot be made
-// to have them — package, unconfined browser and a dbus-spawned daemon were
-// each tried — so this is reported as the environment gap it is rather than as
-// three failing solves.
-const NO_VOICES_EXIT_CODE = 5;
 const NOT_A_REGRESSION = new Map([
   [BANNED_EXIT_CODE, 'BANNED'],
-  [NO_VOICES_EXIT_CODE, 'SKIP (no speech voices on this host)'],
   [RATE_LIMIT_EXIT_CODE, 'RATE LIMITED'],
 ]);
 

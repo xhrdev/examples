@@ -33,10 +33,27 @@
  * ## The ledger is bound to one document
  *
  * The bodies the solver returns are computed from a snapshot of the live page:
- * its HTML, its cookies, its resource timings, its runtime readings. They are
- * not portable. Replaying a ledger against a second document, a second tab or
- * a later load is a mismatch, and the server will not issue one for a snapshot
- * older than five minutes. Generate per document, use in order, discard.
+ * its DOM, its cookies, its tab id. They are not portable. Replaying a ledger
+ * against a second document, a second tab or a later load is a mismatch, and
+ * the server will not issue one for a snapshot older than five minutes.
+ * Generate per document, use in order, discard.
+ *
+ * ## The request is five fields
+ *
+ * It used to be a full realm snapshot — heap, connection, history, resource
+ * timings, a DOM inventory, voice counts, and `Function.prototype.toString`
+ * read through a pristine child realm. None of it is sent any more. The server
+ * derives every one of them from the document and the profile in the same
+ * request, and derives them from the very document it is about to run, so
+ * measuring them here was arriving at the same answer twice.
+ *
+ * One consequence worth knowing: **these examples run headless now.** The
+ * refusal that made them desktop-only was `speechSynthesis.getVoices()`
+ * returning `[]` on a runner, and the counts are no longer part of the
+ * request. Verified against aa.com headless with `getVoices` stubbed to `[]`,
+ * which is a CI runner exactly. `hilton.ts` still needs a headed browser, but
+ * for its own reason — that property refuses headless Chrome whatever the
+ * payloads look like.
  *
  * Rows are a capacity, not a promise: the response carries `expectedCap` rows
  * and the page emits as many carriers as it emits. Running out is a hard stop,
@@ -45,20 +62,17 @@
  * ## Reading this file
  *
  *   attach()          the entry point; installs the router, returns a handle
- *   generateLedger()  snapshots the live page and asks for the ledger
- *   readRealm()       the in-page snapshot, run once per document
+ *   generateLedger()  builds the five-field request and asks for the ledger
+ *   readRealm()       the three readings the request cannot be built without
  *   solveAbck()       the WebSocket lane, relayed through the page's own XHR
  */
 import type { APIResponse, BrowserContext, Page, Route } from 'playwright-core';
 import { WebSocket } from 'undici';
 
 import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
-import { PROFILE, PROFILE_ID } from '#src/profile.js';
+import { PROFILE_ID } from '#src/profile.js';
 import { checkRateLimit } from '#src/rate-limit.js';
 import { solverBaseUrl, solverWsUrl } from '#src/solver-url.js';
-
-/** The request schema this client speaks. The server rejects anything else. */
-const LEDGER_REQUEST_SCHEMA = 'akamai-sbsd-ledger-request/v3';
 
 /** What `attach` hands back. */
 export type AkamaiHandle = {
@@ -148,270 +162,93 @@ type SolverMessage = {
 const log = (msg: string, ...extra: unknown[]): void =>
   console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
 
-/**
- * The page-side globals `readRealm` reads.
- *
- * Declared rather than taken from the DOM lib for one boring reason: this is a
- * Node project, and ESLint's node-builtins rule flags a bare `navigator` or
- * `sessionStorage` as an experimental Node global. Reading them off one
- * explicitly-typed handle keeps the identifiers out of module scope and makes
- * the list of things the snapshot touches readable in one place.
- */
-/* eslint-disable no-unused-vars -- function-type parameters */
-type BrowserRealm = {
-  crypto: {
-    subtle: {
-      digest: (algorithm: string, data: Uint8Array) => Promise<ArrayBuffer>;
-    };
-  };
-  document: Document;
-  history: { length: number };
-  navigator: {
-    connection: {
-      downlink: number;
-      effectiveType: string;
-      rtt: number;
-      saveData: boolean;
-    };
-    deviceMemory?: number;
-    hardwareConcurrency: number;
-    languages: readonly string[];
-  };
-  performance: {
-    memory: {
-      jsHeapSizeLimit: number;
-      totalJSHeapSize: number;
-      usedJSHeapSize: number;
-    };
-  } & Performance;
-  screen: {
-    availHeight: number;
-    availLeft: number;
-    availTop: number;
-    availWidth: number;
-    colorDepth: number;
-    height: number;
-    pixelDepth: number;
-    width: number;
-  };
-  sessionStorage: { getItem: (key: string) => null | string };
-  speechSynthesis: { getVoices: () => Array<{ localService: boolean }> };
-  window: {
-    devicePixelRatio: number;
-    innerHeight: number;
-    innerWidth: number;
-    outerHeight: number;
-    outerWidth: number;
-    screenX: number;
-    screenY: number;
-  };
-};
-/* eslint-enable no-unused-vars */
-
 /** What only the live page can answer. The identity is *not* in here. */
 type RealmSnapshot = {
+  /** `sessionStorage.ak_bm_tab_id`, written by the bundle once it has run. */
+  akBmTabId: null | string;
+  /** `document.cookie` — the JS-visible jar, not the HTTP header. */
   documentCookie: string;
-  resourceEntries: unknown[];
-  runtime: Record<string, unknown>;
-  timeOriginMs: number;
+  /** The live DOM, serialized. Not the served HTML; see `readRealm`. */
+  html: string;
 };
 
 /**
- * The identity the ledger request declares as `profile.overrides`.
+ * Wait for `ak_bm_tab_id` before snapshotting.
  *
- * Declared, not measured — and this is the one thing in this file most likely
- * to be "fixed" into a live read. Do not. Playwright's viewport emulation
- * (`Emulation.setDeviceMetricsOverride`, which `src/akamai/identity.ts`
- * installs) leaves `screen.availLeft` and `screen.availTop` at 0 and
- * `availHeight` equal to `height`. On macOS that is impossible — the menu bar
- * is always there — and a payload built from those readings describes a
- * browser that cannot exist. The symptom is not an error: it is `_abck` at
- * `~-1~` for as many rounds as you are willing to give it.
+ * The bundle writes it shortly after it loads, and it is the one reading the
+ * server cannot default on your behalf: with none supplied it mints a fresh id
+ * per request, so a session that generates more than one ledger describes a
+ * different tab each time while the real page holds one for its lifetime.
  *
- * So this sends the same declared identity `sensor/solver.ts` sends over the
- * session socket, from the same `src/profile.ts`. The two lanes then agree
- * with each other, which is the property that actually matters.
+ * Holding the first carrier is usually enough time on its own; usually is not
+ * always, and on a fast machine the request can leave ~2s in. The wait is
+ * bounded and not fatal — a snapshot without one is still worth sending, and
+ * the server's answer names the reason better than a guess made here would.
  */
-const TELEMETRY_PROFILE = {
-  deviceMemory: PROFILE.deviceMemory,
-  hardwareConcurrency: PROFILE.hardwareConcurrency,
-  languages: PROFILE.languages,
-  screen: PROFILE.screen,
-  timezone: PROFILE.timezone,
-  timezoneOffsetMinutes: PROFILE.timezoneOffsetMinutes,
-};
-
-/**
- * Wait for the realm's asynchronous readings before snapshotting.
- *
- * Two of them are not there the instant the document is:
- *
- *   ak_bm_tab_id  the bundle writes it shortly after it loads, and the server
- *                 refuses a snapshot without one — a document that has not got
- *                 one could not have emitted a carrier. Holding the first
- *                 carrier is usually enough time on its own; usually is not
- *                 always, and on a fast machine the request can leave ~2s in.
- *   voices        `speechSynthesis.getVoices()` is empty for the first few
- *                 hundred milliseconds of any page, on every platform. A macOS
- *                 Chrome reports 180 local voices half a second after load and
- *                 none at all before that, and a snapshot claiming a macOS
- *                 Chrome with no voices describes a browser that cannot exist
- *                 — the same class of mismatch as the screen metrics.
- *
- * Both waits are bounded and neither is fatal: the server's refusal names the
- * reason better than a guess made here would. Note what this deliberately does
- * not do — a machine with no speech engine installed genuinely has no voices,
- * and no amount of waiting invents them. The answer there is to install one,
- * not to send a number the page cannot back up.
- */
-const waitForRealmReadings = async (page: Page): Promise<void> => {
-  const settle = async (
-    predicate: () => boolean,
-    timeout: number
-  ): Promise<void> => {
-    try {
-      await page.waitForFunction(predicate, { polling: 100, timeout });
-    } catch {
-      // Bounded wait elapsed. Send it and let it be judged on its merits.
-    }
-  };
-
-  await settle(() => {
-    /* eslint-disable n/no-unsupported-features/node-builtins */
-    /* eslint-disable no-unused-vars -- function-type parameters */
-    const session = (
-      globalThis as unknown as {
-        sessionStorage: { getItem: (key: string) => null | string };
-      }
-    ).sessionStorage;
-    /* eslint-enable no-unused-vars */
-    /* eslint-enable n/no-unsupported-features/node-builtins */
-    return typeof session.getItem('ak_bm_tab_id') === 'string';
-  }, 10_000);
-
-  await settle(
-    () =>
-      (
-        globalThis as unknown as {
-          speechSynthesis: { getVoices: () => unknown[] };
-        }
-      ).speechSynthesis.getVoices().length > 0,
-    // Ten seconds, not three: on a machine where a speech daemon has to be
-    // spawned on first use the list can take several seconds to arrive, and
-    // the cost of waiting is paid once per document.
-    10_000
-  );
-};
-
-/**
- * Everything the ledger request needs that only the page can answer.
- *
- * Runs as one `page.evaluate` because it has to be one instant: the resource
- * timings, the heap readings and the DOM inventory are compared against each
- * other, and reading them across three round-trips describes a page that never
- * existed.
- */
-const readRealm = (page: Page): Promise<RealmSnapshot> =>
-  page.evaluate(async () => {
-    const realm = globalThis as unknown as BrowserRealm;
-    const { crypto, document, history, performance, speechSynthesis } = realm;
-    // This body runs in the browser, not in Node, so the node-builtins rule
-    // is reading these two as Node's own experimental globals of the same
-    // name. They are the DOM's, and they have been there for twenty years.
-    /* eslint-disable n/no-unsupported-features/node-builtins */
-    const nav = realm.navigator;
-    const session = realm.sessionStorage;
-    /* eslint-enable n/no-unsupported-features/node-builtins */
-    const { memory } = performance;
-    const { connection } = nav;
-    const descriptor = Object.getOwnPropertyDescriptor(
-      Function.prototype,
-      'toString'
-    ) as { value: () => string } & PropertyDescriptor;
-    const toString = descriptor.value;
-
-    // Read Function.prototype.toString's source through a pristine realm, so a
-    // wrapper on this page cannot describe itself as native. A child iframe
-    // gets its own copy of the intrinsics; asking it to stringify *our*
-    // toString is the one reading a patched page cannot forge.
-    const probe = document.createElement('iframe');
-    probe.setAttribute('sandbox', 'allow-same-origin');
-    probe.style.display = 'none';
-    document.body.appendChild(probe);
-    const source = (
-      probe.contentWindow as typeof globalThis & Window
-    ).Function.prototype.toString.call(toString);
-    probe.remove();
-
-    const digest = await crypto.subtle.digest(
-      'SHA-256',
-      new TextEncoder().encode(source)
-    );
-    const voices = speechSynthesis.getVoices();
-
-    return {
-      documentCookie: document.cookie,
-      resourceEntries: performance.getEntriesByType('resource').map((e) => ({
-        duration: e.duration,
-        initiatorType: (e as PerformanceResourceTiming).initiatorType,
-        name: e.name,
-        startTime: e.startTime,
-      })),
-      runtime: {
-        connectionInfo: {
-          downlink: connection.downlink,
-          effectiveType: connection.effectiveType,
-          rtt: connection.rtt,
-          saveData: connection.saveData,
-        },
-        domResourceInventory: {
-          capturedAtPerformanceMs: performance.now(),
-          imgSrc: [...document.querySelectorAll('img[src]')].map((e) =>
-            e.getAttribute('src')
-          ),
-          linkHref: [...document.querySelectorAll('link[href]')].map((e) =>
-            e.getAttribute('href')
-          ),
-          scriptSrc: [...document.querySelectorAll('script[src]')].map((e) =>
-            e.getAttribute('src')
-          ),
-        },
-        functionToString: {
-          descriptor: {
-            configurable: descriptor.configurable === true,
-            enumerable: descriptor.enumerable === true,
-            writable: descriptor.writable === true,
-          },
-          length: toString.length,
-          name: toString.name,
-          prototypeKind:
-            (toString as { prototype?: unknown }).prototype === undefined
-              ? 'undefined'
-              : 'defined',
-          sourceClass: /^function\s+.*\(\)\s*\{\s*\[native code\]\s*\}$/u.test(
-            source.replace(/\s+/gu, ' ').trim()
-          )
-            ? 'native'
-            : 'wrapped',
-          sourceSha256: [...new Uint8Array(digest)]
-            .map((b) => b.toString(16).padStart(2, '0'))
-            .join(''),
-        },
-        historyLength: history.length,
-        memoryInfo: {
-          jsHeapSizeLimit: memory.jsHeapSizeLimit,
-          totalJSHeapSize: memory.totalJSHeapSize,
-          usedJSHeapSize: memory.usedJSHeapSize,
-        },
-        sessionStorage: { akBmTabId: session.getItem('ak_bm_tab_id') },
-        speechSynthesisVoices: {
-          localCount: voices.filter((v) => v.localService).length,
-          totalCount: voices.length,
-        },
+const waitForTabId = async (page: Page): Promise<void> => {
+  try {
+    await page.waitForFunction(
+      () => {
+        /* eslint-disable n/no-unsupported-features/node-builtins */
+        /* eslint-disable no-unused-vars -- function-type parameters */
+        const session = (
+          globalThis as unknown as {
+            sessionStorage: { getItem: (key: string) => null | string };
+          }
+        ).sessionStorage;
+        /* eslint-enable no-unused-vars */
+        /* eslint-enable n/no-unsupported-features/node-builtins */
+        return typeof session.getItem('ak_bm_tab_id') === 'string';
       },
-      timeOriginMs: performance.timeOrigin,
-    };
-  }) as Promise<RealmSnapshot>;
+      { polling: 100, timeout: 10_000 }
+    );
+  } catch {
+    // Bounded wait elapsed. Send it and let it be judged on its merits.
+  }
+};
+
+/**
+ * The three readings the ledger request cannot be built without.
+ *
+ * This used to be a ~90-line `page.evaluate` that measured the whole realm:
+ * heap, connection, history, resource timings, a DOM inventory, and
+ * `Function.prototype.toString` stringified through a pristine child realm.
+ * None of it is sent any more. The server derives every one of those from the
+ * document and the profile in the same request, and derives them from the very
+ * document it is about to run — so measuring them here was work done twice to
+ * arrive at the same answer.
+ *
+ * ⚠ `page.content()`, NOT the served HTML. With no `domResourceInventory` in
+ * the request the server extracts one from `document.html`, so that field has
+ * to be the DOM the page is actually running. The bundle injects into the
+ * document after it is served; a snapshot of the served bytes would describe a
+ * page whose scripts are missing. `page.content()` serializes the live DOM out
+ * of the browser and does not re-fetch anything, which matters: `route.fetch()`
+ * replays from Playwright's own context, and Akamai answers a replayed
+ * *navigation* with a 403 reference-code page.
+ */
+const readRealm = async (page: Page): Promise<RealmSnapshot> => {
+  const [state, html] = await Promise.all([
+    page.evaluate(() => {
+      /* eslint-disable n/no-unsupported-features/node-builtins -- these are
+         the DOM's globals; this body runs in the page, not in Node. */
+      /* eslint-disable no-unused-vars -- function-type parameters */
+      const session = (
+        globalThis as unknown as {
+          sessionStorage: { getItem: (key: string) => null | string };
+        }
+      ).sessionStorage;
+      /* eslint-enable no-unused-vars */
+      /* eslint-enable n/no-unsupported-features/node-builtins */
+      return {
+        akBmTabId: session.getItem('ak_bm_tab_id'),
+        documentCookie: document.cookie,
+      };
+    }),
+    page.content(),
+  ]);
+  return { ...state, html };
+};
 
 export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
   const { host, origin, sensor = 'solver', solverApiKey } = opts;
@@ -422,8 +259,6 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
   ).href;
   const sessionUrl = solverWsUrl(host, '/akamai/session');
 
-  /** The document as served, read off the response — never re-fetched. */
-  let servedHtml = '';
   /** The raw `src` attribute, `?v=` included: it seeds the bundle's codec. */
   let sbsdSrc: null | string = null;
   let sbsdBody: null | string = null;
@@ -466,38 +301,31 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     );
 
   /**
-   * The document is READ, never re-fetched.
-   *
-   * `route.fetch()` replays a request from Playwright's own context, whose TLS
-   * fingerprint is not the browser's. Akamai answers a replayed *navigation*
-   * with a 403 "Page Reference Code" page, which carries none of the bundles
-   * the rest of this depends on. Scripts survive that replay; navigations do
-   * not — so the HTML is taken from the response the browser itself received.
+   * A new main-frame document is a new snapshot, so the ledger issued for the
+   * last one is retired here rather than carried across the bootstrap's
+   * self-reload. The rows are computed from one document's HTML and cookies;
+   * feeding leftovers to the carriers of the page that replaced it describes a
+   * visitor that was never on either.
    */
   page.on('response', (response) => {
     const request = response.request();
     if (request.resourceType() !== 'document') return;
     if (request.frame() !== page.mainFrame()) return;
-    // A new main-frame document is a new snapshot, so the ledger issued for
-    // the last one is retired here rather than carried across the bootstrap's
-    // self-reload. The rows are computed from a document's HTML, cookies,
-    // timings and runtime readings; feeding leftovers to the carriers of the
-    // page that replaced it describes a visitor that was never on either.
     ledger = null;
     cursor = 0;
-    void response.text().then(
-      (text) => {
-        servedHtml = text;
-      },
-      () => {
-        /* a redirect or an aborted navigation has no body to read */
-      }
-    );
   });
 
-  /** One POST, `expectedCap` rows, for the document that is live right now. */
+  /**
+   * One POST, `expectedCap` rows, for the document that is live right now.
+   *
+   * Five fields. Everything else the endpoint accepts — `schema`, `epochMs`,
+   * `resourceEntries`, `profile.chromeFullVersion`, `profile.overrides` and
+   * every member of `document.runtime` except the tab id — is optional, and
+   * the default is computed from this same document and profile. Sending them
+   * measured is not more honest, it is the same answer arrived at twice.
+   */
   async function generateLedger(): Promise<LedgerRow[]> {
-    await waitForRealmReadings(page);
+    await waitForTabId(page);
     const realm = await readRealm(page);
     const response = await fetch(ledgerUrl, {
       body: JSON.stringify({
@@ -507,18 +335,11 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
           // header. The distinction matters — the httpOnly cookies in the jar
           // are deliberately not part of what the page can see.
           cookieHeader: realm.documentCookie,
-          epochMs: Math.round(realm.timeOriginMs),
-          html: servedHtml,
-          resourceEntries: realm.resourceEntries,
-          runtime: realm.runtime,
+          html: realm.html,
+          runtime: { sessionStorage: { akBmTabId: realm.akBmTabId } },
           url: page.url(),
         },
-        profile: {
-          chromeFullVersion: PROFILE.chromeFullVersion,
-          id: PROFILE_ID,
-          overrides: TELEMETRY_PROFILE,
-        },
-        schema: LEDGER_REQUEST_SCHEMA,
+        profile: { id: PROFILE_ID },
       }),
       headers: {
         accept: 'application/json',
@@ -531,25 +352,18 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     checkRateLimit(response.status, response.headers);
     const ledger = (await response.json()) as LedgerResponse;
     if (!ledger.complete) {
-      // The refusal itself says almost nothing: `error.message` is one generic
-      // sentence for every code and `receipt` is null on this path. So the
-      // readings most likely to be at fault are reported from here instead —
-      // they are the ones that differ between a desktop and a CI runner, and
-      // without them a refusal in CI is unactionable.
-      const voices = realm.runtime['speechSynthesisVoices'];
-      const session = realm.runtime['sessionStorage'];
-      // The receipt is the useful half of a refusal: `error.message` is the
-      // same sentence for every code, while the receipt names the input that
-      // could not be reconciled. Without it a CI failure is unactionable.
+      // The refusal itself says little: `error.message` is one generic
+      // sentence for every code and `receipt` is null on the common path. So
+      // the inputs are reported alongside it — with the payload this small,
+      // the four of them are the whole request.
       throw new Error(
         `SBSD ledger refused (${response.status}): ` +
           `${ledger.error?.code ?? 'unknown'} — ` +
           `${ledger.error?.message ?? ''} ` +
           `receipt=${JSON.stringify(ledger.receipt ?? null).slice(0, 400)} ` +
-          `voices=${JSON.stringify(voices)} ` +
-          `session=${JSON.stringify(session)} ` +
-          `resourceEntries=${realm.resourceEntries.length} ` +
-          `html=${servedHtml.length}b cookie=${realm.documentCookie.length}b`
+          `akBmTabId=${JSON.stringify(realm.akBmTabId)} ` +
+          `profile=${PROFILE_ID} ` +
+          `html=${realm.html.length}b cookie=${realm.documentCookie.length}b`
       );
     }
     log(

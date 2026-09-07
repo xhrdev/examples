@@ -12,7 +12,6 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 import { pinSession } from '#src/proxy.js';
-import { NO_VOICES_EXIT_CODE } from '#src/akamai/sbsd/environment.js';
 import { RATE_LIMIT_EXIT_CODE } from '#src/rate-limit.js';
 import { BANNED_EXIT_CODE } from '#src/datadome/ban.js';
 
@@ -178,7 +177,6 @@ const results = {
   denied: 0,
   error: 0,
   rateLimited: 0,
-  skipped: 0,
   success: 0,
 };
 
@@ -197,13 +195,6 @@ let rateLimited = false;
  * to measure until it changes.
  */
 let banned = false;
-
-/**
- * Set the moment any iteration exits with NO_VOICES_EXIT_CODE. Same reasoning
- * again: the script has declared this machine cannot run it, and repeating the
- * measurement on the same machine cannot produce a different answer.
- */
-let skipped = false;
 
 function recordResult(i: number, code: number, elapsed: string): void {
   results.completed++;
@@ -224,12 +215,6 @@ function recordResult(i: number, code: number, elapsed: string): void {
     status = 'BANNED';
     results.banned++;
     banned = true;
-  } else if (code === NO_VOICES_EXIT_CODE) {
-    // Not an error: the script checked a precondition of the channel and this
-    // machine does not meet it. Nothing was attempted, so nothing failed.
-    status = 'SKIPPED (environment)';
-    results.skipped++;
-    skipped = true;
   } else {
     status = `ERROR (exit=${code})`;
     results.error++;
@@ -242,7 +227,7 @@ function recordResult(i: number, code: number, elapsed: string): void {
 
 if (CONCURRENCY <= 1) {
   for (let i = 0; i < ITERATIONS; i++) {
-    if (rateLimited || banned || skipped) break;
+    if (rateLimited || banned) break;
     if (!QUIET) console.log(`[${i + 1}/${ITERATIONS}] Starting...`);
     const { code, elapsed } = await runIteration(i);
     recordResult(i, code, elapsed);
@@ -252,7 +237,7 @@ if (CONCURRENCY <= 1) {
 
   async function worker(): Promise<void> {
     while (nextIndex < ITERATIONS) {
-      if (rateLimited || skipped) return;
+      if (rateLimited) return;
       const i = nextIndex++;
       if (!QUIET) console.log(`  Starting #${i + 1}...`);
       const { code, elapsed } = await runIteration(i);
@@ -301,15 +286,6 @@ if (results.rateLimited > 0) {
   );
 }
 
-if (results.skipped > 0) {
-  console.log(
-    `\n  Skipped after ${results.completed}/${total} iterations: this machine` +
-      ' does not meet a precondition of the channel under test. See the' +
-      ' script output above for which one.'
-  );
-}
-
-if (results.skipped > 0) process.exit(NO_VOICES_EXIT_CODE);
 if (results.rateLimited > 0) process.exit(RATE_LIMIT_EXIT_CODE);
 if (results.banned > 0) process.exit(BANNED_EXIT_CODE);
 process.exit(results.denied > 0 || results.error > 0 ? 1 : 0);

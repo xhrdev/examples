@@ -19,20 +19,19 @@
  * served as "Access Denied" to an ordinary browser, so reaching the form at
  * all is the result; an unsolved run does not get a partial version of it.
  *
- * Verified end to end: `_abck` accepted on round 6, and the search form
- * behind it. The control that makes that mean something is that aa.com serves
- * this same URL as "Access Denied" to an uninstrumented Chrome from the same
- * machine, minutes either side of the run.
+ * Verified end to end headless: `_abck` accepted on round 5, and the search
+ * form behind it. The control that makes that mean something is that aa.com
+ * serves this same URL as "Access Denied" to an uninstrumented Chrome from the
+ * same machine, minutes either side of the run.
+ *
+ * Also verified with `speechSynthesis.getVoices` stubbed to return `[]`, which
+ * is a headless CI runner exactly. That used to be the refusal that made this
+ * channel desktop-only; the counts are no longer part of the ledger request.
  */
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';
 
 import { applyIdentity, USER_AGENT, VIEWPORT } from '#src/akamai/identity.js';
-import {
-  NO_VOICES_EXIT_CODE,
-  NoVoicesError,
-  requireVoices,
-} from '#src/akamai/sbsd/environment.js';
 import { attach } from '#src/akamai/sbsd/solver.js';
 import { PROFILE } from '#src/profile.js';
 import { toLaunchProxy } from '#src/proxy.js';
@@ -148,19 +147,6 @@ process.on('unhandledRejection', (reason) => {
 const cdp = await context.newCDPSession(page);
 await applyIdentity(cdp);
 
-// Checked before anything is attempted: an environment without speech voices
-// cannot produce a ledger the sandbox will accept, and a run that discovers
-// that at the refusal looks like a failed solve. See sbsd/environment.ts.
-try {
-  await page.goto('about:blank');
-  await requireVoices(page);
-} catch (e) {
-  if (e instanceof NoVoicesError) {
-    log(`SKIP: ${e.message}`);
-    await cleanup(NO_VOICES_EXIT_CODE);
-  } else throw e;
-}
-
 // Installed before the first navigation: the SBSD carrier fires during the
 // first document, and a router attached afterwards would miss it.
 const akamai = attach(page, {
@@ -215,10 +201,7 @@ try {
   log(`RESULT: SUCCESS - Akamai solved, reached "${title}"`);
   await cleanup(0);
 } catch (e) {
-  if (e instanceof NoVoicesError) {
-    log(`SKIP: ${e.message}`);
-    await cleanup(NO_VOICES_EXIT_CODE);
-  } else if (e instanceof RateLimitError) {
+  if (e instanceof RateLimitError) {
     reportRateLimit(e);
     await cleanup(RATE_LIMIT_EXIT_CODE);
   } else if (/access denied/iu.test(await page.content().catch(() => ''))) {
