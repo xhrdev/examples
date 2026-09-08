@@ -58,7 +58,7 @@
     "https-proxy-agent": "9.1.0",
     "playwright-core": "1.63.0",
     "tough-cookie": "6.0.2",
-    "undici": "8.10.1"
+    "undici": "8.10.2"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.2",
