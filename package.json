@@ -24,6 +24,7 @@
     "test:unit": "node --test",
     "mcp:smoke": "node --env-file=.env src/mcp/smoke.ts",
     "mcp:grainger": "node --env-file=.env src/mcp/grainger.ts",
+    "mcp:aircanada": "node --env-file=.env src/mcp/aircanada.ts",
     "emit:profile": "node dev-resources/emit-profile.mjs",
     "grainger": "node --env-file=.env src/datadome/grainger-undici.ts",
     "grainger:axios": "node --env-file=.env src/datadome/grainger-axios.ts",

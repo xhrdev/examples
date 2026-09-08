@@ -198,6 +198,7 @@ real targets:
 npm run mcp:smoke      # protocol, tool list, and the caller headers
 npm run mcp:grainger   # a full DataDome clearance flow through the tool
 npm run mcp:grainger -- --url=https://www.idealista.com/
+npm run mcp:aircanada  # a full Akamai SBSD flow through the tool, no browser
 ```
 
 `mcp:smoke` needs no configuration: with no headers the hosted server uses the
@@ -220,16 +221,43 @@ cannot fetch the challenge document itself — and the one fetch the server does
 make on your behalf is that document, which is not what DataDome binds a
 cookie to. Your submission is, and this script sends it, through `proxy=`.
 
-### akamai is not on the hosted server
+`mcp:aircanada` is the Akamai [SBSD](src/akamai/sbsd/README.md) lane with **no
+browser anywhere in it**. The `sbsd/` examples drive the channel from
+Playwright, because the rows have to reach the page's own carrier POSTs; here
+this process fetches the document, the tool answers with the ledger, and this
+process sends the three rows itself. Same division of labour as
+`mcp:grainger` — we compute, you send — which is why SBSD is on the hosted
+server and the `_abck` sensor is not.
 
-`akamai_solve` is not among its tools, and this is a property of Akamai rather
-than an unfinished port. An `_abck` solve has to be submitted by a real
-browser — the solver computes the sensor payloads and Chrome relays each one,
-so the requests carry a genuine TLS fingerprint — and what comes back is bound
-to the address that earned it. A server solving in someone else's cloud
-satisfies neither half.
+Its one catch is the transport, and it is not an SBSD catch: a protected
+property refuses a client whose TLS fingerprint is your HTTP library's, often
+with a `403` before any bundle is served. Headers move that line further than
+you would expect — `www.aircanada.com` answers a bare `fetch` with an Access
+Denied page and the same request carrying `navigationHeaders()` with a bundle —
+but where they are not enough, that is the problem to fix first, on any
+channel. The script reports a refused document as `skipped` rather than as a
+solve failure, because they are different problems.
 
-For Akamai, drive the browser bridge directly, from the machine doing the
+### the akamai `_abck` sensor is not on the hosted server
+
+There is no sensor solve among its tools, and that is a property of the channel
+rather than an unfinished port. The lane that works is a browser bridge
+(`WS /akamai/session`): a socket held across rounds, with Chrome relaying each
+sensor submission on its own connection, and what comes back is bound to the
+address that earned it. A stateless function in someone else's cloud satisfies
+none of that.
+
+The two browserless doors were both tried and both are shut. `POST
+/akamai/solve` with `submit: true` needs egress the solver box does not have —
+given a live ISP proxy it sat at `sensors_sent: 0` until the deadline, with and
+without `script` supplied. With `submit: false` it returns the sensor's first
+bootstrap `GET /_bm/get_params`, which is round one of a conversation with
+nowhere to go. And a fetch-driven session against the real socket ran 18 rounds
+with correctly sized payloads without `_abck` ever leaving `~-1~`, while a
+browser bridge reached `~0~` at round 5 on the same target and address minutes
+earlier. The blocker is who submits.
+
+So for the sensor lane, drive the bridge directly from the machine doing the
 browsing: [`src/akamai/sensor/comcast.ts`](src/akamai/sensor/comcast.ts) and
 the [walkthrough](src/akamai/sensor/README.md) beside it.
 

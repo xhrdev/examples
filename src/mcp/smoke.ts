@@ -17,6 +17,7 @@ const apiKey = process.env['api_key'];
 
 const expectedTools = [
   'akamai_queue_metrics',
+  'akamai_sbsd_solve',
   'datadome_solve',
   'health_check',
   'solver_info',
