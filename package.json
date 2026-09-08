@@ -56,7 +56,7 @@
     "axios-cookiejar-support": "7.0.0",
     "http-cookie-agent": "8.0.0",
     "https-proxy-agent": "9.1.0",
-    "playwright-core": "1.62.1",
+    "playwright-core": "1.63.0",
     "tough-cookie": "6.0.2",
     "undici": "8.10.1"
   },
