@@ -14,16 +14,23 @@
  * reaching `~0~` says the sensor was accepted; landing on a results page says
  * the site actually served us the thing behind the challenge.
  *
- * Two things this target needs, neither of them optional:
+ * ## headless works here now
  *
- *   headed        `--headless` does not work here. hilton refuses a headless
- *                 Chrome whatever the payloads look like, so a run that lands
- *                 on round 5 headed sits at `~-1~` past round 30 headless.
- *                 This is also why the example is not in the CI smoke suite.
- *   a fresh exit  `proxy=` is optional, but the address matters and it wears
- *                 out. One desktop address measured 2/4 direct, then 0/2 after
- *                 another handful of runs; an ISP proxy held 4/4 across the
- *                 same window. Suspect the exit before the payloads.
+ * This example used to say `--headless` did not work — that a run landing on
+ * round 5 headed sat at `~-1~` past round 30 headless, and that hilton refused
+ * a headless Chrome whatever the payloads looked like. Re-measured on
+ * 2026-09-08 after the ledger request was cut to five fields: three headless
+ * runs, `_abck` accepted on round 5 every time, results page reached every
+ * time. Whether the payload change is what moved it or hilton's own scoring
+ * changed is not established here, only that the old claim no longer holds.
+ *
+ * ## the exit address still matters, and it wears out
+ *
+ * `proxy=` is optional, but the address is the variable to suspect first. One
+ * desktop address measured 2/4 direct, then 0/2 after another handful of runs;
+ * an ISP proxy held 4/4 across the same window. Datacentre space is worse
+ * again — see `sbsd/aa.ts` for what that looks like measured across four
+ * providers. Suspect the exit before the payloads.
  */
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';

@@ -46,11 +46,10 @@ const SCRIPTS = [
   { headless: true, script: 'src/akamai/sensor/comcast' },
   { script: 'src/akamai/sensor/comcast-lightpanda' },
   { headless: true, script: 'src/akamai/sensor/ca-edd' },
-  // The SBSD channel. hilton alone is `headed`, and for a target reason
-  // rather than a channel one: it refuses a headless Chrome however good the
-  // payloads are — the same solve that lands on round 5 headed sits at `~-1~`
-  // past round 30 headless — so it runs against a virtual display instead (see
-  // needsVirtualDisplay). aa and aircanada below run headless.
+  // The SBSD channel, and all three run headless as of 2026-09-08. hilton was
+  // the last headed entry — it used to refuse a headless Chrome outright — and
+  // three headless runs now land `_abck` on round 5 and reach the results
+  // page. Nothing here needs a virtual display any more.
   //
   // Advisory because hilton is the target here most sensitive to the exit
   // address, and that sensitivity is cumulative: one desktop address measured
@@ -58,7 +57,7 @@ const SCRIPTS = [
   // 4/4 across the same window. CI gets a fresh address per job, which is the
   // good end of that range — so this may well be steady. Promote it to blocking
   // once a run of green ones says so, rather than assuming either way.
-  { advisory: true, headed: true, script: 'src/akamai/sbsd/hilton' },
+  { advisory: true, headless: true, script: 'src/akamai/sbsd/hilton' },
   // The same channel on two properties that serve the bundle from an
   // obfuscated path rather than /.well-known/sbsd, which is what these are here
   // to exercise: the path is discovered from the bundle's UUID `v=`, and if
@@ -83,6 +82,13 @@ const SCRIPTS = [
 
 /**
  * Whether a headed script has to be wrapped in a virtual display.
+ *
+ * ⚠ NOTHING IN `SCRIPTS` IS HEADED ANY MORE, so this does not fire and the
+ * workflows no longer install xvfb. The mechanism stays because "this target
+ * refuses a headless Chrome" is a real thing a target does — hilton did it
+ * until 2026-09-08 — and adding such an entry back means restoring the
+ * `Install xvfb` step alongside it, or the run dies at launch with
+ * "Missing X server or $DISPLAY", which reads as a failed solve.
  *
  * CI runners have no X display, so a headed Chrome dies at launch with
  * "Missing X server or $DISPLAY" — which reads as a failed solve rather than a
