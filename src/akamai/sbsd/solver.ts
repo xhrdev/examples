@@ -66,7 +66,7 @@
  *   readRealm()       the three readings the request cannot be built without
  *   solveAbck()       the WebSocket lane, relayed through the page's own XHR
  */
-import type { APIResponse, BrowserContext, Page, Route } from 'playwright-core';
+import type { BrowserContext, Page, Route } from 'playwright-core';
 import { WebSocket } from 'undici';
 
 import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
@@ -94,6 +94,26 @@ export type AkamaiHandle = {
 
 export type AttachOptions = {
   /**
+   * Fetch intercepted script requests with this instead of Playwright's
+   * `route.fetch`. Only needed for browsers where `route.fetch` is
+   * unreliable — `src/mitm.ts` exposes exactly this shape, and
+   * `src/akamai/sbsd/aa-lightpanda.ts` and `aircanada-lightpanda.ts` pass it,
+   * for the same reason
+   * `src/akamai/sensor/comcast-lightpanda.ts` does: Playwright's route.fetch
+   * never returns against Lightpanda, because it runs in Playwright's request
+   * context, which syncs cookies with the browser, and once that stops
+   * answering every later route.fetch waits out its timeout.
+   */
+  fetchResponse?: (
+    // eslint-disable-next-line no-unused-vars -- function-type parameters
+    request: {
+      body?: string;
+      headers: Record<string, string>;
+      method: string;
+      url: string;
+    }
+  ) => Promise<Fetched>;
+  /**
    * `host=` from .env, in either form `src/solver-url.ts` accepts. Both the
    * ledger POST and the session socket are derived from it, so a TLS solver
    * gets `https://` and `wss://` together.
@@ -104,6 +124,12 @@ export type AttachOptions = {
    * this origin are intercepted; third-party assets are left alone.
    */
   origin: string;
+  /**
+   * Read the live DOM instead of `page.content()`. Needed on Lightpanda,
+   * where `page.content()`/`frame.content()` never resolve at all — use
+   * `outerHtml()` from `src/lightpanda.ts` there.
+   */
+  readHtml?: () => Promise<string>;
   /**
    * Pin the SBSD path instead of discovering it.
    *
@@ -132,6 +158,15 @@ export type AttachOptions = {
    * handshake with a 401 rather than anything that looks Akamai-related.
    */
   solverApiKey?: string;
+};
+
+/** A response, however it was fetched. */
+type Fetched = {
+  body: string;
+  headers: Record<string, string>;
+  /** Each `set-cookie` separately; a joined string cannot be parsed back. */
+  setCookie?: string[];
+  status: number;
 };
 
 type LedgerResponse = {
@@ -226,8 +261,14 @@ const waitForTabId = async (page: Page): Promise<void> => {
  * of the browser and does not re-fetch anything, which matters: `route.fetch()`
  * replays from Playwright's own context, and Akamai answers a replayed
  * *navigation* with a 403 reference-code page.
+ *
+ * `readHtml` stands in for `page.content()` on browsers where it never
+ * resolves — see `AttachOptions.readHtml`.
  */
-const readRealm = async (page: Page): Promise<RealmSnapshot> => {
+const readRealm = async (
+  page: Page,
+  readHtml: () => Promise<string>
+): Promise<RealmSnapshot> => {
   const [state, html] = await Promise.all([
     page.evaluate(() => {
       /* eslint-disable n/no-unsupported-features/node-builtins -- these are
@@ -245,13 +286,20 @@ const readRealm = async (page: Page): Promise<RealmSnapshot> => {
         documentCookie: document.cookie,
       };
     }),
-    page.content(),
+    readHtml(),
   ]);
   return { ...state, html };
 };
 
 export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
-  const { host, origin, sensor = 'solver', solverApiKey } = opts;
+  const {
+    fetchResponse,
+    host,
+    origin,
+    readHtml = () => page.content(),
+    sensor = 'solver',
+    solverApiKey,
+  } = opts;
   const context: BrowserContext = page.context();
   const ledgerUrl = new URL(
     '/akamai/sbsd/generate-session',
@@ -326,7 +374,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
    */
   async function generateLedger(): Promise<LedgerRow[]> {
     await waitForTabId(page);
-    const realm = await readRealm(page);
+    const realm = await readRealm(page, readHtml);
     const response = await fetch(ledgerUrl, {
       body: JSON.stringify({
         bundle: { scriptSrc: sbsdSrc, source: sbsdBody },
@@ -373,6 +421,78 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
   }
 
   /**
+   * Put a response's cookies in the browser's jar ourselves.
+   *
+   * `route.fulfill` takes one header map, so it can carry exactly one
+   * `set-cookie` — a script response that sets more than one loses the rest.
+   * Playwright applies cookies itself when `route.fetch` did the fetching, so
+   * this only runs on the `fetchResponse` path (see `fetchScript` below);
+   * mirrors `applyCookies` in `src/akamai/sensor/solver.ts`.
+   */
+  const applyCookies = async (
+    url: string,
+    setCookie: string[] | undefined
+  ): Promise<void> => {
+    if (!setCookie || setCookie.length === 0) return;
+    const { hostname } = new URL(url);
+    const cookies = setCookie.flatMap((header) => {
+      const [pair, ...attributes] = header.split(';');
+      const index = pair?.indexOf('=') ?? -1;
+      if (!pair || index < 1) return [];
+      const attribute = (name: string): string | undefined =>
+        attributes
+          .map((a) => a.trim())
+          .find((a) => a.toLowerCase().startsWith(`${name}=`))
+          ?.slice(name.length + 1);
+      const expires = attribute('expires');
+      const maxAge = attribute('max-age');
+      const seconds = maxAge === undefined ? NaN : Number(maxAge);
+      const expiresAt = Number.isFinite(seconds)
+        ? Date.now() / 1000 + seconds
+        : expires
+          ? Date.parse(expires) / 1000
+          : NaN;
+      return [
+        {
+          domain: attribute('domain') ?? hostname,
+          ...(Number.isFinite(expiresAt) ? { expires: expiresAt } : {}),
+          httpOnly: attributes.some(
+            (a) => a.trim().toLowerCase() === 'httponly'
+          ),
+          name: pair.slice(0, index).trim(),
+          path: attribute('path') ?? '/',
+          secure: attributes.some((a) => a.trim().toLowerCase() === 'secure'),
+          value: pair.slice(index + 1).trim(),
+        },
+      ];
+    });
+    if (cookies.length > 0) await context.addCookies(cookies);
+  };
+
+  /**
+   * Fetch an intercepted script request with `fetchResponse` when given,
+   * falling back to `route.fetch` otherwise — see `AttachOptions.fetchResponse`.
+   */
+  const fetchScript = async (route: Route): Promise<Fetched> => {
+    if (fetchResponse) {
+      const req = route.request();
+      const postData = req.postData();
+      return fetchResponse({
+        ...(postData === null ? {} : { body: postData }),
+        headers: await req.allHeaders(),
+        method: req.method(),
+        url: req.url(),
+      });
+    }
+    const resp = await route.fetch();
+    return {
+      body: await resp.text(),
+      headers: resp.headers(),
+      status: resp.status(),
+    };
+  };
+
+  /**
    * Give the page a body we have already decoded.
    *
    * Two headers have to go. `content-encoding` still says `br`, and handing
@@ -380,18 +500,19 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
    * the response dies and the site renders its own error page. `set-cookie`
    * goes because `fulfill` takes ONE header map: a response setting four
    * cookies would keep one and silently lose three, and `route.fetch` has
-   * already put them all in the jar itself.
+   * already put them all in the jar itself (the `fetchResponse` path puts
+   * them there via `applyCookies` instead, at the call site).
    */
   const handBack = async (
     route: Route,
-    response: APIResponse,
+    response: Fetched,
     body: string
   ): Promise<void> => {
-    const headers = { ...response.headers() };
+    const headers = { ...response.headers };
     delete headers['content-encoding'];
     delete headers['content-length'];
     delete headers['set-cookie'];
-    await route.fulfill({ body, headers, status: response.status() });
+    await route.fulfill({ body, headers, status: response.status });
   };
 
   void page.route(`${origin}/**`, async (route) => {
@@ -437,8 +558,9 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     }
 
     if (request.resourceType() === 'script') {
-      const response = await route.fetch();
-      const body = await response.text();
+      const response = await fetchScript(route);
+      const body = response.body;
+      if (fetchResponse) await applyCookies(request.url(), response.setCookie);
       if (isSbsdBundle(url)) {
         sbsdPath = url.pathname;
         sbsdBody = body;
