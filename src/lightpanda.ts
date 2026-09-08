@@ -206,9 +206,20 @@ export const start = async (options: StartOptions = {}): Promise<Session> => {
           ]
         : []),
       ...(blockUrls.length > 0 ? ['--block-urls', blockUrls.join(',')] : []),
+      ...(process.env['LIGHTPANDA_DEBUG'] === '1'
+        ? ['--log-level', 'debug']
+        : []),
     ],
     { stdio: ['ignore', 'pipe', 'pipe'] }
   );
+  // Piped, not inherited, so it stays silent by default — but silent by
+  // default is also why a script that hangs the JS engine looks identical to
+  // a slow network from the outside: nothing else in this file's own logging
+  // comes from inside the browser process. `LIGHTPANDA_DEBUG=1` surfaces it.
+  if (process.env['LIGHTPANDA_DEBUG'] === '1') {
+    child.stdout.on('data', (chunk: Buffer) => log(`[lightpanda] ${chunk}`));
+    child.stderr.on('data', (chunk: Buffer) => log(`[lightpanda] ${chunk}`));
+  }
   let spawnError: Error | undefined;
   child.once('error', (error) => {
     spawnError = error;

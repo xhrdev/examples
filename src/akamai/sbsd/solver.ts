@@ -265,6 +265,29 @@ const waitForTabId = async (page: Page): Promise<void> => {
  * `readHtml` stands in for `page.content()` on browsers where it never
  * resolves — see `AttachOptions.readHtml`.
  */
+/**
+ * A real `document.cookie` getter never repeats a name — the jar it reads
+ * from has at most one entry per (name, domain, path), and the browser
+ * exposes only the name and value, so two entries that both apply to the
+ * current document collapse into whichever is left standing. On Lightpanda,
+ * a cookie set once without a `Domain` attribute and again with one (which is
+ * exactly what an Akamai bundle clearing then reissuing its own tracking
+ * cookie looks like) can end up as two internally, and the getter has been
+ * observed to return both: `bm_lso=; bm_lso=<value>`. The ledger endpoint
+ * refuses a request with a repeated name outright rather than guess which one
+ * is current, so it is resolved here instead, keeping the last occurrence —
+ * the one a set-after-clear sequence means to leave in place.
+ */
+const dedupeCookieHeader = (cookieHeader: string): string => {
+  const seen = new Map<string, string>();
+  for (const pair of cookieHeader.split(';')) {
+    const index = pair.indexOf('=');
+    if (index < 1) continue;
+    seen.set(pair.slice(0, index).trim(), pair.trim());
+  }
+  return [...seen.values()].join('; ');
+};
+
 const readRealm = async (
   page: Page,
   readHtml: () => Promise<string>
@@ -288,7 +311,11 @@ const readRealm = async (
     }),
     readHtml(),
   ]);
-  return { ...state, html };
+  return {
+    ...state,
+    documentCookie: dedupeCookieHeader(state.documentCookie),
+    html,
+  };
 };
 
 export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
@@ -466,7 +493,20 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         },
       ];
     });
-    if (cookies.length > 0) await context.addCookies(cookies);
+    if (cookies.length === 0) return;
+    // Clear any existing cookie of the same name first, regardless of its
+    // domain/path. `addCookies` only overwrites an exact (name, domain,
+    // path) match, and a value set here without the domain Lightpanda's own
+    // jar already scoped it under (e.g. a clearing `bm_lso=;` with no
+    // `Domain` attribute, replayed against the bare hostname while the live
+    // cookie sits under `.aircanada.com`) lands as a second entry instead of
+    // replacing the first. `document.cookie` then reports the name twice,
+    // and the ledger endpoint refuses the whole request over it rather than
+    // guess which one you meant.
+    for (const name of new Set(cookies.map((c) => c.name))) {
+      await context.clearCookies({ name });
+    }
+    await context.addCookies(cookies);
   };
 
   /**
@@ -560,7 +600,17 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     if (request.resourceType() === 'script') {
       const response = await fetchScript(route);
       const body = response.body;
-      if (fetchResponse) await applyCookies(request.url(), response.setCookie);
+      // Cookies go on *after* the route settles, not before. On Lightpanda,
+      // `context.addCookies` while this request is still a pending
+      // `Fetch.requestPaused` deadlocks silently — the fulfill this same
+      // route is waiting to send never goes out, because addCookies is
+      // waiting on the browser and the browser is waiting on the fulfill.
+      // `src/akamai/sensor/solver.ts` already learned this the same way:
+      // fulfill first, apply cookies after.
+      const applyResponseCookies = (): Promise<void> =>
+        fetchResponse
+          ? applyCookies(request.url(), response.setCookie)
+          : Promise.resolve();
       if (isSbsdBundle(url)) {
         sbsdPath = url.pathname;
         sbsdBody = body;
@@ -570,7 +620,8 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         );
         // Handed back rather than stubbed, unlike the sensor below. The bundle
         // has to run: it is what emits the carrier POSTs this file rewrites.
-        return handBack(route, response, body);
+        await handBack(route, response, body);
+        return applyResponseCookies();
       }
       if (
         sensor === 'solver' &&
@@ -584,12 +635,14 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         );
         // The real sensor must not run, or it posts its own telemetry
         // alongside the solver's.
-        return route.fulfill({
+        await route.fulfill({
           body: '/* solved out of process */',
           contentType: 'application/javascript',
         });
+        return applyResponseCookies();
       }
-      return handBack(route, response, body);
+      await handBack(route, response, body);
+      return applyResponseCookies();
     }
 
     return route.continue();

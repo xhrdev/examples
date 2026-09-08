@@ -29,14 +29,19 @@
  * `comcast-lightpanda.ts` relies on for the sensor lane, and the one part of
  * this file that is not new.
  *
- * This has not been measured against a live target the way `aa.ts` has — it
- * is the shape the port takes, not a proven result yet. Run it against your
- * own solver to find out; the things worth watching are the same ones
- * `comcast-lightpanda.ts` called out for the sensor lane: the identity on the
- * wire, cookies surviving the bundle/sensor script responses, and whether the
- * `#matOriginAirport`/`#matDestinationAirport` locators resolve at all —
- * Lightpanda driving a form this way is the one piece neither the sensor nor
- * the other SBSD port has exercised before.
+ * ## measured 2026-09-08: SBSD solves, `_abck` does not
+ *
+ * The SBSD half works exactly like `aircanada-lightpanda.ts`: bundle
+ * captured, ledger issued, carrier answered. `solveAbck()` opens a session
+ * against the real sensor script too, and the exchange runs — but `_abck`
+ * sat at `~-1~` through 22 rounds before this was cut off, where
+ * `comcast-lightpanda.ts` reaches `~0~` on round 5 or 6 against a different
+ * property. Whether that is aa.com scoring something Lightpanda's submission
+ * path does differently, or aa.com being a harder sensor than Comcast's
+ * regardless of browser, is not established here. `aircanada-lightpanda.ts`
+ * is the one to reach for if SBSD is what you need; this file is evidence
+ * that channel works on Lightpanda in general, not a working `_abck` solve
+ * for aa.com specifically.
  */
 import { PROFILE, SEC_CH_UA } from '#src/profile.js';
 import { attach } from '#src/akamai/sbsd/solver.js';

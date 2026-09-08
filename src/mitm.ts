@@ -57,6 +57,14 @@ import { PROFILE } from '#src/datadome/profile.js';
 
 const execFileAsync = promisify(execFile);
 const CERT_DIR = join(process.cwd(), 'target', 'lightpanda-mitm');
+/**
+ * A dead upstream connection used to hang `forward()` forever with nothing
+ * in the logs to say why — the browser (or `mitm.fetch`) waiting on it looks
+ * identical to a slow solve from the outside, and `page.goto`'s own timeout
+ * is the only thing that ever surfaced it, 90s later, pointing at navigation
+ * rather than the request that actually stalled.
+ */
+const UPSTREAM_TIMEOUT_MS = 30_000;
 const CERT_PATH = join(CERT_DIR, 'cert.pem');
 const KEY_PATH = join(CERT_DIR, 'key.pem');
 
@@ -330,6 +338,7 @@ export const start = async (options: MitmOptions = {}): Promise<Mitm> => {
       headers,
       method: request.method,
       redirect: 'manual',
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
     const text = await upstream.text();
 
