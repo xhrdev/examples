@@ -45,6 +45,7 @@
     "comcast:lightpanda": "node --env-file=.env src/akamai/sensor/comcast-lightpanda.ts",
     "comcast:http": "node --env-file=.env src/akamai/sensor/comcast-http.ts",
     "ca-edd": "node --env-file=.env src/akamai/sensor/ca-edd.ts",
+    "ca-edd:lightpanda": "node --env-file=.env src/akamai/sensor/ca-edd-lightpanda.ts",
     "hilton": "node --env-file=.env src/akamai/sbsd/hilton.ts",
     "hilton:lightpanda": "node --env-file=.env src/akamai/sbsd/hilton-lightpanda.ts",
     "aa": "node --env-file=.env src/akamai/sbsd/aa.ts",
