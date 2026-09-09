@@ -51,7 +51,7 @@ import { join } from 'node:path';
 import { TLSSocket } from 'node:tls';
 import { promisify } from 'node:util';
 
-import { ProxyAgent, fetch as undiciFetch } from 'undici';
+import { Agent, ProxyAgent, fetch as undiciFetch } from 'undici';
 
 import { PROFILE } from '#src/datadome/profile.js';
 
@@ -65,6 +65,77 @@ const CERT_DIR = join(process.cwd(), 'target', 'lightpanda-mitm');
  * rather than the request that actually stalled.
  */
 const UPSTREAM_TIMEOUT_MS = 30_000;
+
+/**
+ * Chrome's TLS parameters, in Chrome's order, for the connection this proxy
+ * makes upstream.
+ *
+ * The header rewriting above was only ever half the job. The whole reason
+ * this file exists is that a bot manager reads the connection and not just
+ * the headers — that is stated at the top for DataDome and Lightpanda, and it
+ * is just as true of the client we replace Lightpanda *with*. undici's
+ * defaults are OpenSSL's, and OpenSSL is not Chrome.
+ *
+ * Measured against hilton.com/en/ on 2026-09-09, same headers, same machine,
+ * four ways:
+ *
+ *   undici default, http/1.1            403 after 46s, then no answer at all
+ *   http/2, undici default TLS          403 after 9s
+ *   these parameters, http/1.1          200 in 351ms
+ *   these parameters, http/2            200 in 382ms
+ *
+ * So the suite list and the curve order are what hilton is reading, not the
+ * protocol version. Untouched: aircanada 200 either way, aa 302 either way —
+ * this is not a change that trades one target for another.
+ *
+ * The failure mode is worth recognising because it does not look like a
+ * block. Hilton holds the connection open and answers late or never rather
+ * than refusing, so everything downstream reports a timeout and blames
+ * itself: Lightpanda gives up on the navigation after 5s and renders
+ * `OperationTimedout`, which reads as a slow site.
+ *
+ * **This gets close, not equal.** JA3/JA4 also cover the extension order and
+ * GREASE values, and node's TLS bindings expose neither — a determined
+ * fingerprint still says "not Chrome". Matching exactly needs a client built
+ * on BoringSSL (curl-impersonate, or utls behind a sidecar). What is here is
+ * the part reachable from Node, and it is evidently enough for these targets.
+ *
+ * ALPN is left alone deliberately, so this keeps negotiating http/1.1. Chrome
+ * would speak h2, and undici can (`allowH2`) — but node's h2 SETTINGS frames
+ * are not Chrome's either, and Akamai fingerprints those too. Advertising h2
+ * to get a second fingerprint wrong is not obviously better than not
+ * advertising it; the table above says nothing here needs it.
+ */
+const CHROME_TLS = {
+  ciphers: [
+    'TLS_AES_128_GCM_SHA256',
+    'TLS_AES_256_GCM_SHA384',
+    'TLS_CHACHA20_POLY1305_SHA256',
+    'ECDHE-ECDSA-AES128-GCM-SHA256',
+    'ECDHE-RSA-AES128-GCM-SHA256',
+    'ECDHE-ECDSA-AES256-GCM-SHA384',
+    'ECDHE-RSA-AES256-GCM-SHA384',
+    'ECDHE-ECDSA-CHACHA20-POLY1305',
+    'ECDHE-RSA-CHACHA20-POLY1305',
+    'ECDHE-RSA-AES128-SHA',
+    'ECDHE-RSA-AES256-SHA',
+    'AES128-GCM-SHA256',
+    'AES256-GCM-SHA384',
+    'AES128-SHA',
+    'AES256-SHA',
+  ].join(':'),
+  ecdhCurve: 'X25519:P-256:P-384',
+  sigalgs: [
+    'ecdsa_secp256r1_sha256',
+    'rsa_pss_rsae_sha256',
+    'rsa_pkcs1_sha256',
+    'ecdsa_secp384r1_sha384',
+    'rsa_pss_rsae_sha384',
+    'rsa_pkcs1_sha384',
+    'rsa_pss_rsae_sha512',
+    'rsa_pkcs1_sha512',
+  ].join(':'),
+};
 const CERT_PATH = join(CERT_DIR, 'cert.pem');
 const KEY_PATH = join(CERT_DIR, 'key.pem');
 
@@ -282,7 +353,14 @@ export const start = async (options: MitmOptions = {}): Promise<Mitm> => {
     proxy,
   } = options;
   const { cert, key } = await ensureCertificate();
-  const dispatcher = proxy ? new ProxyAgent(proxy) : undefined;
+  // `requestTls` and not `connect`: on a ProxyAgent the origin is reached
+  // through a CONNECT tunnel, and it is that inner handshake the target sees.
+  // `proxyTls` would dress up the hop to our own proxy, which nobody reads.
+  // The no-proxy path needs its own Agent for the same parameters — undici's
+  // global default would otherwise put OpenSSL's hello on the wire.
+  const dispatcher = proxy
+    ? new ProxyAgent({ requestTls: CHROME_TLS, uri: proxy })
+    : new Agent({ connect: CHROME_TLS });
   const sockets = new Set<Socket>();
 
   /**
