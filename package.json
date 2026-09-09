@@ -49,7 +49,6 @@
     "aa": "node --env-file=.env src/akamai/sbsd/aa.ts",
     "aircanada": "node --env-file=.env src/akamai/sbsd/aircanada.ts",
     "aircanada:lightpanda": "node --env-file=.env src/akamai/sbsd/aircanada-lightpanda.ts",
-    "aa:lightpanda": "node --env-file=.env src/akamai/sbsd/aa-lightpanda.ts",
     "loadtest": "node --env-file=.env src/loadtest.ts",
     "prepare": "husky"
   },

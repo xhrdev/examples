@@ -97,8 +97,7 @@ export type AttachOptions = {
    * Fetch intercepted script requests with this instead of Playwright's
    * `route.fetch`. Only needed for browsers where `route.fetch` is
    * unreliable — `src/mitm.ts` exposes exactly this shape, and
-   * `src/akamai/sbsd/aa-lightpanda.ts` and `aircanada-lightpanda.ts` pass it,
-   * for the same reason
+   * `src/akamai/sbsd/aircanada-lightpanda.ts` passes it, for the same reason
    * `src/akamai/sensor/comcast-lightpanda.ts` does: Playwright's route.fetch
    * never returns against Lightpanda, because it runs in Playwright's request
    * context, which syncs cookies with the browser, and once that stops
