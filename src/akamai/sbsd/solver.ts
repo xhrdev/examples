@@ -555,6 +555,27 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     await route.fulfill({ body, headers, status: response.status });
   };
 
+  /**
+   * Headers for a `route.continue()`, with a duplicate `cookie` name
+   * resolved. `dedupeCookieHeader` was written for the ledger snapshot, but
+   * the same Lightpanda quirk reaches further than that snapshot: a cookie
+   * the SBSD bundle's own in-page `document.cookie =` writes (not
+   * `applyCookies` — this is JS running in the page, entirely outside this
+   * file) lands in Lightpanda's real outgoing `cookie` header too, not just
+   * in what `document.cookie` reads back. A carrier or sensor submission
+   * that goes out with `bm_lso=; bm_lso=<value>` on the wire has been
+   * observed to get "Access Denied" immediately — a malformed cookie header
+   * is itself a signal, independent of how good the payload behind it is.
+   */
+  const dedupedContinueHeaders = async (
+    route: Route
+  ): Promise<Record<string, string>> => {
+    const headers = await route.request().allHeaders();
+    if (headers['cookie'])
+      headers['cookie'] = dedupeCookieHeader(headers['cookie']);
+    return headers;
+  };
+
   void page.route(`${origin}/**`, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -573,7 +594,10 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         if (!row) return route.abort();
         log(`[sbsd] Row ${row.index}: ${row.bytes} bytes`);
         answered++;
-        return route.continue({ postData: row.body });
+        return route.continue({
+          headers: await dedupedContinueHeaders(route),
+          postData: row.body,
+        });
       });
       // The queue must not stay rejected, or every later carrier inherits the
       // first failure; the awaited promise still surfaces it to this caller.
@@ -591,7 +615,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     ) {
       if (request.postData() === authorizedSensorBody) {
         authorizedSensorBody = null;
-        return route.continue();
+        return route.continue({ headers: await dedupedContinueHeaders(route) });
       }
       log(`[abck] Dropped a native sensor POST to ${url.pathname}`);
       return route.abort();
@@ -645,7 +669,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
       return applyResponseCookies();
     }
 
-    return route.continue();
+    return route.continue({ headers: await dedupedContinueHeaders(route) });
   });
 
   /**

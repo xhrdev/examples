@@ -42,6 +42,30 @@
  * is the one to reach for if SBSD is what you need; this file is evidence
  * that channel works on Lightpanda in general, not a working `_abck` solve
  * for aa.com specifically.
+ *
+ * ## a second, separate finding: the exit address matters more here than
+ * ## on Chrome, and cookie duplication was a red herring
+ *
+ * Repeated runs from one home address wore aa.com's tolerance down to
+ * immediate rejection — `npm run aa` (plain Chrome, no Lightpanda) hit the
+ * same wall after enough attempts, which is what showed this was never a
+ * Lightpanda bug in the first place. Routing through a working ISP proxy
+ * fixed `aa.ts` outright (round 5, accepted). It did not fix this file: SBSD
+ * still solves through the same proxy, but the reload came back "Access
+ * Denied" before any sensor script loaded — a *different* failure from the
+ * unsolved-after-22-rounds one above, and one Lightpanda-direct (no proxy)
+ * does not hit.
+ *
+ * The obvious suspect was `solver.ts`'s own duplicate-`bm_lso`-cookie bug
+ * (see `dedupeCookieHeader`), since the SBSD bundle's in-page
+ * `document.cookie` writes leak the same duplication into Lightpanda's real
+ * outgoing `cookie` header, not just the ledger snapshot. `solver.ts` now
+ * dedupes that too before every `route.continue()`. Verified the fix lands —
+ * the carrier POST goes out with exactly one `bm_lso`, value intact — and
+ * the "Access Denied" happened anyway. So the duplicate cookie was real and
+ * is now fixed, but it was not the cause of this denial. What is, between
+ * Lightpanda-via-proxy specifically and every other combination tried, is
+ * still open.
  */
 import { PROFILE, SEC_CH_UA } from '#src/profile.js';
 import { attach } from '#src/akamai/sbsd/solver.js';
