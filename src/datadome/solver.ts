@@ -993,6 +993,20 @@ export async function solve(
       round.nativeSubmitStarted.resolve(undefined);
 
       const solved = await getSolverResult(round, challengeData, documentData);
+      // The site can escalate this round to a captcha on its own timer while
+      // the solver call above is still in flight — an interstitial that
+      // takes its time to answer is exactly what "DataDome is unconvinced"
+      // looks like from the page's side. When that happens, `round.next` is
+      // already set by the time we get here, and this round's native carrier
+      // is a request its own page has already moved past: completing it
+      // still gets a real response from DataDome, but nothing downstream
+      // expects it, and it trips the new round's "recurred" guard. Drop it
+      // instead of relaying stale sensor data into a challenge that no
+      // longer exists.
+      if (round.next) {
+        await route.abort('aborted').catch(() => undefined);
+        return;
+      }
       carrierRounds.set(request, round);
       if (solved.type === 'captcha') {
         const relayUrl = buildCaptchaRelayUrl({

@@ -19,6 +19,14 @@
  * Same code, same address, minutes apart: the homepage escalated and solved,
  * the search page was blocked. A harder target is worth having, but as its own
  * example rather than in place of the escalation one.
+ *
+ * Advisory in the smoke suite: the site's own escalation timer can beat the
+ * solver's answer for the interstitial round, and it can also re-serve the
+ * same interstitial rather than escalating at all. The first case is fixed —
+ * a round that escalates while its relay is still in flight now gets
+ * abandoned instead of corrupting the new round — the second still reads as
+ * "The challenge document recurred in the same round" and needs the round
+ * model to allow a same-type retry, not just an escalation.
  */
 import { runBrowserTarget } from '#src/datadome/browser-target.js';
 

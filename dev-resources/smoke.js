@@ -42,7 +42,15 @@ const SCRIPTS = [
   { script: 'src/datadome/grainger-fetch', useEnvProxy: true },
   { headless: true, script: 'src/datadome/grainger' },
   { advisory: true, script: 'src/datadome/grainger-lightpanda' },
-  { headless: true, script: 'src/datadome/idealista' },
+  // Advisory: exercising the i -> c escalation means racing idealista's own
+  // escalation timer against the solver's answer for the interstitial round,
+  // and the round model assumes one document per round. A fix landed for the
+  // half of that where the site escalates to a captcha while the interstitial
+  // solve is still in flight (the stale relay used to corrupt the new round);
+  // it did not cover the other shape seen live, where the interstitial simply
+  // repeats itself post-relay rather than escalating — that needs the round
+  // model to allow a same-type retry, which is a bigger change than fits here.
+  { advisory: true, headless: true, script: 'src/datadome/idealista' },
   { headless: true, script: 'src/akamai/sensor/comcast' },
   { script: 'src/akamai/sensor/comcast-lightpanda' },
   { headless: true, script: 'src/akamai/sensor/ca-edd' },
