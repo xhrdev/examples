@@ -111,7 +111,7 @@ The same three, in Python, under `py-src/datadome/`:
 
 ### the harder targets
 
-Everything above is a demonstration. These eight exist to be *measured* — they
+Everything above is a demonstration. These six exist to be *measured* — they
 are the DataDome sites customers actually ask about, and they do not all clear
 reliably. The `rt` / `t` column is what an unauthenticated `curl` from a
 datacenter IP drew on 2026-08-25; a residential exit will often see something
@@ -125,8 +125,6 @@ site:
 | `anthropologie.ts` | `www.anthropologie.com` | `i` | interstitial, on an origin that answers HTTP/1.1 while challenging |
 | `yelp.ts` | `www.yelp.com/signup` | none | no server-side block from a good IP — DataDome is present only as the client-side tag, so a clean address gets no challenge and the run times out rather than failing |
 | `etsy.ts` | `www.etsy.com` | `i` | scores first (`x-datadome-riskscore` on the block) and is the least forgiving here |
-| `github.ts` | `github.com/signup` | `c` / `fe` | only the signup path is fronted; the bare host is not |
-| `book-secure.ts` | `www.book-secure.com` | `c` / `fe` | the D-EDGE hotel booking engine. The apex does not resolve — keep the `www` |
 | `bestwestern.ts` | `www.bestwestern.com` | `c` / `fe` | a captcha from the first request, with no interstitial in front of it |
 
 They are deliberately **not** in `npm test`. Each is a headed browser run with

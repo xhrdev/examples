@@ -38,8 +38,6 @@
     "anthropologie": "node --env-file=.env src/datadome/anthropologie.ts",
     "yelp": "node --env-file=.env src/datadome/yelp.ts",
     "etsy": "node --env-file=.env src/datadome/etsy.ts",
-    "github": "node --env-file=.env src/datadome/github.ts",
-    "book-secure": "node --env-file=.env src/datadome/book-secure.ts",
     "bestwestern": "node --env-file=.env src/datadome/bestwestern.ts",
     "comcast": "node --env-file=.env src/akamai/sensor/comcast.ts",
     "comcast:lightpanda": "node --env-file=.env src/akamai/sensor/comcast-lightpanda.ts",
