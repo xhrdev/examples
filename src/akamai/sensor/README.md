@@ -95,11 +95,13 @@ the origin you actually need has to reach `~0~`.
 | `comcast.ts` | solving across two origins during an OAuth redirect chain, up to the login form |
 | `ca-edd.ts` | the same, up to the real login page |
 | `comcast-lightpanda.ts` | the same target driven by **Lightpanda** instead of Chrome — see below |
+| `lowes.ts` | a target that does not always challenge — treats a solver timeout as inconclusive rather than a failure, and checks the page itself |
 
 ```bash
 npm run comcast
 node --env-file=.env src/akamai/sensor/comcast.ts --headless
 npm run ca-edd
+npm run lowes
 ```
 
 Drop `--headless` to watch it happen.

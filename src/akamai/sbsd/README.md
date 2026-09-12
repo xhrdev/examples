@@ -152,11 +152,15 @@ you attach. If you only came for SBSD, say so.
 | `hilton.ts` | both channels on one page, then a real hotel search behind the challenge | solves end to end |
 | `aa.ts` | the bundle on an obfuscated path, discovered rather than configured | solves end to end |
 | `aircanada.ts` | SBSD only, on a property that does not gate on `_abck` | solves end to end |
+| `magazineluiza.ts` | both channels | solves end to end |
+| `tractorsupply.ts` | both channels | solves end to end |
 
 ```bash
 npm run hilton
 npm run aa
 npm run aircanada
+npm run magazineluiza
+npm run tractorsupply
 ```
 
 ### the two channels are scored separately, and it shows

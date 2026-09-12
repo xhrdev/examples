@@ -89,7 +89,9 @@ RESULT: SUCCESS
 | [`src/datadome/{alaska,saks,anthropologie,yelp,etsy,bestwestern}.ts`](src/datadome/README.md#the-harder-targets) | DataDome | varies by target | yes |
 | [`src/akamai/sensor/comcast.ts`](src/akamai/sensor/comcast.ts) | Akamai Bot Manager | `_abck` sensor | yes |
 | [`src/akamai/sensor/ca-edd.ts`](src/akamai/sensor/ca-edd.ts) | Akamai Bot Manager | `_abck` sensor + login | yes |
+| [`src/akamai/sensor/lowes.ts`](src/akamai/sensor/lowes.ts) | Akamai Bot Manager | `_abck` sensor | yes |
 | [`src/akamai/sbsd/hilton.ts`](src/akamai/sbsd/hilton.ts) | Akamai Bot Manager | SBSD + `_abck` sensor | yes — headed only |
+| [`src/akamai/sbsd/{magazineluiza,tractorsupply}.ts`](src/akamai/sbsd/README.md) | Akamai Bot Manager | SBSD + `_abck` sensor | yes |
 
 Each vendor directory has its own README with the protocol details:
 [**src/akamai**](src/akamai/README.md) · [**src/datadome**](src/datadome/README.md)
@@ -111,7 +113,10 @@ npm run etsy -- --screenshot  # ...and alaska, saks, anthropologie, yelp,
                               #    bestwestern
 npm run comcast               # Akamai, _abck sensor
 npm run ca-edd                # Akamai, _abck sensor, up to the real login page
+npm run lowes                 # Akamai, _abck sensor
 npm run hilton                # Akamai, SBSD + _abck; headed only
+npm run magazineluiza         # Akamai, SBSD + _abck
+npm run tractorsupply         # Akamai, SBSD + _abck
 
 # any script takes flags after --
 node --env-file=.env src/datadome/grainger-undici.ts --url=https://www.idealista.com/

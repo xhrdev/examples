@@ -39,6 +39,7 @@
     "yelp": "node --env-file=.env src/datadome/yelp.ts",
     "etsy": "node --env-file=.env src/datadome/etsy.ts",
     "bestwestern": "node --env-file=.env src/datadome/bestwestern.ts",
+    "lowes": "node --env-file=.env src/akamai/sensor/lowes.ts",
     "comcast": "node --env-file=.env src/akamai/sensor/comcast.ts",
     "comcast:lightpanda": "node --env-file=.env src/akamai/sensor/comcast-lightpanda.ts",
     "comcast:http": "node --env-file=.env src/akamai/sensor/comcast-http.ts",
@@ -49,6 +50,8 @@
     "aa": "node --env-file=.env src/akamai/sbsd/aa.ts",
     "aircanada": "node --env-file=.env src/akamai/sbsd/aircanada.ts",
     "aircanada:lightpanda": "node --env-file=.env src/akamai/sbsd/aircanada-lightpanda.ts",
+    "magazineluiza": "node --env-file=.env src/akamai/sbsd/magazineluiza.ts",
+    "tractorsupply": "node --env-file=.env src/akamai/sbsd/tractorsupply.ts",
     "loadtest": "node --env-file=.env src/loadtest.ts",
     "prepare": "husky"
   },
