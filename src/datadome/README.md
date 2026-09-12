@@ -265,6 +265,11 @@ differences worth knowing:
   per iteration, so it makes no practical difference — pick this version if
   you would rather not take a dependency.
 
+### known not to work yet
+
+A couple of targets we tried aren't committed — kept locally, gitignored,
+rather than shipped as working examples.
+
 ## gotchas
 
 - **`no challenge to solve`** — the site served your IP the page directly.

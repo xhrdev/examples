@@ -57,6 +57,11 @@ rewrites a POST the page itself makes rather than sending one — see
 | [`../solver-url.ts`](../solver-url.ts) | turns `host=` from `.env` into an HTTP or WebSocket solver URL |
 | [`../rate-limit.ts`](../rate-limit.ts) | what to do when the solver answers 429 (stop — it is not retryable) |
 
+## known not to work yet
+
+A couple of targets we tried aren't committed — kept locally, gitignored,
+rather than shipped as working examples.
+
 ## gotchas that apply to both
 
 - **Stuck at `~-1~` forever** — usually the identity, not the solver. The

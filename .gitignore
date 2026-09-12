@@ -18,3 +18,10 @@ node_modules
 venv
 __pycache__/
 .ruff_cache/
+
+# Example scripts that don't clear their target yet — kept locally for
+# reference, not committed until they do.
+src/datadome/agrizone.ts
+src/datadome/etsy-listing.ts
+src/akamai/sensor/kroger.ts
+src/akamai/sbsd/ana.ts
