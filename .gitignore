@@ -27,3 +27,4 @@ src/datadome/github.ts
 src/datadome/book-secure.ts
 src/akamai/sensor/kroger.ts
 src/akamai/sbsd/ana.ts
+src/akamai/sbsd/chewy.ts

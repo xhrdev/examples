@@ -40,6 +40,7 @@
     "etsy": "node --env-file=.env src/datadome/etsy.ts",
     "bestwestern": "node --env-file=.env src/datadome/bestwestern.ts",
     "lowes": "node --env-file=.env src/akamai/sensor/lowes.ts",
+    "cvs": "node --env-file=.env src/akamai/sensor/cvs.ts",
     "comcast": "node --env-file=.env src/akamai/sensor/comcast.ts",
     "comcast:lightpanda": "node --env-file=.env src/akamai/sensor/comcast-lightpanda.ts",
     "comcast:http": "node --env-file=.env src/akamai/sensor/comcast-http.ts",
