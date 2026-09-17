@@ -51,7 +51,6 @@ else launchOpts['channel'] = 'chrome';
 
 const browser = await chromium.launch(launchOpts);
 const context = await browser.newContext({
-  deviceScaleFactor: 2,
   ignoreHTTPSErrors: true,
   locale: 'en-US',
   timezoneId: 'America/New_York',
