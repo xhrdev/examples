@@ -85,11 +85,34 @@ export type AkamaiHandle = {
    */
   carriersAnswered: () => number;
   /**
+   * The watched hosts seen so far, and what each has.
+   *
+   * A peer realm only appears once the browser has been there, so this is a
+   * running view rather than a fixed list.
+   */
+  realms: () => Array<{
+    answered: number;
+    hasSensor: boolean;
+    host: string;
+  }>;
+  /**
    * Resolves when `_abck` is accepted. Call it once the document you actually
    * want is loaded — not during the bootstrap. Rejects if the `_abck` sensor
    * script was never seen, which on a page that only runs SBSD is expected.
+   *
+   * `host` picks the realm on a property that runs more than one; it defaults
+   * to the origin.
    */
-  solveAbck: () => Promise<void>;
+  // eslint-disable-next-line no-unused-vars -- function-type parameters
+  solveAbck: (opts?: SolveAbckOptions) => Promise<void>;
+  /**
+   * Solve every host that has a sensor, in turn, and return the ones solved.
+   *
+   * The multi-realm entry point. A host that cannot be solved is logged rather
+   * than thrown, so one unreachable realm does not hide the rest.
+   */
+  // eslint-disable-next-line no-unused-vars -- function-type parameters
+  solveAll: (opts?: SolveAbckOptions) => Promise<string[]>;
 };
 
 export type AttachOptions = {
@@ -124,6 +147,17 @@ export type AttachOptions = {
    */
   origin: string;
   /**
+   * Every host to treat as protected, when a property runs more than one.
+   *
+   * A property can serve its pages, its application and its API from separate
+   * first-party hosts, each behind the same edge and each with its own
+   * `_abck`. ana.co.jp is three: `www`, `aswbe`, `space`. Watching only
+   * `origin` leaves the realm the content is actually behind untouched.
+   *
+   * Defaults to the origin's host, which is the single-realm behaviour.
+   */
+  protectedHosts?: readonly (RegExp | string)[];
+  /**
    * Read the live DOM instead of `page.content()`. Needed on Lightpanda,
    * where `page.content()`/`frame.content()` never resolve at all — use
    * `outerHtml()` from `src/lightpanda.ts` there.
@@ -157,6 +191,35 @@ export type AttachOptions = {
    * handshake with a 401 rather than anything that looks Akamai-related.
    */
   solverApiKey?: string;
+};
+
+/** Per-call options for {@link AkamaiHandle.solveAbck}. */
+export type SolveAbckOptions = {
+  /** Which realm to solve. Defaults to the origin's host. */
+  host?: string;
+  /**
+   * How long the lane may stay quiet before `waitForAcceptance: false`
+   * returns. Default 15000ms.
+   *
+   * A quiet window rather than a deadline: the gap between two rounds is the
+   * solver's think time plus a round trip, and a fixed deadline cuts whichever
+   * round straddles it. Measured on a live ladder, consecutive gaps were 1.6s,
+   * 2.2s, 0.9s, 5.9s, 4.7s and 9.5s as the bundle backed off.
+   */
+  idleMs?: number;
+  /**
+   * Whether to hold until the solver reports `_abck` accepted. Default `true`.
+   *
+   * `false` returns once a round has been answered and the lane has been quiet
+   * for `idleMs` — the cookie is whatever it is, usually still `~-1~`.
+   *
+   * That is the right mode on a property with no protected request to assert
+   * clearance against, where acceptance is not observable from the client and
+   * the default never returns. ana.co.jp's `www` is exactly that: it has not
+   * reached `~0~` in any session measured, while the booking engine it hands
+   * off to accepts in two rounds.
+   */
+  waitForAcceptance?: boolean;
 };
 
 /** A response, however it was fetched. */
@@ -333,45 +396,95 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
   ).href;
   const sessionUrl = solverWsUrl(host, '/akamai/session');
 
-  /** The raw `src` attribute, `?v=` included: it seeds the bundle's codec. */
-  let sbsdSrc: null | string = null;
-  let sbsdBody: null | string = null;
   /**
-   * The path the bundle was served from, which is also the path its carriers
-   * POST to. Learned from the bundle request unless `opts.sbsdPath` pins it,
-   * and there is no race in learning it late: a carrier cannot fire before the
-   * bundle that emits it has loaded.
-   */
-  let sbsdPath: null | string = opts.sbsdPath ?? null;
-  /** Kept across the bootstrap's self-reload, so the second load can use it. */
-  let bmMain: { body: string; url: string } | null = null;
-  /**
-   * The in-flight or completed ledger request, memoized as a *promise*.
+   * Everything that was one-per-attach is now one-per-host.
    *
-   * A page emits its carriers concurrently, so two of them can both find a
-   * not-yet-populated `rows` and each ask for a ledger. That is not a wasted
-   * request, it is a wrong answer: the second ledger replaces the first, the
-   * cursor carries on into it, and the page ends up submitting row 0 of one
-   * document snapshot followed by rows 1 and 2 of another. Memoizing the
-   * promise makes the second carrier await the first request instead.
+   * These were nine `let`s scoped to the origin. A peer realm running its own
+   * SBSD needs its own bundle, its own ledger and its own cursor: sharing them
+   * is what makes a peer's carrier draw a row from a document it was never on,
+   * which the server rejects as a snapshot mismatch.
    */
-  let ledger: null | Promise<LedgerRow[]> = null;
-  /**
-   * Rows are handed out one at a time, in order. `cursor++` across concurrent
-   * route handlers is not enough on its own — the awaits between taking a row
-   * and continuing the route let a later carrier overtake an earlier one, and
-   * SBSD ordering is FIFO by construction.
-   */
-  let carrierQueue: Promise<unknown> = Promise.resolve();
-  let cursor = 0;
-  /** Carriers answered with a row, across every document on this page. */
-  let answered = 0;
-  /** The one sensor body the solver authored; anything else is the native one. */
-  let authorizedSensorBody: null | string = null;
+  type HostState = {
+    /** Carriers answered with a row, on this host. */
+    answered: number;
+    /** The one sensor body the solver authored; anything else is native. */
+    authorizedSensorBody: null | string;
+    /** Kept across the bootstrap's self-reload, so the second load can use it. */
+    bmMain: { body: string; url: string } | null;
+    /**
+     * Rows are handed out one at a time, in order. `cursor++` across concurrent
+     * route handlers is not enough on its own — the awaits between taking a row
+     * and continuing the route let a later carrier overtake an earlier one, and
+     * SBSD ordering is FIFO by construction.
+     */
+    carrierQueue: Promise<unknown>;
+    cursor: number;
+    /**
+     * The in-flight or completed ledger request, memoized as a *promise*.
+     *
+     * A page emits its carriers concurrently, so two of them can both find a
+     * not-yet-populated `rows` and each ask for a ledger. That is not a wasted
+     * request, it is a wrong answer: the second ledger replaces the first, the
+     * cursor carries on into it, and the page ends up submitting row 0 of one
+     * document snapshot followed by rows 1 and 2 of another.
+     */
+    ledger: null | Promise<LedgerRow[]>;
+    sbsdBody: null | string;
+    /**
+     * The path the bundle was served from, which is also the path its carriers
+     * POST to. Learned from the bundle request, and there is no race in
+     * learning it late: a carrier cannot fire before the bundle that emits it
+     * has loaded.
+     */
+    sbsdPath: null | string;
+    /** The raw `src` attribute, `?v=` included: it seeds the bundle's codec. */
+    sbsdSrc: null | string;
+  };
 
-  const cookies = async (): Promise<Record<string, string>> =>
+  const originHost = new URL(origin).host;
+  const watched: readonly (RegExp | string)[] = opts.protectedHosts ?? [
+    originHost,
+  ];
+  const isProtected = (candidate: string): boolean =>
+    watched.some((p) =>
+      typeof p === 'string' ? p === candidate : p.test(candidate)
+    );
+
+  const sites = new Map<string, HostState>();
+  const siteFor = (hostname: string): HostState => {
+    let site = sites.get(hostname);
+    if (!site) {
+      site = {
+        answered: 0,
+        authorizedSensorBody: null,
+        bmMain: null,
+        carrierQueue: Promise.resolve(),
+        cursor: 0,
+        ledger: null,
+        sbsdBody: null,
+        sbsdPath: opts.sbsdPath ?? null,
+        sbsdSrc: null,
+      };
+      sites.set(hostname, site);
+    }
+    return site;
+  };
+  /** The document host's state, which is what the single-realm API acts on. */
+  const originSite = siteFor(originHost);
+
+  /**
+   * The jar for one host. Scoped, because a session opened for a peer host
+   * carrying the document host's cookies describes a visitor that does not
+   * exist: the peer's own `_abck` is the cookie being moved.
+   */
+  const cookies = async (
+    hostname: string = originHost
+  ): Promise<Record<string, string>> =>
     Object.fromEntries(
-      (await context.cookies(origin)).map((c) => [c.name, c.value])
+      (await context.cookies(`https://${hostname}`)).map((c) => [
+        c.name,
+        c.value,
+      ])
     );
 
   /**
@@ -385,8 +498,19 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     const request = response.request();
     if (request.resourceType() !== 'document') return;
     if (request.frame() !== page.mainFrame()) return;
-    ledger = null;
-    cursor = 0;
+    // The host that just committed a document, not every host: a peer realm's
+    // ledger is bound to ITS document, and clearing it because a different
+    // host navigated throws away rows its carriers are still queued against.
+    let documentHost: string;
+    try {
+      documentHost = new URL(request.url()).host;
+    } catch {
+      return;
+    }
+    const site = sites.get(documentHost);
+    if (!site) return;
+    site.ledger = null;
+    site.cursor = 0;
   });
 
   /**
@@ -398,12 +522,12 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
    * the default is computed from this same document and profile. Sending them
    * measured is not more honest, it is the same answer arrived at twice.
    */
-  async function generateLedger(): Promise<LedgerRow[]> {
+  async function generateLedger(site: HostState): Promise<LedgerRow[]> {
     await waitForTabId(page);
     const realm = await readRealm(page, readHtml);
     const response = await fetch(ledgerUrl, {
       body: JSON.stringify({
-        bundle: { scriptSrc: sbsdSrc, source: sbsdBody },
+        bundle: { scriptSrc: site.sbsdSrc, source: site.sbsdBody },
         document: {
           // Historical field name: this is document.cookie, NOT the HTTP
           // header. The distinction matters — the httpOnly cookies in the jar
@@ -575,24 +699,38 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     return headers;
   };
 
-  void page.route(`${origin}/**`, async (route) => {
+  /*
+   * Every request, filtered by host — not `${origin}/**`.
+   *
+   * An origin-scoped pattern cannot see a peer realm, because a peer realm
+   * is a different origin. Anything outside `protectedHosts` is continued
+   * untouched, which is the same third-party behaviour as before.
+   */
+  void page.route('**/*', async (route) => {
     const request = route.request();
-    const url = new URL(request.url());
+    let url: URL;
+    try {
+      url = new URL(request.url());
+    } catch {
+      return route.continue();
+    }
+    if (!isProtected(url.host)) return route.continue();
+    const site = siteFor(url.host);
     const post = request.method() === 'POST';
 
-    // SBSD carrier. The first one is held while the ledger is generated, which
+    // SBSD carrier. The first one is held while the site.ledger is generated, which
     // is also what makes the snapshot legal: `sessionStorage.ak_bm_tab_id`
     // only exists once the bundle has run.
-    if (post && sbsdPath !== null && url.pathname === sbsdPath) {
-      const mine = carrierQueue.then(async () => {
-        ledger ??= generateLedger();
-        const rows = await ledger;
-        const row = rows[cursor++];
+    if (post && site.sbsdPath !== null && url.pathname === site.sbsdPath) {
+      const mine = site.carrierQueue.then(async () => {
+        site.ledger ??= generateLedger(site);
+        const rows = await site.ledger;
+        const row = rows[site.cursor++];
         // Out of rows: fail closed. Letting the native body through here would
         // hand Akamai a payload from an uninstrumented page alongside ours.
         if (!row) return route.abort();
         log(`[sbsd] Row ${row.index}: ${row.bytes} bytes`);
-        answered++;
+        site.answered++;
         return route.continue({
           headers: await dedupedContinueHeaders(route),
           postData: row.body,
@@ -600,7 +738,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
       });
       // The queue must not stay rejected, or every later carrier inherits the
       // first failure; the awaited promise still surfaces it to this caller.
-      carrierQueue = mine.catch(() => undefined);
+      site.carrierQueue = mine.catch(() => undefined);
       return mine;
     }
 
@@ -609,11 +747,11 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     if (
       post &&
       sensor === 'solver' &&
-      bmMain &&
-      url.pathname === new URL(bmMain.url).pathname
+      site.bmMain &&
+      url.pathname === new URL(site.bmMain.url).pathname
     ) {
-      if (request.postData() === authorizedSensorBody) {
-        authorizedSensorBody = null;
+      if (request.postData() === site.authorizedSensorBody) {
+        site.authorizedSensorBody = null;
         return route.continue({ headers: await dedupedContinueHeaders(route) });
       }
       log(`[abck] Dropped a native sensor POST to ${url.pathname}`);
@@ -635,9 +773,9 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
           ? applyCookies(request.url(), response.setCookie)
           : Promise.resolve();
       if (isSbsdBundle(url)) {
-        sbsdPath = url.pathname;
-        sbsdBody = body;
-        sbsdSrc = `${url.pathname}${url.search}`;
+        site.sbsdPath = url.pathname;
+        site.sbsdBody = body;
+        site.sbsdSrc = `${url.pathname}${url.search}`;
         log(
           `[sbsd] Bundle captured: ${body.length} bytes from ${url.pathname}`
         );
@@ -651,7 +789,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         body.length > 50_000 &&
         /\bbmak\b/.test(body)
       ) {
-        bmMain = { body, url: request.url() };
+        site.bmMain = { body, url: request.url() };
         log(
           `[abck] Sensor script captured: ${body.length} bytes ` +
             `from ${url.pathname}`
@@ -724,9 +862,15 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     }
   };
 
-  /** Stateful lane: init, then answer every submission out of the page. */
-  async function solveAbck(): Promise<void> {
-    if (!bmMain) {
+  /**
+   * Stateful lane: init, then answer every submission out of the page.
+   *
+   * `host` picks the realm. It defaults to the origin, which is the
+   * single-realm behaviour; `solveAll()` passes each host it found a sensor on.
+   */
+  async function solveAbck(solveOpts?: SolveAbckOptions): Promise<void> {
+    const site = siteFor(solveOpts?.host ?? originHost);
+    if (!site.bmMain) {
       throw new Error(
         sensor === 'page'
           ? 'attach() was given sensor: "page", so the sensor script was ' +
@@ -735,10 +879,10 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
               'if the property only runs SBSD, do not call solveAbck()'
       );
     }
-    const captured = bmMain;
+    const captured = site.bmMain;
     log(
       `[abck] Opening session against ${captured.url} ` +
-        `(_abck=${(await cookies())['_abck']?.split('~')[1] ?? 'absent'})`
+        `(_abck=${(await cookies(site === originSite ? originHost : new URL(captured.url).host))['_abck']?.split('~')[1] ?? 'absent'})`
     );
     const socket = new WebSocket(sessionUrl, {
       ...(solverApiKey ? { headers: { 'x-api-key': solverApiKey } } : {}),
@@ -764,7 +908,32 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
       })
     );
 
+    const waitForAcceptance = solveOpts?.waitForAcceptance ?? true;
+    const idleMs = solveOpts?.idleMs ?? 15_000;
     return new Promise<void>((resolve, reject) => {
+      let rounds = 0;
+      let settled = false;
+      let idleTimer: null | ReturnType<typeof setTimeout> = null;
+      /**
+       * The `waitForAcceptance: false` exit.
+       *
+       * Armed only once a round has been answered, so a lane where nothing ever
+       * happened still hangs rather than reporting success — that failure stays
+       * as loud as it was. The timer resets on every round, which makes this a
+       * quiet window and not a deadline.
+       */
+      const armIdle = (): void => {
+        if (waitForAcceptance || settled || rounds === 0) return;
+        if (idleTimer !== null) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          log(`[abck] Lane ended on the idle timer after ${rounds} round(s)`);
+          socket.close();
+          resolve();
+        }, idleMs);
+        idleTimer.unref?.();
+      };
       // Let the event type come from undici's WebSocket rather than annotating
       // it: the DOM's MessageEvent is a different, incompatible declaration.
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
@@ -774,7 +943,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         ) as SolverMessage;
 
         if (message.type === 'submission') {
-          authorizedSensorBody = message.body ?? '';
+          site.authorizedSensorBody = message.body ?? '';
           const result = await sendFromPage({
             body: message.body ?? '',
             headers: message.headers,
@@ -796,6 +965,8 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         }
 
         if (message.type === 'cookie_update') {
+          rounds += 1;
+          armIdle();
           log(
             `[abck] Cookie update: round=${message.round} ` +
               `rval=${message.rval} accepted=${message.accepted}`
@@ -803,11 +974,15 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         }
 
         if (message.type === 'status' && message.state === 'accepted') {
+          if (settled) return;
+          settled = true;
           socket.close();
           resolve();
         }
 
         if (message.type === 'error') {
+          if (settled) return;
+          settled = true;
           socket.close();
           reject(new Error(message.message ?? 'solver reported an error'));
         }
@@ -823,5 +998,37 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     });
   }
 
-  return { carriersAnswered: () => answered, solveAbck };
+  return {
+    carriersAnswered: () =>
+      [...sites.values()].reduce((total, site) => total + site.answered, 0),
+    /** What each watched host has, so a caller can see which realms exist. */
+    realms: () =>
+      [...sites.entries()].map(([hostname, site]) => ({
+        answered: site.answered,
+        hasSensor: site.bmMain !== null,
+        host: hostname,
+      })),
+    solveAbck,
+    /**
+     * Solve every host that has a sensor, in turn.
+     *
+     * A peer's sensor only appears once the browser has been there, so this is
+     * called again wherever the flow reaches somewhere new. Returns the hosts
+     * it solved; one unreachable realm is logged rather than thrown, so it does
+     * not hide the rest.
+     */
+    solveAll: async (solveOpts?: SolveAbckOptions) => {
+      const solved: string[] = [];
+      for (const [hostname, site] of sites) {
+        if (site.bmMain === null) continue;
+        try {
+          await solveAbck({ ...solveOpts, host: hostname });
+          solved.push(hostname);
+        } catch (error) {
+          log(`[abck] ${hostname}: ${(error as Error).message}`);
+        }
+      }
+      return solved;
+    },
+  };
 }
