@@ -53,7 +53,13 @@ const SCRIPTS = [
   { advisory: true, headless: true, script: 'src/datadome/idealista' },
   { headless: true, script: 'src/akamai/sensor/comcast' },
   { script: 'src/akamai/sensor/comcast-lightpanda' },
-  { headless: true, script: 'src/akamai/sensor/ca-edd' },
+  // Advisory as of 2026-09-17: two runs in a row, each on a fresh CI runner
+  // address, came back "Access Denied" — the same exit-address sensitivity
+  // that already makes hilton/aa/aircanada advisory below, not a code
+  // regression (the solve itself completes; the property gates on the IP
+  // afterward). Promote back to blocking once a run of green ones says the
+  // address problem has gone away.
+  { advisory: true, headless: true, script: 'src/akamai/sensor/ca-edd' },
   // The SBSD channel, and all three run headless as of 2026-09-08. hilton was
   // the last headed entry — it used to refuse a headless Chrome outright — and
   // three headless runs now land `_abck` on round 5 and reach the results
