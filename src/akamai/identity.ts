@@ -37,10 +37,24 @@ export const VIEWPORT: { height: number; width: number } = {
  * option alone, because only the CDP form carries `userAgentMetadata` — the
  * structured client hints Akamai reads. Playwright's option sets the header
  * and leaves `navigator.userAgentData` describing the real browser.
+ *
+ * `acceptLanguage` is `PROFILE.languages`, a preference list and NOT a header.
+ * Chrome splits this field on commas for `navigator.languages` and
+ * re-serialises it with q-values for the wire, so handing it the header form
+ * gets both wrong at once. Measured on Chrome 151:
+ *
+ *   'en-US,en;q=0.9'  navigator.languages ["en-US","en;q=0.9"]
+ *                     Accept-Language     "en-US,en;q=0.9;q=0.9"
+ *   'en-US,en'        navigator.languages ["en-US","en"]
+ *                     Accept-Language     "en-US,en;q=0.9"
+ *
+ * The second is what Chrome sends unaided. The first is a language tag no
+ * browser produces, beside a doubled q-value — the kind of disagreement this
+ * file exists to prevent.
  */
 export const applyIdentity = async (cdp: CDPSession): Promise<void> => {
   await cdp.send('Emulation.setUserAgentOverride', {
-    acceptLanguage: 'en-US,en;q=0.9',
+    acceptLanguage: PROFILE.languages,
     userAgent: PROFILE.userAgent,
     userAgentMetadata: {
       architecture: 'arm',
