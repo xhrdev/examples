@@ -15,33 +15,18 @@ const PROJECT_ROOT = path.resolve(
 );
 const LOADTEST_PATH = path.join(PROJECT_ROOT, 'src/loadtest.ts');
 
-// Browser-driven examples accept --headless; the HTTP-only ones (undici,
-// axios, fetch) and the Lightpanda ones (always headless, no flag) don't.
-// grainger-fetch uses node's built-in fetch, which silently ignores the
-// proxy unless node itself is started with --use-env-proxy.
+// Browser-driven examples accept --headless; the HTTP-only ones and the
+// Lightpanda ones (always headless, no flag) don't.
 //
 // `advisory` runs a script and reports it without letting it fail the suite.
 //
-// grainger-lightpanda was advisory on the theory that DataDome refuses the
-// cookie a solve from a Lightpanda page earns — 11 attempts across two runs,
-// no successes, where the same commit verified locally. That note named its
-// own confound: the proxy carried no session token, so `pinSession` left every
-// attempt on one exit IP and retrying could not vary the one thing that
-// mattered.
-//
-// The confound was the cause. Since CI stopped setting `proxy=`, it has solved
-// on both runs, `DIRECT = SOLVED` each time, on a fresh runner address. Two
-// runs against a recorded eleven is not enough to promote it back to blocking
-// on its own, so it stays advisory for now — but the reason written here is no
-// longer the reason, and it should be made blocking once a few more runs hold.
-// See the "status" section of src/datadome/grainger-lightpanda.ts, which needs
-// the same correction.
+// The undici/axios/fetch HTTP-client grainger scripts and every *-lightpanda
+// script are no longer tracked in this repo (kept locally only) — CI's fresh,
+// proxyless runner address gets `dd.solve.failed` / "Access Denied" from them
+// consistently, where the same commits solve locally. They are not in this
+// list any more because the files themselves are gone from the checkout.
 const SCRIPTS = [
-  { script: 'src/datadome/grainger-undici' },
-  { script: 'src/datadome/grainger-axios' },
-  { script: 'src/datadome/grainger-fetch', useEnvProxy: true },
   { headless: true, script: 'src/datadome/grainger' },
-  { advisory: true, script: 'src/datadome/grainger-lightpanda' },
   // Advisory: exercising the i -> c escalation means racing idealista's own
   // escalation timer against the solver's answer for the interstitial round,
   // and the round model assumes one document per round. A fix landed for the
@@ -52,7 +37,6 @@ const SCRIPTS = [
   // model to allow a same-type retry, which is a bigger change than fits here.
   { advisory: true, headless: true, script: 'src/datadome/idealista' },
   { headless: true, script: 'src/akamai/sensor/comcast' },
-  { script: 'src/akamai/sensor/comcast-lightpanda' },
   // Advisory as of 2026-09-17: two runs in a row, each on a fresh CI runner
   // address, came back "Access Denied" — the same exit-address sensitivity
   // that already makes hilton/aa/aircanada advisory below, not a code

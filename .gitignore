@@ -27,3 +27,15 @@ src/datadome/github.ts
 src/datadome/book-secure.ts
 src/akamai/sensor/kroger.ts
 src/akamai/sbsd/chewy.ts
+
+# CI's fresh, proxyless runner address consistently gets dd.solve.failed /
+# Access Denied from these where the same commits solve locally — kept
+# locally for reference, not committed until that's understood.
+src/datadome/grainger-undici.ts
+src/datadome/grainger-axios.ts
+src/datadome/grainger-fetch.ts
+src/datadome/grainger-lightpanda.ts
+src/akamai/sensor/comcast-lightpanda.ts
+src/akamai/sensor/ca-edd-lightpanda.ts
+src/akamai/sbsd/hilton-lightpanda.ts
+src/akamai/sbsd/aircanada-lightpanda.ts
