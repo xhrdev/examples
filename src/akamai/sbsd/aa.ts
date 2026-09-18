@@ -70,7 +70,6 @@ else launchOpts['channel'] = 'chrome';
 
 const browser = await chromium.launch(launchOpts);
 const context = await browser.newContext({
-  deviceScaleFactor: PROFILE.screen.devicePixelRatio,
   locale: 'en-US',
   serviceWorkers: 'block',
   timezoneId: PROFILE.timezone,

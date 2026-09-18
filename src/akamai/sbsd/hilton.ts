@@ -91,7 +91,6 @@ else launchOpts['channel'] = 'chrome';
 
 const browser = await chromium.launch(launchOpts);
 const context = await browser.newContext({
-  deviceScaleFactor: PROFILE.screen.devicePixelRatio,
   locale: 'en-US',
   // The SBSD bundle registers one, and a service worker that outlives the
   // document would answer requests this script never sees.
