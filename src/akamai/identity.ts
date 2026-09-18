@@ -1,57 +1,99 @@
-/**
- * The browser identity the Akamai examples install on a real Chrome.
- *
- * Akamai scores the sensor telemetry against the headers the browser actually
- * sends, so these overrides have to say the same thing as the profile the
- * solver was told to model. When they disagree the failure is silent and
- * expensive: `_abck` sits at `~-1~` for as many rounds as you give it, and
- * nothing in the transcript names the version as the reason.
- *
- * Everything here is derived from `src/profile.ts` for that reason — these
- * used to be literals copied into each script, which is exactly how they ended
- * up two major versions behind the Chrome the scripts were launching.
- */
 import type { CDPSession } from 'playwright-core';
 
 import { FULL_VERSION_LIST, PROFILE } from '#src/profile.js';
 
-/** What the browser claims, and what `newContext({ userAgent })` is given. */
 export const USER_AGENT: string = PROFILE.userAgent;
 
-/**
- * The viewport, matched to the profile's inner window.
- *
- * `innerHeight` rather than a round number: the profile declares this window
- * to the solver, and a browser whose real viewport disagrees with the declared
- * one is a mismatch like any other.
- */
-export const VIEWPORT: { height: number; width: number } = {
-  height: PROFILE.screen.innerHeight,
-  width: PROFILE.screen.innerWidth,
+export const VIEWPORT: null = null;
+
+const SCREEN_FIELDS = [
+  'availHeight',
+  'availLeft',
+  'availTop',
+  'availWidth',
+  'colorDepth',
+  'devicePixelRatio',
+  'height',
+  'width',
+] as const;
+
+type ScreenReading = Record<(typeof SCREEN_FIELDS)[number], number>;
+
+const screenDrift = (reading: ScreenReading): string[] =>
+  SCREEN_FIELDS.filter((field) => reading[field] !== PROFILE.screen[field]).map(
+    (field) =>
+      `${field}=${reading[field]} (profile says ${PROFILE.screen[field]})`
+  );
+
+const readPrimaryScreen = async (
+  cdp: CDPSession
+): Promise<{ id: string } & ScreenReading> => {
+  const { screenInfos } = await cdp.send('Emulation.getScreenInfos');
+  const primary = screenInfos.find((info) => info.isPrimary) ?? screenInfos[0];
+  if (!primary) throw new Error('Emulation.getScreenInfos returned no screens');
+  return primary;
 };
 
-/**
- * Install the identity on a live page.
- *
- * `Emulation.setUserAgentOverride` rather than Playwright's `userAgent`
- * option alone, because only the CDP form carries `userAgentMetadata` — the
- * structured client hints Akamai reads. Playwright's option sets the header
- * and leaves `navigator.userAgentData` describing the real browser.
- *
- * `acceptLanguage` is `PROFILE.languages`, a preference list and NOT a header.
- * Chrome splits this field on commas for `navigator.languages` and
- * re-serialises it with q-values for the wire, so handing it the header form
- * gets both wrong at once. Measured on Chrome 151:
- *
- *   'en-US,en;q=0.9'  navigator.languages ["en-US","en;q=0.9"]
- *                     Accept-Language     "en-US,en;q=0.9;q=0.9"
- *   'en-US,en'        navigator.languages ["en-US","en"]
- *                     Accept-Language     "en-US,en;q=0.9"
- *
- * The second is what Chrome sends unaided. The first is a language tag no
- * browser produces, beside a doubled q-value — the kind of disagreement this
- * file exists to prevent.
- */
+const matchScreenToProfile = async (cdp: CDPSession): Promise<void> => {
+  const screen = await readPrimaryScreen(cdp);
+  if (screenDrift(screen).length === 0) return;
+
+  const dpr = PROFILE.screen.devicePixelRatio;
+
+  const refuse = (drift: string[]): string =>
+    `This display cannot carry the ${PROFILE.os}/Chrome ${PROFILE.chromeVersion} profile: ` +
+    `${drift.join(', ')}. Chrome reports its real screen and nothing this build ` +
+    `accepts can give it a different work area, so: run headful (headless has no ` +
+    `menu bar to report — it starts at 800x600 with availHeight === height), on the ` +
+    `display PROFILE.screen was captured from, or recapture PROFILE.screen here.`;
+
+  try {
+    await cdp.send('Emulation.updateScreen', {
+      colorDepth: PROFILE.screen.colorDepth,
+      devicePixelRatio: dpr,
+      height: PROFILE.screen.height * dpr,
+      left: 0,
+      screenId: screen.id,
+      top: 0,
+      width: PROFILE.screen.width * dpr,
+      workAreaInsets: {
+        bottom:
+          (PROFILE.screen.height -
+            PROFILE.screen.availTop -
+            PROFILE.screen.availHeight) *
+          dpr,
+        left: PROFILE.screen.availLeft * dpr,
+        right:
+          (PROFILE.screen.width -
+            PROFILE.screen.availLeft -
+            PROFILE.screen.availWidth) *
+          dpr,
+        top: PROFILE.screen.availTop * dpr,
+      },
+    });
+  } catch {
+    console.warn(`[identity] ${refuse(screenDrift(screen))}`);
+    return;
+  }
+
+  const drift = screenDrift(await readPrimaryScreen(cdp));
+  if (drift.length > 0) console.warn(`[identity] ${refuse(drift)}`);
+};
+
+const pinWindowToProfile = async (cdp: CDPSession): Promise<void> => {
+  const { windowId } = await cdp.send('Browser.getWindowForTarget');
+  await cdp.send('Browser.setWindowBounds', {
+    bounds: {
+      height: PROFILE.screen.outerHeight,
+      left: PROFILE.screen.screenX,
+      top: PROFILE.screen.screenY,
+      width: PROFILE.screen.outerWidth,
+      windowState: 'normal',
+    },
+    windowId,
+  });
+};
+
 export const applyIdentity = async (cdp: CDPSession): Promise<void> => {
   await cdp.send('Emulation.setUserAgentOverride', {
     acceptLanguage: PROFILE.languages,
@@ -68,12 +110,6 @@ export const applyIdentity = async (cdp: CDPSession): Promise<void> => {
       platformVersion: PROFILE.platformVersion,
     },
   });
-  await cdp.send('Emulation.setDeviceMetricsOverride', {
-    deviceScaleFactor: PROFILE.screen.devicePixelRatio,
-    height: PROFILE.screen.innerHeight,
-    mobile: false,
-    screenHeight: PROFILE.screen.height,
-    screenWidth: PROFILE.screen.width,
-    width: PROFILE.screen.innerWidth,
-  });
+  await matchScreenToProfile(cdp);
+  await pinWindowToProfile(cdp);
 };
