@@ -43,6 +43,7 @@
     "hilton": "node --env-file=.env src/akamai/sbsd/hilton.ts",
     "aa": "node --env-file=.env src/akamai/sbsd/aa.ts",
     "aircanada": "node --env-file=.env src/akamai/sbsd/aircanada.ts",
+    "chewy": "node --env-file=.env src/akamai/sbsd/chewy.ts",
     "magazineluiza": "node --env-file=.env src/akamai/sbsd/magazineluiza.ts",
     "tractorsupply": "node --env-file=.env src/akamai/sbsd/tractorsupply.ts",
     "loadtest": "node --env-file=.env src/loadtest.ts",

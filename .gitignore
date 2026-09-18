@@ -26,7 +26,6 @@ src/datadome/etsy-listing.ts
 src/datadome/github.ts
 src/datadome/book-secure.ts
 src/akamai/sensor/kroger.ts
-src/akamai/sbsd/chewy.ts
 
 # CI's fresh, proxyless runner address consistently gets dd.solve.failed /
 # Access Denied from these where the same commits solve locally — kept
