@@ -12,6 +12,11 @@ updates:
     assignees:
       - skilbjo
     rebase-strategy: auto
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
     versioning-strategy: increase
     open-pull-requests-limit: 15
     commit-message:
@@ -24,6 +29,10 @@ updates:
       interval: weekly
     assignees:
       - skilbjo
+    groups:
+      github-actions:
+        patterns:
+          - '*'
     open-pull-requests-limit: 5
     commit-message:
       prefix: fix
