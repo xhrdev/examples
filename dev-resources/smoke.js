@@ -76,6 +76,16 @@ const SCRIPTS = [
   // sensor before assuming the SBSD lane broke.
   { advisory: true, headless: true, script: 'src/akamai/sbsd/aa' },
   { advisory: true, headless: true, script: 'src/akamai/sbsd/aircanada' },
+  // chewy.com, verified working (commit 5de75f4) but not yet run through this
+  // suite in CI. Advisory until a run of green ones on CI's address gives it
+  // the same track record as the targets above.
+  { advisory: true, headless: true, script: 'src/akamai/sbsd/chewy' },
+  // ana.co.jp — the multi-realm SBSD/abck example (#70), brought up to date in
+  // #72. Local runs on 2026-09-19: 1/2 (one system-error page, one clean
+  // solve reaching the flight-search results) — the same exit-address
+  // sensitivity as hilton/aa/aircanada, not a code regression. Advisory for
+  // the same reason.
+  { advisory: true, headless: true, script: 'src/akamai/sbsd/ana' },
 ];
 
 /**
