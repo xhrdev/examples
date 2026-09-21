@@ -154,6 +154,7 @@ you attach. If you only came for SBSD, say so.
 | `aircanada.ts` | SBSD only, on a property that does not gate on `_abck` | solves end to end |
 | `magazineluiza.ts` | both channels | solves end to end |
 | `tractorsupply.ts` | both channels | solves end to end |
+| `oakley.ts` | both channels, then a real **sign-in** with `username=`/`password=` from `.env` | solves end to end |
 
 ```bash
 npm run hilton
@@ -161,6 +162,7 @@ npm run aa
 npm run aircanada
 npm run magazineluiza
 npm run tractorsupply
+npm run oakley
 ```
 
 ### the two channels are scored separately, and it shows

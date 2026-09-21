@@ -185,6 +185,13 @@ login.xfinity.com. business.comcast.com stays at `~-1~` in a Chrome run too.
   with none, and `_abck` stays at `~-1~` either way. `solve()` skips bundles
   now — see [`src/akamai/sbsd-bundle.ts`](../sbsd-bundle.ts) for how they are
   told apart — but the symptom is worth recognising in your own client.
+- **A session that never produces a round** (init sent, then silence) — the
+  session was started against something that looks like the sensor but is not:
+  Akamai's runtime-injected tracking pixel (`/akam/13/25477803` and similar
+  `/akam/<digits>/...` beacons), or the SBSD bundle when the pixel-tag
+  heuristic in `extractAkamaiScriptUrl` spilled onto it. `solve()` excludes
+  both — see `isSensorScriptUrl` in `solver.ts` — but if a new target hangs
+  like this, check the script URL the session initialised with.
 - **500 with `queue_full` or `queue_wait_timeout`** — the container is
   saturated. It runs 8 concurrent solves with a queue depth of 32 by default;
   `GET /akamai/queue-metrics` shows live numbers before you scale up.

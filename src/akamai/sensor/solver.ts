@@ -118,13 +118,35 @@ const cookiesToRecord = (
   return r;
 };
 
+/**
+ * Akamai's runtime-injected tracking pixel — `/akam/13/25477803` and similar
+ * `/akam/<digits>/...` beacons. It is a 1x1 pixel, not the sensor script, but
+ * its URL matches the `/akam` keyword and it can load before the sensor, so
+ * without this exclusion a session starts against the pixel's body and the
+ * solve hangs silently (the solver can model telemetry only from the sensor).
+ */
+const AKAM_PIXEL_PATH_RE = /^\/akam\/\d+\//iu;
+
+/**
+ * Whether a script URL is worth handing to the solver as the sensor script.
+ * Two things are not: the SBSD bundle (posting to it answers 200 with no body
+ * and `_abck` never leaves `~-1~`) and the runtime-injected tracking pixel.
+ */
+const isSensorScriptUrl = (url: URL): boolean =>
+  !isSbsdBundle(url) && !AKAM_PIXEL_PATH_RE.test(url.pathname);
+
 const extractAkamaiScriptUrl = (
   html: string,
   baseUrl: string
 ): null | string => {
-  // Pattern 1: akam pixel tag
+  // Pattern 1: akam pixel tag. Its `src` is the pixel beacon, but the regex's
+  // `.*?` can spill onto a following script tag on the same line, which on a
+  // property that also runs SBSD grabs the bundle — so it is filtered like
+  // everything else rather than trusted.
   let match = /akam\/13.*?top:\s?-999px.*?src="(.*?)"/gm.exec(html);
-  if (match) return new URL(match[1] ?? '', baseUrl).href;
+  const pixelCandidate = match ? new URL(match[1] ?? '', baseUrl) : null;
+  if (pixelCandidate && isSensorScriptUrl(pixelCandidate))
+    return pixelCandidate.href;
 
   // Pattern 2: Long random-looking path (5–10 segments).
   //
@@ -138,21 +160,24 @@ const extractAkamaiScriptUrl = (
   /* eslint-enable security/detect-unsafe-regex */
   for (const candidate of html.matchAll(longPathRe)) {
     const href = new URL(candidate[1] ?? '', baseUrl);
-    if (!isSbsdBundle(href)) return href.href;
+    if (isSensorScriptUrl(href)) return href.href;
   }
 
   // Pattern 3: Known Akamai keywords in path
   match = /<script[^>]+src=["']([^"']*\/(?:akam|_abck|bm-)[^"']+)["']/im.exec(
     html
   );
-  if (match) return new URL(match[1] ?? '', baseUrl).href;
+  if (match) {
+    const href = new URL(match[1] ?? '', baseUrl);
+    if (isSensorScriptUrl(href)) return href.href;
+  }
 
   return null;
 };
 
 const isLikelyAkamaiScriptUrl = (url: string): boolean => {
   const parsed = new URL(url);
-  if (isSbsdBundle(parsed)) return false;
+  if (!isSensorScriptUrl(parsed)) return false;
   const p = parsed.pathname;
   // eslint-disable-next-line security/detect-unsafe-regex
   return /^(\/[a-zA-Z0-9\-_]+){5,}$/.test(p) || /\/(?:akam|_abck|bm-)/.test(p);

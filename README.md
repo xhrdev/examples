@@ -92,6 +92,7 @@ RESULT: SUCCESS
 | [`src/akamai/sensor/lowes.ts`](src/akamai/sensor/lowes.ts) | Akamai Bot Manager | `_abck` sensor | yes |
 | [`src/akamai/sbsd/hilton.ts`](src/akamai/sbsd/hilton.ts) | Akamai Bot Manager | SBSD + `_abck` sensor | yes — headed only |
 | [`src/akamai/sbsd/{magazineluiza,tractorsupply}.ts`](src/akamai/sbsd/README.md) | Akamai Bot Manager | SBSD + `_abck` sensor | yes |
+| [`src/akamai/sbsd/oakley.ts`](src/akamai/sbsd/oakley.ts) | Akamai Bot Manager | SBSD + `_abck` sensor, then real sign-in | yes |
 
 Each vendor directory has its own README with the protocol details:
 [**src/akamai**](src/akamai/README.md) · [**src/datadome**](src/datadome/README.md)
@@ -117,6 +118,7 @@ npm run lowes                 # Akamai, _abck sensor
 npm run hilton                # Akamai, SBSD + _abck; headed only
 npm run magazineluiza         # Akamai, SBSD + _abck
 npm run tractorsupply         # Akamai, SBSD + _abck
+npm run oakley                # Akamai, SBSD + _abck, then signs in (needs username=/password= in .env)
 
 # any script takes flags after --
 node --env-file=.env src/datadome/grainger-undici.ts --url=https://www.idealista.com/
