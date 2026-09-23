@@ -1,10 +1,10 @@
 /**
  * Run with:
  *
- *   npm run mcp:aircanada
- *   npm run mcp:aircanada -- --url=https://www.hilton.com/en/
+ *   npm run mcp:solve -- --url=https://www.aircanada.com/ca/en/aco/home.html
  *
- * Akamai SBSD through the hosted MCP server, with **no browser at all**.
+ * Akamai SBSD through the hosted MCP server, with **no browser at all**, for
+ * any SBSD-protected URL you pass in.
  *
  * The `sbsd/` examples in this repo drive the channel from Playwright: the
  * page loads the bundle, the bundle emits its carrier POSTs, and `attach()`
@@ -24,13 +24,23 @@
  * address. That is not a binding that matters; the bundle is served to anyone
  * who asks for that exact `src`.
  *
- * ## why aircanada
+ * ## pick an SBSD-only target
  *
- * It is the SBSD-only target. hilton.com and aa.com run both channels and gate
- * on `_abck` as well, which needs a browser bridge and is not available on the
- * hosted server — so on those two this answers one channel of two and the
- * document stays blocked. aircanada does not gate on `_abck` at all, which
- * makes SBSD the only variable.
+ * This answers one channel: SBSD. Properties that also gate on `_abck` (e.g.
+ * hilton.com, aa.com — see the `sbsd/` examples) need a browser bridge for
+ * that second channel, which the hosted server does not provide — the
+ * document stays blocked there even if the SBSD half would have succeeded.
+ * If a target you point this at fails, check whether it runs a second
+ * channel before assuming SBSD is the problem.
+ *
+ * Confirmed SBSD-only, verified working through this script:
+ *
+ *   - https://www.aircanada.com/ca/en/aco/home.html
+ *   - https://www.chewy.com/
+ *
+ * `store.playstation.com` also runs SBSD-only, but does not challenge —
+ * its pages render the same with or without a solve, so it proves nothing
+ * either way and is not listed as a target above.
  *
  * ## the transport is the catch, and it is not an SBSD catch
  *
@@ -67,8 +77,10 @@ type Ledger = {
 const readFlag = (name: string): string | undefined =>
   process.argv.find((arg) => arg.startsWith(`${name}=`))?.split('=')[1];
 
-const targetUrl =
-  readFlag('--url') ?? 'https://www.aircanada.com/ca/en/aco/home.html';
+const targetUrl = readFlag('--url');
+if (!targetUrl) {
+  throw new Error('usage: npm run mcp:solve -- --url=https://...');
+}
 const origin = new URL(targetUrl).origin;
 const configuredProxy = process.env['proxy'];
 const apiKey = process.env['api_key'];

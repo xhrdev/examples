@@ -6,7 +6,8 @@
   "exclude": [
     "dev-resources/repl.cjs",
     "dist",
-    "node_modules"
+    "node_modules",
+    "src/**/*-lightpanda.ts"
   ],
   "compilerOptions": {
     "lib": ["ES2025", "DOM"],

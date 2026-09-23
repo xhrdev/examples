@@ -8,7 +8,7 @@
  * client at all.
  *
  * Every other script in this directory drives part of the flow itself —
- * `grainger.ts` sends the DataDome submission, `aircanada.ts` sends the SBSD
+ * `grainger.ts` sends the DataDome submission, `solve.ts` sends the SBSD
  * ledger rows — because the vendor binds the result to whoever submits it.
  * `web_fetch` is the one tool that does not need that from you: the fetch,
  * the solve and the submission all happen inside the same server call, so
@@ -82,7 +82,7 @@ log(
 );
 if (result.sbsdDetected)
   log(
-    '  note: this page also runs Akamai SBSD, which web_fetch reports but does not drive — see akamai_sbsd_solve / aircanada.ts'
+    '  note: this page also runs Akamai SBSD, which web_fetch reports but does not drive — see akamai_sbsd_solve / solve.ts'
   );
 if (result.cookies) log(`cookies earned: ${result.cookies}`);
 

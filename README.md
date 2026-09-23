@@ -205,7 +205,8 @@ real targets:
 npm run mcp:smoke      # protocol, tool list, and the caller headers
 npm run mcp:grainger   # a full DataDome clearance flow through the tool
 npm run mcp:grainger -- --url=https://www.idealista.com/
-npm run mcp:aircanada  # a full Akamai SBSD flow through the tool, no browser
+npm run mcp:solve -- --url=https://www.aircanada.com/ca/en/aco/home.html
+                        # a full Akamai SBSD flow through the tool, no browser
 ```
 
 `mcp:smoke` needs no configuration: with no headers the hosted server uses the
@@ -228,13 +229,18 @@ cannot fetch the challenge document itself — and the one fetch the server does
 make on your behalf is that document, which is not what DataDome binds a
 cookie to. Your submission is, and this script sends it, through `proxy=`.
 
-`mcp:aircanada` is the Akamai [SBSD](src/akamai/sbsd/README.md) lane with **no
-browser anywhere in it**. The `sbsd/` examples drive the channel from
-Playwright, because the rows have to reach the page's own carrier POSTs; here
-this process fetches the document, the tool answers with the ledger, and this
-process sends the three rows itself. Same division of labour as
-`mcp:grainger` — we compute, you send — which is why SBSD is on the hosted
-server and the `_abck` sensor is not.
+`mcp:solve` is the Akamai [SBSD](src/akamai/sbsd/README.md) lane with **no
+browser anywhere in it**, against any SBSD-only URL you pass with `--url=`.
+The `sbsd/` examples drive the channel from Playwright, because the rows have
+to reach the page's own carrier POSTs; here this process fetches the document,
+the tool answers with the ledger, and this process sends the three rows
+itself. Same division of labour as `mcp:grainger` — we compute, you send —
+which is why SBSD is on the hosted server and the `_abck` sensor is not.
+
+Properties that also gate on `_abck` (hilton.com, aa.com) need a browser
+bridge the hosted server does not provide, so the document stays blocked
+there even if SBSD would have succeeded — pick a target that runs SBSD only.
+aircanada.com is one such target, which is why it's the example above.
 
 Its one catch is the transport, and it is not an SBSD catch: a protected
 property refuses a client whose TLS fingerprint is your HTTP library's, often

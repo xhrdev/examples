@@ -22,6 +22,7 @@ const expectedTools = [
   'health_check',
   'solver_info',
   'solver_stats',
+  'web_fetch',
 ];
 
 log(`MCP ${MCP_URL}`);
