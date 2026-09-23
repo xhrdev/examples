@@ -47,6 +47,15 @@ Those fields are the challenge. `cookie` is the same value DataDome set in the
 Step 3 sends `dd`, `ddCookie`, `iframeData` (the HTML from step 2), and a
 `profile` / `js_profile` pair describing the browser you are claiming to be.
 
+Newer challenge documents load the DataDome collector as an external `defer`
+script on captcha-delivery.com instead of inlining it. The solver does not
+fetch it: send the body of every such script the document references as
+`iframeData.externalScripts` (`[{ url, body }]`; `extractExternalScriptUrls`
+in `external-scripts.ts` lists them). A missing one answers 422
+`dd.script.missing`; one the document does not load answers 400. Documents
+with an inline collector need none. `solver.ts` takes the bodies from the
+browser's own responses.
+
 ### you send the submission, always
 
 `/dd/solve` never submits for you — it returns a prepared submission.

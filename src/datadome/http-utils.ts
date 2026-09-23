@@ -15,6 +15,7 @@
 import { GEO_ORIGIN, PROFILE, PROFILE_ID } from '#src/datadome/profile.js';
 import { ACCESS_DENIED_EXIT_CODE, isAccessDenied } from '#src/access-denied.js';
 import { pinSession } from '#src/proxy.js';
+import type { ExternalScript } from '#src/datadome/external-scripts.js';
 import type { StylesheetAsset } from '#src/datadome/stylesheets.js';
 import { solverBaseUrl } from '#src/solver-url.js';
 import {
@@ -163,6 +164,7 @@ export const solveRequestBody = ({
   dd,
   documentHtml,
   documentUrl,
+  externalScripts,
   proxy,
   stylesheetAssets,
   targetUrl,
@@ -170,6 +172,7 @@ export const solveRequestBody = ({
   dd: DataDomeBlock;
   documentHtml: string;
   documentUrl: string;
+  externalScripts?: ExternalScript[];
   proxy: string | undefined;
   /**
    * The challenge document's stylesheets, from `collectStylesheetAssets`.
@@ -190,6 +193,7 @@ export const solveRequestBody = ({
   },
   ddCookie: dd.cookie,
   iframeData: {
+    ...(externalScripts?.length ? { externalScripts } : {}),
     html: documentHtml,
     ...(stylesheetAssets?.length ? { stylesheetAssets } : {}),
     url: documentUrl,
