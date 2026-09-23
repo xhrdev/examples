@@ -632,7 +632,6 @@ function validateSolverResult(
 }
 
 const CHALLENGE_ROUTE = 'https://geo.captcha-delivery.com/**';
-const EXTERNAL_SCRIPT_WAIT_MS = 15000;
 const DD_TAGS_ROUTE = '*://dd.*/**/tags.js*';
 const QUIET_WINDOW_MS = 5000;
 const TIMEOUT = 120000;
@@ -759,7 +758,7 @@ export async function solve(
     waitFor(
       externalScriptBody(url).promise,
       `the challenge's external script ${url}`,
-      Math.min(timeout, EXTERNAL_SCRIPT_WAIT_MS),
+      timeout,
       fatal.promise
     );
 
