@@ -65,6 +65,13 @@ import {
 } from '#src/datadome/profile.js';
 import { BannedError } from '#src/datadome/ban.js';
 import {
+  buildCaptchaLayout,
+  CAPTCHA_HANDLE_SELECTOR,
+  CAPTCHA_LAYOUT_SETTLE_MS,
+  CAPTCHA_LAYOUT_TIMEOUT_MS,
+  type CaptchaLayout,
+} from '#src/datadome/captcha-layout.js';
+import {
   type ExternalScript,
   externalScriptUrl,
   extractExternalScriptUrls,
@@ -1286,6 +1293,17 @@ async function callSolver(
   externalScriptBody: (url: string) => Promise<string>
 ): Promise<PreparedSubmission> {
   const connection = document.surfaces.connection;
+  const captchaLayoutMeasurement =
+    challenge.dd.rt === 'c'
+      ? measureCaptchaLayout(
+          document.frame,
+          {
+            height: document.surfaces.screen.innerHeight,
+            width: document.surfaces.screen.innerWidth,
+          },
+          timeout
+        )
+      : Promise.resolve(undefined);
 
   const externalScripts: ExternalScript[] = await Promise.all(
     extractExternalScriptUrls(document.html, document.url).map(
@@ -1311,6 +1329,7 @@ async function callSolver(
         return response.text();
       }, assetUrl),
   });
+  const captchaLayout = await captchaLayoutMeasurement;
 
   const raw = await fetchJson(
     new URL('/dd/solve', solverBaseUrl),
@@ -1323,6 +1342,7 @@ async function callSolver(
           challenge.cookie.value
         ),
         iframeData: {
+          ...(captchaLayout ? { captchaLayout } : {}),
           finalNavigationResponseBodySizes:
             document.finalNavigationResponseBodySizes,
           ...(externalScripts.length ? { externalScripts } : {}),
@@ -1661,6 +1681,57 @@ function isInterstitialPost(method: string, value: string): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+async function measureCaptchaLayout(
+  frame: Frame,
+  viewport: { height: number; width: number },
+  timeout: number
+): Promise<CaptchaLayout | undefined> {
+  try {
+    const ready = await frame.waitForFunction(
+      (selector: string) => {
+        const box = document.querySelector(selector)?.getBoundingClientRect();
+        return box !== undefined && box.width > 0 && box.height > 0;
+      },
+      CAPTCHA_HANDLE_SELECTOR,
+      { polling: 100, timeout: Math.min(timeout, CAPTCHA_LAYOUT_TIMEOUT_MS) }
+    );
+    await ready.dispose();
+    const measurement = await frame.evaluate(
+      async ({ selector, settleMs }) => {
+        const readHandle = () => {
+          const box = document.querySelector(selector)?.getBoundingClientRect();
+          return box
+            ? {
+                bottom: box.bottom,
+                left: box.left,
+                right: box.right,
+                top: box.top,
+              }
+            : undefined;
+        };
+        const handle = readHandle();
+        await new Promise((resolve) => setTimeout(resolve, settleMs));
+        const settledHandle = readHandle();
+        return handle && settledHandle
+          ? {
+              handle,
+              scroll: { x: window.scrollX, y: window.scrollY },
+              settledHandle,
+              viewport: {
+                height: window.innerHeight,
+                width: window.innerWidth,
+              },
+            }
+          : undefined;
+      },
+      { selector: CAPTCHA_HANDLE_SELECTOR, settleMs: CAPTCHA_LAYOUT_SETTLE_MS }
+    );
+    return measurement ? buildCaptchaLayout(measurement, viewport) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeProxy(raw: string): string {
