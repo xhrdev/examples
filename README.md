@@ -78,9 +78,6 @@ RESULT: SUCCESS
 
 | script | vendor | challenge | needs a browser |
 |---|---|---|---|
-| [`src/datadome/grainger-undici.ts`](src/datadome/grainger-undici.ts) | DataDome | captcha / interstitial | no — undici |
-| [`src/datadome/grainger-axios.ts`](src/datadome/grainger-axios.ts) | DataDome | captcha / interstitial | no — axios |
-| [`src/datadome/grainger-fetch.ts`](src/datadome/grainger-fetch.ts) | DataDome | captcha / interstitial | no — no deps |
 | [`py-src/datadome/grainger_requests.py`](py-src/datadome/grainger_requests.py) | DataDome | captcha / interstitial | no — python, requests |
 | [`py-src/datadome/grainger_httpx.py`](py-src/datadome/grainger_httpx.py) | DataDome | captcha / interstitial | no — python, httpx |
 | [`py-src/datadome/grainger_urllib.py`](py-src/datadome/grainger_urllib.py) | DataDome | captcha / interstitial | no — python, stdlib |
@@ -105,9 +102,6 @@ Akamai scores on two independent channels and the examples are split to match:
 Run any of them directly, or use the npm aliases:
 
 ```bash
-npm run grainger              # DataDome, no browser (undici)
-npm run grainger:axios        # ...the same, with axios + a cookie jar
-npm run grainger:fetch        # ...the same, with zero dependencies
 npm run grainger:browser      # DataDome, via Playwright
 npm run idealista
 npm run etsy -- --screenshot  # ...and alaska, saks, anthropologie, yelp,
@@ -121,7 +115,6 @@ npm run tractorsupply         # Akamai, SBSD + _abck
 npm run oakley                # Akamai, SBSD + _abck, then signs in (needs username=/password= in .env)
 
 # any script takes flags after --
-node --env-file=.env src/datadome/grainger-undici.ts --url=https://www.idealista.com/
 node --env-file=.env src/datadome/idealista.ts --headless
 ```
 
@@ -138,26 +131,31 @@ The Python examples read the same `.env` and take the same flags:
 **Plain HTTP.** You already have an HTTP scraper and just want a cookie.
 Fetch the challenge, POST it to the solver, submit the result. No Chromium
 anywhere, and it is the cheapest option by a wide margin — a solve costs four
-requests and a few hundred milliseconds.
+requests, plus one per external DataDome script, and a few hundred
+milliseconds.
 
-There are three interchangeable versions of that example, so you can copy
-whichever matches your stack. They make the same four requests and differ only
-in the client:
+There are interchangeable versions of that example, so you can copy whichever
+matches your stack. They make the same requests and differ only in the client:
 
 | file | client | notes |
 |---|---|---|
-| `src/datadome/grainger-undici.ts` | undici | per-request proxy via `ProxyAgent`; the default |
-| `src/datadome/grainger-axios.ts` | axios + `axios-cookiejar-support` | cookie jar carries `datadome` for you |
-| `src/datadome/grainger-fetch.ts` | Node's built-in `fetch` | no dependencies; run it with `--use-env-proxy` |
 | `py-src/datadome/grainger_requests.py` | requests | `Session` keeps the jar |
 | `py-src/datadome/grainger_httpx.py` | httpx | proxy is per-client, one per pinned session |
 | `py-src/datadome/grainger_urllib.py` | urllib | standard library only |
 | `dev-resources/curl` | curl + jq | the bare HTTP, no runtime at all |
 
 The shared request building lives in
-[`src/datadome/http-utils.ts`](src/datadome/http-utils.ts) and
-[`py-src/datadome/http_utils.py`](py-src/datadome/http_utils.py), so each file
-is just its own client.
+[`py-src/datadome/http_utils.py`](py-src/datadome/http_utils.py), so each
+Python file is just its own client.
+
+Newer challenge documents load the DataDome collector from a `<script src>` on
+captcha-delivery.com instead of inlining it, and the solver does not fetch it:
+send each such script's body as `iframeData.externalScripts`
+(`[{ url, body }]`), or `/dd/solve` answers 422 `dd.script.missing`. The Python
+clients list them with `external_script_urls` and fetch them through the same
+session, proxy and cookies as the challenge document
+(`collect_external_scripts`); `dev-resources/curl` does the same with jq. A
+document with an inline collector needs none.
 
 The browser identity sits apart in [`src/profile.ts`](src/profile.ts), which
 every example shares — both vendors, both languages, and the MCP server. There
@@ -216,8 +214,9 @@ CloudFront and actually reach the origin — if an origin request policy ever
 stops forwarding them, every caller silently falls back to the trial box and
 nothing else would tell you.
 
-`mcp:grainger` is [`grainger-undici.ts`](src/datadome/grainger-undici.ts) with
-its middle two requests replaced by one tool call. Comparing the two files is
+`mcp:grainger` is the flow of
+[`grainger_requests.py`](py-src/datadome/grainger_requests.py) with its middle
+requests replaced by one tool call. Comparing the two files is
 the clearest statement of what the MCP server actually does: you still make
 the blocked request and you still send the submission — because DataDome binds
 the clearance cookie to whoever sends it — and everything between is a tool
@@ -375,7 +374,7 @@ loop.
 
 ## curl
 
-[`dev-resources/curl`](dev-resources/curl) runs the same four requests in
+[`dev-resources/curl`](dev-resources/curl) runs the same flow in
 shell, which is the one to read if you are integrating from a language we do
 not have an example for:
 

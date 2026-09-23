@@ -9,10 +9,11 @@
 # the example to read if you are integrating from a language we do not have
 # an example for, or if you just want to see the bare HTTP.
 #
-# It is the same four requests as src/datadome/grainger-undici.ts:
+# It is the same flow as py-src/datadome/grainger_requests.py:
 #
 #   1. GET the target. DataDome answers 403 with an inline `var dd = {...}`.
-#   2. GET the challenge document from geo.captcha-delivery.com.
+#   2. GET the challenge document from geo.captcha-delivery.com, and every
+#      captcha-delivery.com script it loads with `<script src>`.
 #   3. POST /dd/solve — the solver returns a prepared submission.
 #   4. Send that submission yourself. DataDome returns the clearance cookie.
 #
@@ -72,7 +73,10 @@ proxy="${proxy:-$(read_env proxy)}"
 api_key="${api_key:-$(read_env api_key)}"
 
 target="${1:-https://www.seloger.com/}"
-solver="http://${host}:3000"
+case "$host" in
+  *://*) solver="${host%/}" ;;
+  *)     solver="http://${host}:3000" ;;
+esac
 geo='https://geo.captcha-delivery.com'
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -120,12 +124,13 @@ else
   log "no proxy= set — going out from this machine's address"
 fi
 
+sec_ch_ua='sec-ch-ua: "Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"'
 ua='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
 nav=(
   -H "user-agent: ${ua}"
   -H 'accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
   -H 'accept-language: en-US,en;q=0.9'
-  -H 'sec-ch-ua: "Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"'
+  -H "${sec_ch_ua}"
   -H 'sec-ch-ua-mobile: ?0'
   -H 'sec-ch-ua-platform: "macOS"'
   -H 'sec-fetch-dest: document'
@@ -180,6 +185,66 @@ status="$(req "${work}/document.html" -m 60 "${via[@]}" "${nav[@]}" \
   "$doc_url")"
 log "  <- HTTP ${status} ($(wc -c <"${work}/document.html" | tr -d ' ') bytes)"
 
+jq -rn --rawfile html "${work}/document.html" --arg doc "$doc_url" '
+  def tags($p):
+    ($html[$p:] | [match("<script\\b([^>]*)>"; "i")][0]) as $m
+    | select($m)
+    | ($p + $m.offset + $m.length) as $end
+    | $m.captures[0].string,
+      (($html[$end:] | [match("</script>"; "i")][0]) as $close
+       | select($close)
+       | tags($end + $close.offset + 9));
+  def resolve:
+    sub("^\\s+"; "") | sub("\\s+$"; "")
+    | if test("^[a-z][a-z0-9+.-]*:"; "i") then .
+      elif startswith("//") then "https:" + .
+      elif startswith("/") then ($doc | capture("^(?<o>[^:]+://[^/?#]+)").o) + .
+      elif startswith("?") then ($doc | sub("[?#].*$"; "")) + .
+      elif . == "" or startswith("#") then $doc | sub("#.*$"; "")
+      else ($doc | sub("[?#].*$"; "") | sub("[^/]*$"; "")) + .
+      end;
+  [ tags(0)
+    | capture("(?:^|\\s)src\\s*=\\s*(?:\"(?<d>[^\"]*)\"|\u0027(?<s>[^\u0027]*)\u0027|(?<u>[^\\s>]+))"; "i")
+    | (.d // .s // .u)
+    | select(. != "")
+    | resolve
+    | capture("^https://(?<host>([^/?#@:]+\\.)?captcha-delivery\\.com)(:443|:)?(?<rest>[/?#].*)?$"; "i")
+    | "https://" + (.host | ascii_downcase)
+      + ((.rest // "/") | sub("#.*$"; "") | if startswith("?") then "/" + . else . end)
+  ]
+  | reduce .[] as $url ([]; if IN(.[]; $url) then . else . + [$url] end)
+  | .[:4][]' >"${work}/script-urls.txt"
+
+: >"${work}/scripts.ndjson"
+n=0
+while IFS= read -r script_url; do
+  n=$((n + 1))
+  case "$script_url" in
+    "${geo}/"*) site='same-origin'; script_referer="$doc_url" ;;
+    *)          site='same-site';   script_referer="${geo}/" ;;
+  esac
+  log "GET external script ${script_url}"
+  status="$(req "${work}/script-${n}.js" -m 60 "${via[@]}" \
+    -H "user-agent: ${ua}" \
+    -H 'accept: */*' \
+    -H 'accept-language: en-US,en;q=0.9' \
+    -H "referer: ${script_referer}" \
+    -H "${sec_ch_ua}" \
+    -H 'sec-ch-ua-mobile: ?0' \
+    -H 'sec-ch-ua-platform: "macOS"' \
+    -H 'sec-fetch-dest: script' \
+    -H 'sec-fetch-mode: no-cors' \
+    -H "sec-fetch-site: ${site}" \
+    "$script_url")"
+  log "  <- HTTP ${status} ($(wc -c <"${work}/script-${n}.js" | tr -d ' ') bytes)"
+  case "$status" in
+    2??) ;;
+    *) fail "external script returned HTTP ${status}: ${script_url}" ;;
+  esac
+  jq -n --arg url "$script_url" --rawfile body "${work}/script-${n}.js" \
+    '{ body: $body, url: $url }' >>"${work}/scripts.ndjson"
+done <"${work}/script-urls.txt"
+
 # --- 3. ask the solver to build the submission ----------------------------
 #
 # `--rawfile` slurps the challenge document straight in as a JSON string, so
@@ -190,7 +255,8 @@ jq -n \
   --arg docUrl "$doc_url" \
   --arg proxy "$pinned" \
   --arg ua "$ua" \
-  --rawfile html "${work}/document.html" '
+  --rawfile html "${work}/document.html" \
+  --slurpfile scripts "${work}/scripts.ndjson" '
   {
     brands: [
       { brand: "Google Chrome", version: "149" },
@@ -220,7 +286,8 @@ jq -n \
            + (if $dd.e then { e: $dd.e } else {} end)
            + (if $dd.b then { b: $dd.b } else {} end)),
       ddCookie: $dd.cookie,
-      iframeData: { html: $html, url: $docUrl },
+      iframeData: ({ html: $html, url: $docUrl }
+                  + (if $scripts == [] then {} else { externalScripts: $scripts } end)),
       js_profile: $p,
       profile: {
         chromeFullVersion: $p.chromeFullVersion,

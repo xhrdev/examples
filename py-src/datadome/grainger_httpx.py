@@ -4,7 +4,7 @@ python3 py-src/datadome/grainger_httpx.py
 python3 py-src/datadome/grainger_httpx.py --url=https://www.idealista.com/
 
 DataDome clearance cookies for grainger.com with **httpx** — no browser.
-Same four requests as grainger_requests.py; see that file for the flow.
+Same requests as grainger_requests.py; see that file for the flow.
 
 httpx takes the proxy per client rather than per request, which maps
 neatly onto one pinned session per attempt. It also keeps a cookie jar,
@@ -26,6 +26,7 @@ from datadome.http_utils import (  # noqa: E402
   TIMEOUT_S,
   challenge_document_url,
   check_rate_limit,
+  collect_external_scripts,
   check_prepared_submission,
   document_headers,
   log,
@@ -63,6 +64,14 @@ def attempt(proxy, api_key, solver_url, target_url):
     document = client.get(document_url, headers=document_headers(target_url))
     log(f'  <- HTTP {document.status_code} ({len(document.text)} bytes)')
 
+    def fetch_script(url, headers):
+      script = client.get(url, headers=headers)
+      return script.status_code, script.content.decode('utf-8', 'replace')
+
+    external_scripts = collect_external_scripts(
+      document.text, document_url, fetch_script
+    )
+
     # 3. Ask xhr.dev to build the submission — but not to send it. This
     #    call goes to your own solver, so it uses a proxy-less client.
     log('POST /dd/solve')
@@ -73,7 +82,12 @@ def attempt(proxy, api_key, solver_url, target_url):
       solve_endpoint(solver_url),
       headers=headers,
       json=solve_request_body(
-        dd, document.text, document_url, proxy, target_url
+        dd,
+        document.text,
+        document_url,
+        proxy,
+        target_url,
+        external_scripts=external_scripts,
       ),
       timeout=TIMEOUT_S,
     )

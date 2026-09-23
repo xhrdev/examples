@@ -6,17 +6,18 @@ python3 py-src/datadome/grainger_requests.py --url=https://www.idealista.com/
 DataDome clearance cookies for grainger.com with **requests** — no browser.
 
 There are three interchangeable Python versions of this example, one per
-HTTP client. They make exactly the same four requests; only the client
+HTTP client. They make exactly the same requests; only the client
 differs:
 
   grainger_requests.py  requests   (this file)
   grainger_httpx.py     httpx
   grainger_urllib.py    urllib, from the standard library
 
-The four requests:
+The requests:
 
   1. GET the target. DataDome answers 403 with an inline `var dd = {...}`.
-  2. GET the challenge document from geo.captcha-delivery.com.
+  2. GET the challenge document from geo.captcha-delivery.com, and every
+     captcha-delivery.com script it loads with `<script src>`.
   3. POST /dd/solve — the solver returns a prepared submission.
   4. Send that submission yourself. DataDome returns the clearance cookie.
 
@@ -42,6 +43,7 @@ from datadome.http_utils import (  # noqa: E402
   TIMEOUT_S,
   challenge_document_url,
   check_rate_limit,
+  collect_external_scripts,
   check_prepared_submission,
   document_headers,
   log,
@@ -83,6 +85,14 @@ def attempt(proxy, api_key, solver_url, target_url):
   )
   log(f'  <- HTTP {document.status_code} ({len(document.text)} bytes)')
 
+  def fetch_script(url, headers):
+    script = session.get(url, headers=headers, timeout=TIMEOUT_S)
+    return script.status_code, script.content.decode('utf-8', 'replace')
+
+  external_scripts = collect_external_scripts(
+    document.text, document_url, fetch_script
+  )
+
   # 3. Ask xhr.dev to build the submission — but not to send it. This call
   #    goes to your own solver, so it must not use the proxy.
   log('POST /dd/solve')
@@ -93,7 +103,12 @@ def attempt(proxy, api_key, solver_url, target_url):
     solve_endpoint(solver_url),
     headers=headers,
     json=solve_request_body(
-      dd, document.text, document_url, proxy, target_url
+      dd,
+      document.text,
+      document_url,
+      proxy,
+      target_url,
+      external_scripts=external_scripts,
     ),
     timeout=TIMEOUT_S,
   )
