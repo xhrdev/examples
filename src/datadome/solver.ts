@@ -64,6 +64,18 @@ import {
   PROFILE_ID,
 } from '#src/datadome/profile.js';
 import { BannedError } from '#src/datadome/ban.js';
+import {
+  buildCaptchaLayout,
+  CAPTCHA_HANDLE_SELECTOR,
+  CAPTCHA_LAYOUT_SETTLE_MS,
+  CAPTCHA_LAYOUT_TIMEOUT_MS,
+  type CaptchaLayout,
+} from '#src/datadome/captcha-layout.js';
+import {
+  type ExternalScript,
+  externalScriptUrl,
+  extractExternalScriptUrls,
+} from '#src/datadome/external-scripts.js';
 import { collectStylesheetAssets } from '#src/datadome/stylesheets.js';
 import { checkRateLimit } from '#src/rate-limit.js';
 
@@ -726,6 +738,37 @@ export async function solve(
     );
   };
 
+  const externalScriptBodies = new Map<string, Deferred<string>>();
+  const externalScriptBody = (url: string): Deferred<string> => {
+    let entry = externalScriptBodies.get(url);
+    if (!entry) {
+      entry = deferred<string>();
+      void entry.promise.catch(() => undefined);
+      externalScriptBodies.set(url, entry);
+    }
+    return entry;
+  };
+  const onScriptResponse = (response: Response): void => {
+    if (response.request().resourceType() !== 'script' || !response.ok()) {
+      return;
+    }
+    const url = externalScriptUrl(response.url());
+    if (!url) return;
+    const entry = externalScriptBody(url);
+    if (entry.settled) return;
+    response.body().then(
+      (body) => entry.resolve(body.toString('utf8')),
+      (error: unknown) => entry.reject(asError(error))
+    );
+  };
+  const awaitExternalScript = (url: string): Promise<string> =>
+    waitFor(
+      externalScriptBody(url).promise,
+      `the challenge's external script ${url}`,
+      timeout,
+      fatal.promise
+    );
+
   const getSolverResult = (
     round: Round,
     challengeData: ChallengeData,
@@ -737,7 +780,8 @@ export async function solve(
       documentData,
       proxy,
       timeout,
-      solverApiKey
+      solverApiKey,
+      awaitExternalScript
     ).catch((error: unknown) => {
       fail(error);
       throw error;
@@ -1045,6 +1089,7 @@ export async function solve(
   page.on('close', onPageClosed);
   page.on('crash', onPageCrashed);
   page.on('response', onResponse);
+  page.on('response', onScriptResponse);
   page.on('requestfailed', onRequestFailed);
 
   let browserSession: CDPSession | undefined;
@@ -1184,6 +1229,7 @@ export async function solve(
     page.removeListener('close', onPageClosed);
     page.removeListener('crash', onPageCrashed);
     page.removeListener('response', onResponse);
+    page.removeListener('response', onScriptResponse);
     page.removeListener('requestfailed', onRequestFailed);
     if (routeInstalled) {
       await context
@@ -1242,9 +1288,31 @@ async function callSolver(
   document: ChallengeDocumentData,
   proxy: string | undefined,
   timeout: number,
-  solverApiKey: string | undefined
+  solverApiKey: string | undefined,
+  // eslint-disable-next-line no-unused-vars -- function-type parameter
+  externalScriptBody: (url: string) => Promise<string>
 ): Promise<PreparedSubmission> {
   const connection = document.surfaces.connection;
+  const captchaLayoutMeasurement =
+    challenge.dd.rt === 'c'
+      ? measureCaptchaLayout(
+          document.frame,
+          {
+            height: document.surfaces.screen.innerHeight,
+            width: document.surfaces.screen.innerWidth,
+          },
+          timeout
+        )
+      : Promise.resolve(undefined);
+
+  const externalScripts: ExternalScript[] = await Promise.all(
+    extractExternalScriptUrls(document.html, document.url).map(
+      async (scriptUrl) => ({
+        body: await externalScriptBody(scriptUrl),
+        url: scriptUrl,
+      })
+    )
+  );
 
   // The challenge document's stylesheets. Fetched from inside the challenge
   // frame itself — same origin, same cookies, same proxy as the document —
@@ -1261,6 +1329,7 @@ async function callSolver(
         return response.text();
       }, assetUrl),
   });
+  const captchaLayout = await captchaLayoutMeasurement;
 
   const raw = await fetchJson(
     new URL('/dd/solve', solverBaseUrl),
@@ -1273,8 +1342,10 @@ async function callSolver(
           challenge.cookie.value
         ),
         iframeData: {
+          ...(captchaLayout ? { captchaLayout } : {}),
           finalNavigationResponseBodySizes:
             document.finalNavigationResponseBodySizes,
+          ...(externalScripts.length ? { externalScripts } : {}),
           html: document.html,
           ...(stylesheetAssets.length ? { stylesheetAssets } : {}),
           url: document.url,
@@ -1610,6 +1681,57 @@ function isInterstitialPost(method: string, value: string): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+async function measureCaptchaLayout(
+  frame: Frame,
+  viewport: { height: number; width: number },
+  timeout: number
+): Promise<CaptchaLayout | undefined> {
+  try {
+    const ready = await frame.waitForFunction(
+      (selector: string) => {
+        const box = document.querySelector(selector)?.getBoundingClientRect();
+        return box !== undefined && box.width > 0 && box.height > 0;
+      },
+      CAPTCHA_HANDLE_SELECTOR,
+      { polling: 100, timeout: Math.min(timeout, CAPTCHA_LAYOUT_TIMEOUT_MS) }
+    );
+    await ready.dispose();
+    const measurement = await frame.evaluate(
+      async ({ selector, settleMs }) => {
+        const readHandle = () => {
+          const box = document.querySelector(selector)?.getBoundingClientRect();
+          return box
+            ? {
+                bottom: box.bottom,
+                left: box.left,
+                right: box.right,
+                top: box.top,
+              }
+            : undefined;
+        };
+        const handle = readHandle();
+        await new Promise((resolve) => setTimeout(resolve, settleMs));
+        const settledHandle = readHandle();
+        return handle && settledHandle
+          ? {
+              handle,
+              scroll: { x: window.scrollX, y: window.scrollY },
+              settledHandle,
+              viewport: {
+                height: window.innerHeight,
+                width: window.innerWidth,
+              },
+            }
+          : undefined;
+      },
+      { selector: CAPTCHA_HANDLE_SELECTOR, settleMs: CAPTCHA_LAYOUT_SETTLE_MS }
+    );
+    return measurement ? buildCaptchaLayout(measurement, viewport) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeProxy(raw: string): string {

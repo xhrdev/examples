@@ -47,6 +47,15 @@ Those fields are the challenge. `cookie` is the same value DataDome set in the
 Step 3 sends `dd`, `ddCookie`, `iframeData` (the HTML from step 2), and a
 `profile` / `js_profile` pair describing the browser you are claiming to be.
 
+Newer challenge documents load the DataDome collector as an external `defer`
+script on captcha-delivery.com instead of inlining it. The solver does not
+fetch it: send the body of every such script the document references as
+`iframeData.externalScripts` (`[{ url, body }]`; `extractExternalScriptUrls`
+in `external-scripts.ts` lists them). A missing one answers 422
+`dd.script.missing`; one the document does not load answers 400. Documents
+with an inline collector need none. `solver.ts` takes the bodies from the
+browser's own responses.
+
 ### you send the submission, always
 
 `/dd/solve` never submits for you — it returns a prepared submission.
@@ -82,6 +91,16 @@ the sensor values, and lets **Chrome** own the actual submission — the native
 interstitial POST or captcha GET — so the request carries a real TLS
 fingerprint and the browser's own cookie jar. It handles the `i -> c`
 escalation and resolves once DataDome returns an accepted cookie.
+
+For captchas it also measures the slider handle (`#captcha__element
+div.slider`) inside the challenge frame, in that frame's viewport CSS pixels,
+and sends it as `iframeData.captchaLayout` (built by `captcha-layout.ts`). Its
+`viewport` has to equal the `js_profile.screen.innerWidth`/`innerHeight` sent
+with it. It may not be needed: without it the solver reconstructs the slider
+geometry from the challenge document and its stylesheets, and falls back to its
+default geometry when it can't. If the measurement fails the client sends
+nothing and the solve goes ahead. The HTTP flow has no rendered frame to
+measure, so it leaves the field out.
 
 Use it when the site needs a browser anyway. If all you want is a cookie, the
 HTTP flow is far cheaper.
