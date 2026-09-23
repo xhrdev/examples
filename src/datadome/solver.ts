@@ -64,6 +64,11 @@ import {
   PROFILE_ID,
 } from '#src/datadome/profile.js';
 import { BannedError } from '#src/datadome/ban.js';
+import {
+  type ExternalScript,
+  externalScriptUrl,
+  extractExternalScriptUrls,
+} from '#src/datadome/external-scripts.js';
 import { collectStylesheetAssets } from '#src/datadome/stylesheets.js';
 import { checkRateLimit } from '#src/rate-limit.js';
 
@@ -627,6 +632,7 @@ function validateSolverResult(
 }
 
 const CHALLENGE_ROUTE = 'https://geo.captcha-delivery.com/**';
+const EXTERNAL_SCRIPT_WAIT_MS = 15000;
 const DD_TAGS_ROUTE = '*://dd.*/**/tags.js*';
 const QUIET_WINDOW_MS = 5000;
 const TIMEOUT = 120000;
@@ -726,6 +732,37 @@ export async function solve(
     );
   };
 
+  const externalScriptBodies = new Map<string, Deferred<string>>();
+  const externalScriptBody = (url: string): Deferred<string> => {
+    let entry = externalScriptBodies.get(url);
+    if (!entry) {
+      entry = deferred<string>();
+      void entry.promise.catch(() => undefined);
+      externalScriptBodies.set(url, entry);
+    }
+    return entry;
+  };
+  const onScriptResponse = (response: Response): void => {
+    if (response.request().resourceType() !== 'script' || !response.ok()) {
+      return;
+    }
+    const url = externalScriptUrl(response.url());
+    if (!url) return;
+    const entry = externalScriptBody(url);
+    if (entry.settled) return;
+    response.body().then(
+      (body) => entry.resolve(body.toString('utf8')),
+      (error: unknown) => entry.reject(asError(error))
+    );
+  };
+  const awaitExternalScript = (url: string): Promise<string> =>
+    waitFor(
+      externalScriptBody(url).promise,
+      `the challenge's external script ${url}`,
+      Math.min(timeout, EXTERNAL_SCRIPT_WAIT_MS),
+      fatal.promise
+    );
+
   const getSolverResult = (
     round: Round,
     challengeData: ChallengeData,
@@ -737,7 +774,8 @@ export async function solve(
       documentData,
       proxy,
       timeout,
-      solverApiKey
+      solverApiKey,
+      awaitExternalScript
     ).catch((error: unknown) => {
       fail(error);
       throw error;
@@ -1045,6 +1083,7 @@ export async function solve(
   page.on('close', onPageClosed);
   page.on('crash', onPageCrashed);
   page.on('response', onResponse);
+  page.on('response', onScriptResponse);
   page.on('requestfailed', onRequestFailed);
 
   let browserSession: CDPSession | undefined;
@@ -1184,6 +1223,7 @@ export async function solve(
     page.removeListener('close', onPageClosed);
     page.removeListener('crash', onPageCrashed);
     page.removeListener('response', onResponse);
+    page.removeListener('response', onScriptResponse);
     page.removeListener('requestfailed', onRequestFailed);
     if (routeInstalled) {
       await context
@@ -1242,9 +1282,20 @@ async function callSolver(
   document: ChallengeDocumentData,
   proxy: string | undefined,
   timeout: number,
-  solverApiKey: string | undefined
+  solverApiKey: string | undefined,
+  // eslint-disable-next-line no-unused-vars -- function-type parameter
+  externalScriptBody: (url: string) => Promise<string>
 ): Promise<PreparedSubmission> {
   const connection = document.surfaces.connection;
+
+  const externalScripts: ExternalScript[] = await Promise.all(
+    extractExternalScriptUrls(document.html, document.url).map(
+      async (scriptUrl) => ({
+        body: await externalScriptBody(scriptUrl),
+        url: scriptUrl,
+      })
+    )
+  );
 
   // The challenge document's stylesheets. Fetched from inside the challenge
   // frame itself — same origin, same cookies, same proxy as the document —
@@ -1275,6 +1326,7 @@ async function callSolver(
         iframeData: {
           finalNavigationResponseBodySizes:
             document.finalNavigationResponseBodySizes,
+          ...(externalScripts.length ? { externalScripts } : {}),
           html: document.html,
           ...(stylesheetAssets.length ? { stylesheetAssets } : {}),
           url: document.url,
