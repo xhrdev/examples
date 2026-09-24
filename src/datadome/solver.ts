@@ -172,6 +172,12 @@ type Deferred<T> = {
 };
 
 type FrameSurfaces = {
+  battery?: {
+    charging: boolean;
+    chargingTime: null | number;
+    dischargingTime: null | number;
+    level: number;
+  };
   connection?: {
     downlink: number;
     effectiveType: string;
@@ -1351,6 +1357,9 @@ async function callSolver(
           url: document.url,
         },
         js_profile: {
+          ...(document.surfaces.battery
+            ? { battery: document.surfaces.battery }
+            : {}),
           brands: PROFILE.brands,
           chromeFullVersion: PROFILE.chromeFullVersion,
           chromeVersion: PROFILE.chromeVersion,
@@ -1789,9 +1798,36 @@ async function sampleChallengeFrame(
           };
         }
       ).connection;
+      const getBattery = (
+        browserNavigator as unknown as {
+          getBattery?: () => Promise<{
+            charging: boolean;
+            chargingTime: number;
+            dischargingTime: number;
+            level: number;
+          }>;
+        }
+      ).getBattery;
+      const battery = getBattery
+        ? await getBattery.call(browserNavigator)
+        : undefined;
       const navigation = performance.getEntriesByType('navigation')[0] as
         PerformanceNavigationTiming | undefined;
       return {
+        ...(battery
+          ? {
+              battery: {
+                charging: battery.charging,
+                chargingTime: Number.isFinite(battery.chargingTime)
+                  ? battery.chargingTime
+                  : null,
+                dischargingTime: Number.isFinite(battery.dischargingTime)
+                  ? battery.dischargingTime
+                  : null,
+                level: battery.level,
+              },
+            }
+          : {}),
         ...(connection
           ? {
               connection: {
@@ -1825,6 +1861,7 @@ async function sampleChallengeFrame(
     throw new Error('The challenge frame did not inherit the Chrome profile');
   }
   return {
+    ...(sampled.battery ? { battery: sampled.battery } : {}),
     ...(sampled.connection ? { connection: sampled.connection } : {}),
     languages: sampled.languages,
     nextHopProtocol: sampled.nextHopProtocol,
