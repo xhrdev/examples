@@ -24,16 +24,34 @@
  *   2. Read the challenge parameters out of the page.
  *   3. POST them to `/dd/solve`; get a prepared submission back.
  *   4. Splice that payload into the request Chrome is already making.
- *   5. Repeat if DataDome escalates: an interstitial (`i`) frequently turns
- *      into a captcha (`c`), so the round loop handles an `i -> c` sequence.
+ *   5. Repeat for as long as DataDome keeps asking. An interstitial (`i`)
+ *      turning into a captcha (`c`) is the common case, but nothing here
+ *      counts challenges or insists on a particular order: whatever is on
+ *      screen gets answered.
  *   6. Resolve once a navigation succeeds with the accepted cookie.
+ *
+ * ## Only one thing is unsolvable
+ *
+ * A captcha document with no slider in it is DataDome's block page. It looks
+ * like a captcha in the `dd` object — `rt: "c"` all the same — but there is
+ * no puzzle on the page, so there is nothing to send. That is the one failure
+ * this bridge declares on its own. A rejected submission, a re-served
+ * challenge, a challenge that swaps type mid-flight: all of those just mean
+ * another challenge to answer.
+ *
+ * ## Nothing here reloads the page
+ *
+ * The challenge script treats a failed subresource as a reason to start over,
+ * so this file never aborts a DataDome request and never navigates on its own.
+ * A carrier it cannot use is passed through untouched. Every navigation in the
+ * flow is one the challenge script chose to make.
  *
  * ## Reading this file
  *
  * Everything below `solve` is a helper, in alphabetical order. The parts
  * worth knowing:
  *
- *   solve()                     the entry point and the round loop
+ *   solve()                     the entry point and the challenge loop
  *   callSolver()                the one HTTP call to xhr.dev
  *   parseChallenge()            challenge params out of a document URL
  *   buildCaptchaRelayUrl()      splices the solved payload into a captcha GET
@@ -94,8 +112,6 @@ type CaptchaSolverResult = {
 
 type ChallengeIr = number | string;
 
-type ChallengeSequence = ReadonlyArray<DataDomeChallenge['rt']>;
-
 type DataDomeChallenge = {
   b?: number;
   cid: string;
@@ -145,6 +161,17 @@ export type SolveResult = {
   url: string;
 };
 
+/**
+ * One challenge, read and priced. There is no numbering and no history: the
+ * page either has a challenge on screen or it does not, and if it puts a new
+ * one up, that one replaces this.
+ */
+type Attempt = {
+  challenge: ChallengeData;
+  document: ChallengeDocumentData;
+  solver: Promise<PreparedSubmission>;
+};
+
 type ChallengeData = {
   cookie: Cookie;
   dd: DataDomeChallenge;
@@ -160,6 +187,18 @@ type ChallengeDocumentData = {
   html: string;
   surfaces: FrameSurfaces;
   url: string;
+};
+
+/**
+ * The slot the challenge on screen occupies. Opened the moment a challenge
+ * document response is seen — synchronously, before it is read — so that the
+ * submission the challenge script makes can be matched to it without anyone
+ * counting anything. `superseded` resolves with the slot that replaced it.
+ */
+type ChallengeSlot = {
+  attempt: Deferred<Attempt>;
+  nativeSubmitStarted: Deferred<undefined>;
+  superseded: Deferred<ChallengeSlot>;
 };
 
 type Deferred<T> = {
@@ -202,27 +241,6 @@ type RawMessage = {
   result?: unknown;
 };
 
-type Round = {
-  challenge: Deferred<ChallengeData>;
-  challengeData?: ChallengeData;
-  completion: Deferred<RoundCompletion>;
-  document: Deferred<ChallengeDocumentData>;
-  index: number;
-  nativeSubmitStarted: Deferred<undefined>;
-  next?: Round;
-  relayStarted: boolean;
-  solver?: Promise<PreparedSubmission>;
-  submit: Deferred<SubmitResult>;
-};
-
-type RoundCompletion =
-  | { kind: 'escalated'; round: Round }
-  | { kind: 'navigation'; navigation: NavigationResult };
-
-type SubmitResult = {
-  expectedNavigationUrl?: string;
-};
-
 type WindowGeometry = {
   availHeight: number;
   availLeft: number;
@@ -240,19 +258,6 @@ type WindowGeometry = {
   screenY: number;
   width: number;
 };
-
-function appendChallengeType(
-  sequence: ChallengeSequence,
-  next: DataDomeChallenge['rt']
-): ChallengeSequence {
-  if (sequence.length === 0) return [next];
-  if (sequence.length === 1 && sequence[0] === 'i' && next === 'c') {
-    return [...sequence, next];
-  }
-  throw new Error(
-    'Only interstitial, captcha, and interstitial-to-captcha sequences are supported'
-  );
-}
 
 /** Replace only the two sensor fields in Chrome's native captcha XHR URL. */
 function buildCaptchaRelayUrl(context: CaptchaRelayContext): string {
@@ -671,7 +676,7 @@ const UA_OVERRIDE = {
 const log = (message: string, ...extra: unknown[]): void =>
   console.log(`[${new Date().toISOString()}] ${message}`, ...extra);
 
-/** Solve a DataDome interstitial, captcha, or interstitial-to-captcha flow. */
+/** Solve however many DataDome challenges the page decides to serve. */
 export async function solve(
   page: Page,
   options: SolveOptions
@@ -685,9 +690,12 @@ export async function solve(
 
   const fatal = deferred<never>();
   void fatal.promise.catch(() => undefined);
-  const carrierRounds = new Map<Request, Round>();
-  let sequence: ChallengeSequence = [];
-  let activeRound: Round | undefined;
+  const accepted = deferred<NavigationResult>();
+  const carriers = new Set<Request>();
+  const challengeSlots = new Map<Response, ChallengeSlot>();
+  const firstSlot = deferred<ChallengeSlot>();
+  let currentSlot: ChallengeSlot | undefined;
+  let relayed = false;
   let failed = false;
   let responseQueue = Promise.resolve();
 
@@ -697,45 +705,20 @@ export async function solve(
     fatal.reject(asError(error));
   };
 
-  const createRound = (): Round => {
-    const round: Round = {
-      challenge: deferred<ChallengeData>(),
-      completion: deferred<RoundCompletion>(),
-      document: deferred<ChallengeDocumentData>(),
-      index: 0,
+  // Opened the instant a challenge document response is seen, before any of
+  // the asynchronous work of reading it — so a carrier request that races
+  // that work still waits for *this* challenge's payload and never picks up
+  // the one before it.
+  const openSlot = (): ChallengeSlot => {
+    const slot: ChallengeSlot = {
+      attempt: deferred<Attempt>(),
       nativeSubmitStarted: deferred<undefined>(),
-      relayStarted: false,
-      submit: deferred<SubmitResult>(),
+      superseded: deferred<ChallengeSlot>(),
     };
-    activeRound = round;
-    return round;
-  };
-
-  const createNextRound = (previous: Round): Round => {
-    if (previous.next) return previous.next;
-    if (previous.challengeData?.dd.rt !== 'i') {
-      throw new Error('Only an interstitial may escalate to a captcha');
-    }
-    const next = createRound();
-    previous.next = next;
-    previous.completion.resolve({ kind: 'escalated', round: next });
-    return next;
-  };
-
-  const registerChallenge = (
-    round: Round,
-    challengeData: ChallengeData
-  ): void => {
-    if (round.challenge.settled) {
-      throw new Error('A challenge round attempted to replace its identity');
-    }
-    sequence = appendChallengeType(sequence, challengeData.dd.rt);
-    round.challengeData = challengeData;
-    round.index = sequence.length;
-    round.challenge.resolve(challengeData);
-    log(
-      `DataDome ${challengeData.dd.rt === 'c' ? 'captcha' : 'interstitial'} detected (round ${round.index}, ${sequence.join(' -> ')})`
-    );
+    currentSlot?.superseded.resolve(slot);
+    currentSlot = slot;
+    firstSlot.resolve(slot);
+    return slot;
   };
 
   const externalScriptBodies = new Map<string, Deferred<string>>();
@@ -769,27 +752,8 @@ export async function solve(
       fatal.promise
     );
 
-  const getSolverResult = (
-    round: Round,
-    challengeData: ChallengeData,
-    documentData: ChallengeDocumentData
-  ): Promise<PreparedSubmission> => {
-    round.solver ??= callSolver(
-      solverBaseUrl,
-      challengeData,
-      documentData,
-      proxy,
-      timeout,
-      solverApiKey,
-      awaitExternalScript
-    ).catch((error: unknown) => {
-      fail(error);
-      throw error;
-    });
-    return round.solver;
-  };
-
   const processChallengeDocument = async (
+    slot: ChallengeSlot,
     response: Response,
     type: DataDomeChallenge['rt']
   ): Promise<void> => {
@@ -805,52 +769,32 @@ export async function solve(
       throw new Error('Unexpected DataDome challenge document');
     }
 
-    let round = activeRound;
-    if (!round) {
-      throw new Error('A challenge document appeared without an active round');
+    const dd = parseChallenge(request.url());
+    if (!dd || dd.rt !== type) {
+      throw new Error('The challenge document identity could not be parsed');
     }
-    if (round.challengeData && round.challengeData.dd.rt !== type) {
-      if (type !== 'c' || !round.relayStarted) {
-        throw new Error('The challenge document type changed unexpectedly');
-      }
-      round = createNextRound(round);
-    }
-    if (round.document.settled) {
-      throw new Error('The challenge document recurred in the same round');
-    }
-
-    if (!round.challenge.settled) {
-      const dd = parseChallenge(request.url());
-      if (!dd || dd.rt !== type) {
-        throw new Error('The challenge document identity could not be parsed');
-      }
-      const cookie = selectTargetCookie(
-        await context.cookies(targetUrl.href),
-        targetUrl
-      );
-      if (!cookie) {
-        throw new Error('The escalated challenge lost its target cookie');
-      }
-      registerChallenge(round, { cookie, dd, pageUrl: targetUrl.href });
-    }
-
-    const challengeData = await waitFor(
-      round.challenge.promise,
-      `challenge ${round.index} metadata`,
-      timeout,
-      fatal.promise
+    const cookie = selectTargetCookie(
+      await context.cookies(targetUrl.href),
+      targetUrl
     );
-    if (challengeData.dd.rt !== type) {
-      throw new Error('The challenge metadata and document type differed');
+    if (!cookie) {
+      throw new Error('The challenge lost its target cookie');
     }
+    const challenge: ChallengeData = { cookie, dd, pageUrl: targetUrl.href };
+    log(`DataDome ${type === 'c' ? 'captcha' : 'interstitial'} detected`);
 
     const [body, sizes] = await Promise.all([response.body(), request.sizes()]);
     const surfaces = await sampleChallengeFrame(page.mainFrame(), frame);
     const html = body.toString('utf8');
+    // A captcha document with no slider in it is not a captcha we can answer:
+    // it is the block page DataDome serves when it has already decided. That
+    // is the one thing this bridge treats as unsolvable. Checked after the
+    // body is in hand, because waiting first risks losing it to a navigation.
+    if (type === 'c') await assertCaptchaSlider(frame, slot, timeout);
     if (!html.includes('<script')) {
       throw new Error('The challenge document did not contain a script');
     }
-    const documentData: ChallengeDocumentData = {
+    const document: ChallengeDocumentData = {
       finalNavigationResponseBodySizes: {
         decodedBodySize: body.byteLength,
         encodedBodySize: Math.max(0, Math.round(sizes.responseBodySize)),
@@ -860,11 +804,21 @@ export async function solve(
       surfaces,
       url: request.url(),
     };
-    round.document.resolve(documentData);
+    const solver = callSolver(
+      solverBaseUrl,
+      challenge,
+      document,
+      proxy,
+      timeout,
+      solverApiKey,
+      awaitExternalScript
+    ).catch((error: unknown) => {
+      fail(error);
+      throw error;
+    });
+    void solver.catch(() => undefined);
     log(`DataDome ${type === 'c' ? 'captcha' : 'interstitial'} document ready`);
-    void getSolverResult(round, challengeData, documentData).catch(
-      () => undefined
-    );
+    slot.attempt.resolve({ challenge, document, solver });
   };
 
   const processTargetDocument = async (response: Response): Promise<void> => {
@@ -879,15 +833,8 @@ export async function solve(
     }
 
     if (response.status() !== 403) {
-      if (
-        response.status() >= 200 &&
-        response.status() < 300 &&
-        activeRound?.relayStarted
-      ) {
-        activeRound.completion.resolve({
-          kind: 'navigation',
-          navigation: { status: response.status(), url: response.url() },
-        });
+      if (response.status() >= 200 && response.status() < 300 && relayed) {
+        accepted.resolve({ status: response.status(), url: response.url() });
       }
       return;
     }
@@ -900,49 +847,15 @@ export async function solve(
     ) {
       throw new BannedError();
     }
-
-    const round = activeRound;
-    if (!round) {
-      throw new Error('The target challenge appeared without an active round');
-    }
-    if (round.challenge.settled) {
-      if (!round.relayStarted || round.challengeData?.dd.rt !== 'i') {
-        throw new Error('The target returned a recurrent challenge');
-      }
-      createNextRound(round);
-    }
-  };
-
-  const processCarrierResponse = async (response: Response): Promise<void> => {
-    const request = response.request();
-    const round = carrierRounds.get(request);
-    if (!round) return;
-    carrierRounds.delete(request);
-
-    const captcha = round.challengeData?.dd.rt === 'c';
-    const accepted = captcha
-      ? response.status() >= 200 && response.status() < 300
-      : response.status() >= 200 && response.status() < 400;
-    if (!accepted) {
-      throw new Error(
-        `DataDome ${captcha ? 'captcha GET' : 'interstitial POST'} returned HTTP ${response.status()}`
-      );
-    }
-    const expectedNavigationUrl = captcha
-      ? captchaReloadUrl(request.url())
-      : undefined;
-    round.submit.resolve({
-      ...(expectedNavigationUrl ? { expectedNavigationUrl } : {}),
-    });
-    log(
-      `DataDome ${captcha ? 'captcha GET' : 'interstitial POST'} returned HTTP ${response.status()}`
-    );
+    // Any other 403 is DataDome saying "challenge first". The challenge
+    // document that follows opens its own slot; there is nothing to do here.
   };
 
   const processResponse = async (response: Response): Promise<void> => {
     const request = response.request();
-    if (carrierRounds.has(request)) {
-      await processCarrierResponse(response);
+    if (carriers.has(request)) {
+      carriers.delete(request);
+      log(`DataDome submission returned HTTP ${response.status()}`);
       return;
     }
     if (
@@ -953,22 +866,27 @@ export async function solve(
     }
     const type = challengeDocumentType(request);
     if (type) {
-      await processChallengeDocument(response, type);
+      const slot = challengeSlots.get(response);
+      if (!slot) throw new Error('A challenge document arrived without a slot');
+      challengeSlots.delete(response);
+      await processChallengeDocument(slot, response, type);
       return;
     }
     await processTargetDocument(response);
   };
 
   const onResponse = (response: Response): void => {
+    // Rotate the slot synchronously, before the queued work below runs.
+    if (challengeDocumentType(response.request())) {
+      challengeSlots.set(response, openSlot());
+    }
     responseQueue = responseQueue
       .then(() => processResponse(response))
       .catch((error: unknown) => fail(error));
   };
 
   const onRequestFailed = (request: Request): void => {
-    const round = carrierRounds.get(request);
-    if (!round) return;
-    carrierRounds.delete(request);
+    if (!carriers.delete(request)) return;
     fail(
       new Error(
         `DataDome browser submission failed: ${request.failure()?.errorText ?? 'unknown network error'}`
@@ -1000,58 +918,51 @@ export async function solve(
       return;
     }
 
+    // Whatever challenge is on screen when the carrier is created is the one
+    // it belongs to. Nothing here ever aborts a DataDome request: an abort is
+    // a failed subresource to the challenge script, and a failed subresource
+    // is what makes it reload itself.
+    const slot = currentSlot;
+    if (!slot) {
+      log('A DataDome submission appeared before any challenge; passing it on');
+      await route.continue();
+      return;
+    }
+    carriers.add(request);
+
     try {
-      const round = activeRound;
-      if (!round) {
-        throw new Error('A DataDome submission appeared without a round');
-      }
-      if (round.relayStarted) {
-        throw new Error('The browser created more than one round submission');
-      }
-      round.relayStarted = true;
-
-      const challengeData = await waitFor(
-        round.challenge.promise,
-        'challenge metadata',
+      const attempt = await waitFor(
+        slot.attempt.promise,
+        'the challenge document',
         timeout,
         fatal.promise
       );
-      const documentData = await waitFor(
-        round.document.promise,
-        'challenge document',
-        timeout,
-        fatal.promise
-      );
-      if (
-        (challengeData.dd.rt === 'i' && !interstitial) ||
-        (challengeData.dd.rt === 'c' && !captcha)
-      ) {
-        throw new Error('The native carrier did not match the challenge type');
-      }
-      if (request.resourceType() !== 'xhr') {
-        throw new Error('The native DataDome carrier was not an XHR');
-      }
-      if (request.frame() !== documentData.frame) {
-        throw new Error('The native carrier came from another frame');
-      }
-      round.nativeSubmitStarted.resolve(undefined);
-
-      const solved = await getSolverResult(round, challengeData, documentData);
-      // The site can escalate this round to a captcha on its own timer while
-      // the solver call above is still in flight — an interstitial that
-      // takes its time to answer is exactly what "DataDome is unconvinced"
-      // looks like from the page's side. When that happens, `round.next` is
-      // already set by the time we get here, and this round's native carrier
-      // is a request its own page has already moved past: completing it
-      // still gets a real response from DataDome, but nothing downstream
-      // expects it, and it trips the new round's "recurred" guard. Drop it
-      // instead of relaying stale sensor data into a challenge that no
-      // longer exists.
-      if (round.next) {
-        await route.abort('aborted').catch(() => undefined);
+      // A carrier that does not belong to the challenge on screen is one the
+      // page has already left behind — an interstitial POST that arrives
+      // after the captcha replaced it, say. Its sensors would describe a
+      // challenge that no longer exists, so let the browser's own request go
+      // through untouched. DataDome will decline it and ask again, and the
+      // challenge it asks with is one this loop answers like any other.
+      const mine =
+        request.resourceType() === 'xhr' &&
+        request.frame() === attempt.document.frame &&
+        (attempt.challenge.dd.rt === 'c' ? captcha : interstitial);
+      if (!mine) {
+        log('Passing on a carrier that is not this challenge’s');
+        await route.continue();
         return;
       }
-      carrierRounds.set(request, round);
+      slot.nativeSubmitStarted.resolve(undefined);
+
+      const solved = await attempt.solver;
+      if (slot.superseded.settled) {
+        // The page moved on while the solver was working. These sensors
+        // describe a challenge that is no longer on screen, so send the
+        // browser's own request untouched rather than relay them.
+        log('Passing on a carrier whose challenge the page replaced');
+        await route.continue();
+        return;
+      }
       if (solved.type === 'captcha') {
         const relayUrl = buildCaptchaRelayUrl({
           headers: await request.allHeaders(),
@@ -1059,6 +970,7 @@ export async function solve(
           url: request.url(),
         });
         log(`Relaying sandbox sensors in Chrome captcha GET`);
+        relayed = true;
         await route.continue({ url: relayUrl });
         return;
       }
@@ -1070,10 +982,11 @@ export async function solve(
       }
       const relayBody = buildInterstitialRelayBody(nativeBody, solved.body);
       log(`Relaying sandbox sensors in Chrome interstitial POST`);
+      relayed = true;
       await route.continue({ postData: relayBody });
     } catch (error) {
       fail(error);
-      await route.abort('blockedbyclient').catch(() => undefined);
+      await route.continue().catch(() => undefined);
     }
   };
   const blockDdTags = (route: Route, request: Request): Promise<void> => {
@@ -1116,91 +1029,98 @@ export async function solve(
       fail
     );
 
-    const solveRound = async (
-      round: Round
-    ): Promise<
-      | { cookie: Cookie; kind: 'accepted'; navigation: NavigationResult }
-      | { kind: 'escalated'; round: Round }
-    > => {
-      const challengeData = await waitFor(
-        round.challenge.promise,
-        'DataDome challenge',
-        timeout,
-        fatal.promise
-      );
-      const documentData = await waitFor(
-        round.document.promise,
-        `challenge ${round.index} document`,
-        timeout,
-        fatal.promise
-      );
-      await getSolverResult(round, challengeData, documentData);
-      if (challengeData.dd.rt === 'c') {
-        await triggerPassiveCaptchaCarrier(
-          documentData.frame,
-          round.nativeSubmitStarted,
-          timeout,
-          fatal.promise
-        );
-      }
-      const submitted = await waitFor(
-        round.submit.promise,
-        `challenge ${round.index} browser response`,
-        timeout,
-        fatal.promise
-      );
-
-      const completion = await waitFor(
-        round.completion.promise,
-        `challenge ${round.index} completion`,
-        timeout,
-        fatal.promise
-      );
-      if (completion.kind === 'escalated') return completion;
-      if (
-        submitted.expectedNavigationUrl &&
-        new URL(completion.navigation.url).href !==
-          new URL(submitted.expectedNavigationUrl).href
-      ) {
-        throw new Error(
-          'The organic post-captcha navigation used an unexpected URL'
-        );
-      }
-
-      const cookie = await waitForCookieRotation(
-        context,
-        challengeData,
-        timeout,
-        fatal.promise
-      );
-      return {
-        cookie,
-        kind: 'accepted',
-        navigation: completion.navigation,
-      };
+    // Answer the challenge on screen. An interstitial's carrier fires on its
+    // own; a captcha's has to be asked for. Errors here are only fatal while
+    // this challenge is still the one on screen — once the page has replaced
+    // it, a dead frame is expected, not a fault.
+    const driveAttempt = (slot: ChallengeSlot, attempt: Attempt): void => {
+      void (async () => {
+        try {
+          await waitFor(
+            attempt.solver,
+            'the prepared submission',
+            timeout,
+            fatal.promise
+          );
+          if (attempt.challenge.dd.rt === 'c') {
+            const giveUp = Promise.race<never>([
+              fatal.promise,
+              slot.superseded.promise.then(() => {
+                throw new Error('The challenge was replaced');
+              }),
+            ]);
+            void giveUp.catch(() => undefined);
+            await triggerPassiveCaptchaCarrier(
+              attempt.document.frame,
+              slot.nativeSubmitStarted,
+              timeout,
+              giveUp
+            );
+          }
+        } catch (error) {
+          if (slot.superseded.settled) {
+            log(`Abandoning a replaced challenge: ${asError(error).message}`);
+            return;
+          }
+          fail(error);
+        }
+      })();
     };
 
-    const firstRound = createRound();
     const initialNavigation = page
       .goto(targetUrl.href, { timeout, waitUntil: 'domcontentloaded' })
       .catch((error: unknown) => {
-        if (!firstRound.challenge.settled) fail(error);
+        if (!currentSlot) fail(error);
         return null;
       });
 
-    let round = firstRound;
-    let accepted: { cookie: Cookie; navigation: NavigationResult } | undefined;
-    while (!accepted) {
-      const result = await solveRound(round);
-      if (result.kind === 'escalated') {
-        round = result.round;
-      } else {
-        accepted = result;
-      }
+    let slot = await waitFor(
+      firstSlot.promise,
+      'a DataDome challenge',
+      timeout,
+      fatal.promise
+    );
+    let answered: Attempt | undefined;
+    let navigation: NavigationResult | undefined;
+    while (!navigation) {
+      const attempt = await waitFor(
+        slot.attempt.promise,
+        'the challenge document',
+        timeout,
+        fatal.promise
+      );
+      answered = attempt;
+      driveAttempt(slot, attempt);
+      const outcome = await waitFor(
+        Promise.race<
+          | { kind: 'accepted'; navigation: NavigationResult }
+          | { kind: 'replaced'; slot: ChallengeSlot }
+        >([
+          accepted.promise.then((value) => ({
+            kind: 'accepted' as const,
+            navigation: value,
+          })),
+          slot.superseded.promise.then((value) => ({
+            kind: 'replaced' as const,
+            slot: value,
+          })),
+        ]),
+        'DataDome acceptance',
+        timeout,
+        fatal.promise
+      );
+      if (outcome.kind === 'accepted') navigation = outcome.navigation;
+      else slot = outcome.slot;
     }
 
+    if (!answered) throw new Error('DataDome acceptance lost its challenge');
+    const cookie = await waitForCookieRotation(
+      context,
+      answered.challenge,
+      timeout,
+      fatal.promise
+    );
     await raceFatal(initialNavigation, fatal.promise);
-    const roundsBeforeQuietWindow = sequence.length;
     await waitFor(
       delay(QUIET_WINDOW_MS),
       'acceptance window',
@@ -1209,19 +1129,17 @@ export async function solve(
     );
     await responseQueue;
     if (
-      sequence.length !== roundsBeforeQuietWindow ||
+      slot.superseded.settled ||
       new URL(page.url()).hostname !== targetUrl.hostname ||
-      accepted.navigation.status >= 400
+      navigation.status >= 400
     ) {
       throw new Error('DataDome acceptance could not be proven');
     }
 
-    log(
-      `DataDome acceptance proven after ${sequence.join(' -> ')} with HTTP ${accepted.navigation.status}`
-    );
+    log(`DataDome acceptance proven with HTTP ${navigation.status}`);
     return {
-      cookie: accepted.cookie.value,
-      responseStatus: accepted.navigation.status,
+      cookie: cookie.value,
+      responseStatus: navigation.status,
       url: page.url(),
     };
   } finally {
@@ -1247,6 +1165,38 @@ export async function solve(
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+/**
+ * A captcha document with no slider in it is the block page. DataDome serves
+ * the same `t: "c"` shell either way, so the object says "captcha" while the
+ * page offers nothing to solve — asking the solver for sensors there produces
+ * a payload for a puzzle that does not exist. The slider is the difference,
+ * so the slider is what this waits for. It is the only unsolvable outcome
+ * this bridge recognises; everything else is just another challenge.
+ */
+async function assertCaptchaSlider(
+  frame: Frame,
+  slot: ChallengeSlot,
+  timeout: number
+): Promise<void> {
+  try {
+    const handle = await frame.waitForFunction(
+      (selector: string) => {
+        const box = document.querySelector(selector)?.getBoundingClientRect();
+        return box !== undefined && box.width > 0 && box.height > 0;
+      },
+      CAPTCHA_HANDLE_SELECTOR,
+      { polling: 100, timeout: Math.min(timeout, CAPTCHA_LAYOUT_TIMEOUT_MS) }
+    );
+    await handle.dispose();
+  } catch {
+    // A frame the page replaced while we were looking is not a block page.
+    if (slot.superseded.settled) return;
+    throw new Error(
+      'DataDome served a captcha with no slider: this is a block page, not a challenge'
+    );
+  }
 }
 
 async function assertInterstitialCarrier(
@@ -1406,14 +1356,6 @@ async function callSolver(
     throw new Error('Solver returned an unexpected DataDome Referer');
   }
   return result;
-}
-
-function captchaReloadUrl(carrierUrl: string): string {
-  const values = new URL(carrierUrl).searchParams.getAll('referer');
-  if (values.length !== 1 || !values[0]) {
-    throw new Error('The native captcha carrier omitted its reload URL');
-  }
-  return httpUrl(values[0], 'captcha reload').href;
 }
 
 function captureWindowGeometry(): WindowGeometry {
