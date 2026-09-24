@@ -22,11 +22,10 @@
  *
  * Advisory in the smoke suite: the site's own escalation timer can beat the
  * solver's answer for the interstitial round, and it can also re-serve the
- * same interstitial rather than escalating at all. The first case is fixed —
- * a round that escalates while its relay is still in flight now gets
- * abandoned instead of corrupting the new round — the second still reads as
- * "The challenge document recurred in the same round" and needs the round
- * model to allow a same-type retry, not just an escalation.
+ * same interstitial rather than escalating at all. Both are fixed — a round
+ * that escalates while its relay is still in flight gets abandoned instead
+ * of corrupting the new round, and a re-served interstitial starts a fresh
+ * same-type round instead of failing as a recurrent challenge.
  */
 import { runBrowserTarget } from '#src/datadome/browser-target.js';
 

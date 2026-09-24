@@ -246,7 +246,11 @@ function appendChallengeType(
   next: DataDomeChallenge['rt']
 ): ChallengeSequence {
   if (sequence.length === 0) return [next];
-  if (sequence.length === 1 && sequence[0] === 'i' && next === 'c') {
+  // An interstitial may repeat any number of times before it escalates to a
+  // captcha (DataDome's own escalation timer re-serves the same interstitial
+  // rather than accepting or escalating it, so a retry is a normal outcome),
+  // but a captcha never repeats or escalates further.
+  if (sequence[sequence.length - 1] === 'i') {
     return [...sequence, next];
   }
   throw new Error(
@@ -341,6 +345,16 @@ function challengeIrValue(value: unknown): ChallengeIr | undefined {
   if (!isUnsignedInteger(unsigned)) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function isEscalatedCompletion(
+  value: unknown
+): value is { kind: 'escalated'; round: Round } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { kind?: unknown }).kind === 'escalated'
+  );
 }
 
 function isUnsignedInteger(value: string): boolean {
@@ -809,6 +823,16 @@ export async function solve(
     if (!round) {
       throw new Error('A challenge document appeared without an active round');
     }
+    // A document that arrives after this round's own relay already got back
+    // a 2xx is never a new challenge, whatever type it claims to be. DataDome
+    // accepted the round and is just replaying its redirect dance — same
+    // interstitial again, or a captcha page — on its way to the real target.
+    // Treating that as an escalation or a retry means waiting on a native
+    // carrier that will never fire (a hang) or reading a response body off a
+    // page that navigates or closes out from under us mid-read (a crash).
+    // Leave the round alone and let its own `completion` wait for the real
+    // navigation instead.
+    if (round.relayStarted && round.submit.settled) return;
     if (round.challengeData && round.challengeData.dd.rt !== type) {
       if (type !== 'c' || !round.relayStarted) {
         throw new Error('The challenge document type changed unexpectedly');
@@ -816,7 +840,15 @@ export async function solve(
       round = createNextRound(round);
     }
     if (round.document.settled) {
-      throw new Error('The challenge document recurred in the same round');
+      // A re-served interstitial that reaches here (the round's relay is
+      // still pending, per the guard above) can only mean the round's own
+      // relay never got a response — aborted because it was superseded, or
+      // DataDome simply declined and asked again — which is a genuine retry
+      // needing a new round to solve.
+      if (type !== 'i' || !round.relayStarted) {
+        throw new Error('The challenge document recurred in the same round');
+      }
+      round = createNextRound(round);
     }
 
     if (!round.challenge.settled) {
@@ -905,6 +937,12 @@ export async function solve(
     if (!round) {
       throw new Error('The target challenge appeared without an active round');
     }
+    // Same reasoning as the matching guard in processChallengeDocument: once
+    // this round's own relay already got back a 2xx, a 403 from the target
+    // is a stale straggler from before the new cookie applied, not a real
+    // re-challenge — ignore it and let completion resolve off a later
+    // response instead of failing a round DataDome already accepted.
+    if (round.relayStarted && round.submit.settled) return;
     if (round.challenge.settled) {
       if (!round.relayStarted || round.challengeData?.dd.rt !== 'i') {
         throw new Error('The target returned a recurrent challenge');
@@ -1143,12 +1181,31 @@ export async function solve(
           fatal.promise
         );
       }
-      const submitted = await waitFor(
-        round.submit.promise,
-        `challenge ${round.index} browser response`,
-        timeout,
-        fatal.promise
-      );
+      // A round can be superseded — its native carrier aborted because
+      // `round.next` was already set by the time the solver answered (see
+      // the abort above) — before it ever gets a browser response. Waiting
+      // on `round.submit` alone would then hang until the timeout even
+      // though `round.completion` already knows this round is done for.
+      // Racing the two lets an escalation that lands first short-circuit
+      // the wait instead of being noticed only after it, on the next line.
+      let submitted: SubmitResult;
+      try {
+        submitted = await waitFor(
+          Promise.race([
+            round.submit.promise,
+            round.completion.promise.then((completion) => {
+              if (completion.kind === 'escalated') throw completion;
+              return round.submit.promise;
+            }),
+          ]),
+          `challenge ${round.index} browser response`,
+          timeout,
+          fatal.promise
+        );
+      } catch (thrown) {
+        if (isEscalatedCompletion(thrown)) return thrown;
+        throw thrown;
+      }
 
       const completion = await waitFor(
         round.completion.promise,
