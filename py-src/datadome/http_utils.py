@@ -17,7 +17,7 @@ import os
 import re
 import sys
 from datetime import datetime, timezone
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode, urljoin, urlsplit, urlunsplit
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -64,6 +64,15 @@ PROFILE_ID = PROFILE['id']
 DD_BLOCK_RE = re.compile(r'var\s+dd\s*=\s*(\{[^}]*\})')
 TITLE_RE = re.compile(r'<title>([^<]*)', re.I)
 
+MAX_EXTERNAL_SCRIPTS = 4
+SCRIPT_OPEN_TAG_RE = re.compile(r'<script\b([^>]*)>', re.I)
+SRC_ATTRIBUTE_RE = re.compile(
+  r'''(?:^|\s)src\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))''', re.I
+)
+_PRINTABLE = ''.join(map(chr, range(0x21, 0x7F)))
+_PATH_SAFE = _PRINTABLE.translate(str.maketrans('', '', '"#<>?`{}'))
+_QUERY_SAFE = _PRINTABLE.translate(str.maketrans('', '', '"#<>\''))
+
 
 def log(message):
   stamp = datetime.now(timezone.utc).isoformat(timespec='milliseconds')
@@ -99,6 +108,24 @@ def document_headers(target_url):
     'referer': target_url,
     'sec-fetch-dest': 'iframe',
     'sec-fetch-site': 'cross-site',
+  })
+  return headers
+
+
+def script_headers(document_url, script_url):
+  document = urlsplit(document_url)
+  same_origin = urlsplit(script_url).netloc == document.netloc
+  headers = navigation_headers()
+  del headers['sec-fetch-user']
+  del headers['upgrade-insecure-requests']
+  headers.update({
+    'accept': '*/*',
+    'referer': (
+      document_url if same_origin else f'{document.scheme}://{document.netloc}/'
+    ),
+    'sec-fetch-dest': 'script',
+    'sec-fetch-mode': 'no-cors',
+    'sec-fetch-site': 'same-origin' if same_origin else 'same-site',
   })
   return headers
 
@@ -156,6 +183,59 @@ def challenge_document_url(dd, target_url):
   return f'{GEO_ORIGIN}{path}?{urlencode(params)}'
 
 
+def external_script_url(value, base=None):
+  if not value:
+    return None
+  try:
+    url = urlsplit(urljoin(base, value.strip()) if base else value.strip())
+    port = url.port
+  except ValueError:
+    return None
+  host = url.hostname or ''
+  if (
+    url.scheme != 'https'
+    or url.username
+    or url.password
+    or port not in (None, 443)
+    or (
+      host != 'captcha-delivery.com'
+      and not host.endswith('.captcha-delivery.com')
+    )
+  ):
+    return None
+  path = quote(url.path or '/', _PATH_SAFE)
+  return urlunsplit(('https', host, path, quote(url.query, _QUERY_SAFE), ''))
+
+
+def external_script_urls(html, document_url):
+  urls = []
+  lower = html.lower()
+  position = 0
+  while match := SCRIPT_OPEN_TAG_RE.search(html, position):
+    src = SRC_ATTRIBUTE_RE.search(match.group(1))
+    value = src and next(v for v in src.groups() if v is not None)
+    url = external_script_url(value, document_url)
+    if url and url not in urls:
+      urls.append(url)
+    close = lower.find('</script>', match.end())
+    if close < 0:
+      break
+    position = close + len('</script>')
+  return urls[:MAX_EXTERNAL_SCRIPTS]
+
+
+def collect_external_scripts(document_html, document_url, fetch):
+  scripts = []
+  for url in external_script_urls(document_html, document_url):
+    log(f'GET external script {url}')
+    status, body = fetch(url, script_headers(document_url, url))
+    log(f'  <- HTTP {status} ({len(body)} bytes)')
+    if not 200 <= status < 300:
+      raise RuntimeError(f'external script returned HTTP {status}: {url}')
+    scripts.append({'body': body, 'url': url})
+  return scripts
+
+
 def solve_endpoint(solver_url):
   """`/dd/solve` never submits for you — it returns a prepared submission.
 
@@ -165,17 +245,23 @@ def solve_endpoint(solver_url):
   return f'{solver_url}/dd/solve'
 
 
-def solve_request_body(dd, document_html, document_url, proxy, target_url):
+def solve_request_body(
+  dd, document_html, document_url, proxy, target_url, external_scripts=None
+):
   challenge = {'cid': dd['cid'], 'hsh': dd['hsh'], 'rt': dd['rt']}
   challenge['s'] = dd.get('s', 0)
   for key in ('b', 'e', 't'):
     if dd.get(key) is not None:
       challenge[key] = dd[key]
 
+  iframe_data = {'html': document_html, 'url': document_url}
+  if external_scripts:
+    iframe_data['externalScripts'] = external_scripts
+
   body = {
     'dd': challenge,
     'ddCookie': dd['cookie'],
-    'iframeData': {'html': document_html, 'url': document_url},
+    'iframeData': iframe_data,
     'js_profile': {
       'brands': PROFILE['brands'],
       'chromeFullVersion': PROFILE['chromeFullVersion'],

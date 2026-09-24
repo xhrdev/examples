@@ -4,8 +4,8 @@ python3 py-src/datadome/grainger_urllib.py
 python3 py-src/datadome/grainger_urllib.py --url=https://www.idealista.com/
 
 DataDome clearance cookies for grainger.com with **nothing but the
-standard library** — no browser, and no third-party HTTP client. Same four
-requests as grainger_requests.py; see that file for the flow.
+standard library** — no browser, and no third-party HTTP client. Same requests
+as grainger_requests.py; see that file for the flow.
 
 `urllib.request` tunnels HTTPS through a proxy via `ProxyHandler`, and
 takes the credentials straight from the proxy URL. Build one opener for
@@ -33,6 +33,7 @@ from datadome.http_utils import (  # noqa: E402
   TIMEOUT_S,
   challenge_document_url,
   check_rate_limit,
+  collect_external_scripts,
   check_prepared_submission,
   document_headers,
   log,
@@ -137,13 +138,24 @@ def attempt(proxy, api_key, solver_url, target_url):
   )
   log(f'  <- HTTP {status} ({len(document_html)} bytes)')
 
+  external_scripts = collect_external_scripts(
+    document_html,
+    document_url,
+    lambda url, headers: _send(proxied, url, headers)[:2],
+  )
+
   # 3. Ask xhr.dev to build the submission — but not to send it.
   log('POST /dd/solve')
   headers = {'content-type': 'application/json'}
   if api_key:
     headers['x-api-key'] = api_key
   body = solve_request_body(
-    dd, document_html, document_url, proxy, target_url
+    dd,
+    document_html,
+    document_url,
+    proxy,
+    target_url,
+    external_scripts=external_scripts,
   )
   status, solve_body, _headers = _send(
     direct,

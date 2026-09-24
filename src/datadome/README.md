@@ -34,11 +34,12 @@ Those fields are the challenge. `cookie` is the same value DataDome set in the
 
 ## the HTTP flow
 
-`grainger-undici.ts` is this, end to end, in about 200 lines:
+`py-src/datadome/grainger_requests.py` is this, end to end:
 
 ```
 1.  GET  https://www.grainger.com/            -> 403 + var dd={…} + datadome cookie
 2.  GET  geo.captcha-delivery.com/captcha/…   -> challenge document HTML
+    GET  ct.captcha-delivery.com/…            -> each external script it loads
 3.  POST <solver>/dd/solve       -> a prepared submission
 4.  GET  geo.captcha-delivery.com/captcha/check?…  -> {"cookie":"datadome=…"}
 5.  GET  https://www.grainger.com/  + cookie  -> 200, the real page
@@ -54,7 +55,9 @@ fetch it: send the body of every such script the document references as
 in `external-scripts.ts` lists them). A missing one answers 422
 `dd.script.missing`; one the document does not load answers 400. Documents
 with an inline collector need none. `solver.ts` takes the bodies from the
-browser's own responses.
+browser's own responses; the Python clients fetch them through the same
+session, proxy and cookies as the document (`collect_external_scripts` in
+`http_utils.py`), and `dev-resources/curl` does the same with jq.
 
 ### you send the submission, always
 
@@ -109,21 +112,17 @@ HTTP flow is far cheaper.
 
 | file | what it shows |
 |---|---|
-| `grainger-undici.ts` | the full HTTP flow with **undici**. `--url=` points it at any DataDome site. |
-| `grainger-axios.ts` | the same flow with **axios** and a cookie jar |
-| `grainger-fetch.ts` | the same flow with **Node's built-in fetch** and no dependencies |
-| `grainger.ts` | the same target through the browser bridge |
-| `grainger-lightpanda.ts` | the flow driven by **Lightpanda** instead of Chrome — see below |
+| `grainger.ts` | grainger.com through the browser bridge |
 | `idealista.ts` | an interstitial that escalates to a captcha |
 | `browser-target.ts` | the launch options, signal handling and screenshot capture every browser example shares |
-| `http-utils.ts` | request building and response parsing the three HTTP versions share |
+| `http-utils.ts` | the headers and block-page parsing the MCP examples share |
 | `profile.ts` | the browser identity and DataDome endpoints, shared with `solver.ts` |
 
-The same three, in Python, under `py-src/datadome/`:
+The HTTP flow, in Python, under `py-src/datadome/`:
 
 | file | what it shows |
 |---|---|
-| `grainger_requests.py` | the HTTP flow with **requests** |
+| `grainger_requests.py` | the HTTP flow with **requests**. `--url=` points it at any DataDome site. |
 | `grainger_httpx.py` | the same flow with **httpx** |
 | `grainger_urllib.py` | the same flow with **only the standard library** |
 | `http_utils.py` | the Python port of `http-utils.ts` (identity included) |
@@ -174,67 +173,16 @@ Three things that decide the outcome more than the script does:
   as success.
 
 ```bash
-npm run grainger          # undici
-npm run grainger:axios    # axios
-npm run grainger:fetch    # no dependencies
-node --env-file=.env src/datadome/grainger-undici.ts --url=https://www.idealista.com/
+./venv/bin/python py-src/datadome/grainger_requests.py --url=https://www.idealista.com/
 node --env-file=.env src/datadome/idealista.ts --headless
 ```
 
 ### lightpanda
 
-`grainger-lightpanda.ts` swaps Chrome for [Lightpanda], a headless browser with
-no renderer — a ~70MB binary that starts in milliseconds and holds a page in a
-few MB. `npm install` downloads it to `target/`, so there is nothing to set up:
-
-```bash
-npm run grainger:lightpanda
-```
-
-**Lightpanda cannot reach DataDome on its own.** Point it straight at a proxy
-and DataDome answers `rt:"c"` with `t:"bv"` — a banned visitor — before a line
-of JavaScript runs, where the same proxy IP a second later gets a plain
-`t:"fe"` from `grainger-undici.ts`. It is not the user agent: undici sending
-`User-Agent: Lightpanda/1.0` over that proxy still gets `t:"fe"`. It is the
-connection, and nothing inside the browser can change it — `--user-agent`
-rejects any value containing "Mozilla", and `Emulation.setUserAgentOverride` is
-ignored on the wire.
-
-So `src/lightpanda.ts` puts `src/mitm.ts` in front of it: a local proxy that
-terminates TLS and re-makes each request with undici, the client the
-browser-free examples already use. With that the ban is gone — grainger serves
-an ordinary interstitial and the solve comes back in a second or two. Two
-details of that proxy were found here:
-
-- a request with **no `accept-encoding`** gets a captcha where the same request
-  with one gets an interstitial. `undici.request` sends none, `undici.fetch`
-  does, so the proxy uses `fetch`.
-- Lightpanda sends six headers and no `sec-fetch-*`. Without them grainger.com
-  serves its own error page instead of the real one.
-
-**Status:** reliable. A verified attempt returns the real page and DataDome
-rotates the cookie:
-
-```
-clearance cookie: datadome=QTlff_rUpD_JXTy6VJjnQ0wA9hB7akP68m1D2t678Gh_…
-verifying against the target
-  <- HTTP 200 (489743 bytes) "Grainger Industrial Supply - MRO Products…"
-```
-
-This used to fail roughly four attempts in ten, even with the three retries
-the runner makes. Re-measured 2026-08-16 with
-`node --env-file=.env src/loadtest.ts --script=src/datadome/grainger-lightpanda --iterations=30`:
-40/40 iterations across two runs verified first time, with no retries needed.
-The two things that changed between the original measurement and now are
-`16a8874` (2026-08-15, gave every Lightpanda session its own CDP port instead
-of pinning 9222 for all of them) and a lot of intervening upstream changes on
-DataDome's side, so which one actually fixed it isn't confirmed — only that
-it now holds up. `grainger-undici.ts` on the same proxy in the same minute
-still verifies first time, every time, same as before.
-
-See `src/lightpanda.ts` for the three differences that bite immediately (never
-reuse the starting page, `newCDPSession` crashes Playwright, `content()` never
-returns).
+`src/lightpanda.ts` and `src/mitm.ts` drive a challenge with [Lightpanda], a
+headless browser with no renderer, instead of Chrome. The example that ran them
+against grainger.com, `grainger-lightpanda.ts`, is not committed: see
+`.gitignore`.
 
 [Lightpanda]: https://lightpanda.io
 
@@ -247,16 +195,11 @@ site-by-site results.
 
 ### picking a client
 
-All three are the same four requests, so copy whichever matches what you
-already use. Every one of them treats `proxy=` as optional — unset, the client
-is built without a proxy and the whole flow goes out from this machine. Two
-differences worth knowing:
+The three Python clients make the same requests, so copy whichever matches
+what you already use. Every one of them treats `proxy=` as optional — unset,
+the client is built without a proxy and the whole flow goes out from this
+machine. Two differences worth knowing:
 
-- **axios** needs its proxy agent and its cookie jar to be *the same object*.
-  Passing `jar` alongside a plain `HttpsProxyAgent` throws `does not support
-  for use with other http(s).Agent` — wrap the proxy agent with
-  `createCookieAgent` from `http-cookie-agent` instead. Also set
-  `proxy: false`, or axios rewrites the request line and breaks CONNECT.
 - **requests and httpx** both keep a cookie jar, and both need help with
   this one cookie. DataDome sets the clearance cookie with
   `Domain=.grainger.com`, but the response comes from
@@ -269,18 +212,6 @@ differences worth knowing:
   with a `ProxyHandler` for the target traffic, and one with an empty
   `ProxyHandler({})` for the call to your own solver. Credentials in the proxy
   URL become the `Proxy-Authorization` header on the CONNECT automatically.
-- **built-in fetch** takes its proxy from `HTTP_PROXY` / `HTTPS_PROXY`, and
-  only reads them when Node is started with `--use-env-proxy`. Set `NO_PROXY`
-  to the solver's host so that call goes direct — this is required, not
-  tidiness: a datacenter proxy will not tunnel to the solver's port, so the
-  solve fails without it. Node matches `NO_PROXY` on the bare host, so an IP
-  works as well as a name.
-
-  The only thing you give up is that the configuration is per-process rather
-  than per-request, so one process cannot use two proxies at once. Every
-  example here uses a single proxy and the load-test runner spawns a process
-  per iteration, so it makes no practical difference — pick this version if
-  you would rather not take a dependency.
 
 ### known not to work yet
 

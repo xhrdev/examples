@@ -18,8 +18,8 @@ npm run grainger:extension -- --screenshot
 ## When to reach for this
 
 Use the ordinary examples when you want a **cookie** — something to carry into
-an HTTP client, a scraper, another process. `grainger-undici.ts` is faster,
-cheaper, and has no browser in it.
+an HTTP client, a scraper, another process. The HTTP examples in
+`py-src/datadome/` are faster, cheaper, and have no browser in them.
 
 Use this when you want a **browsing session that stays cleared**: an operator
 driving a real browser, a long-lived session across many pages, or anything
