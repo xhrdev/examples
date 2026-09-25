@@ -1824,6 +1824,16 @@ async function sampleChallengeFrame(
         },
         languages: [...browserNavigator.languages],
         nextHopProtocol: navigation?.nextHopProtocol ?? '',
+        // Not part of the identity comparison — reported when it fails.
+        // `navigator.userAgentData` is a secure-context API, so a frame
+        // sampled on an opaque or insecure document has no client hints at
+        // all and every hint field compares empty. That reads identically to
+        // an override that never arrived unless these two say otherwise.
+        why: {
+          documentUrl: location.href,
+          hasUserAgentData: Boolean(userAgentData),
+          secureContext: globalThis.isSecureContext,
+        },
       };
     }),
   ]);
@@ -1856,7 +1866,7 @@ async function sampleChallengeFrame(
       );
 
     throw new Error(
-      `The challenge frame did not inherit the Chrome profile — ${mismatched.join('; ')}`
+      `The challenge frame did not inherit the Chrome profile — ${mismatched.join('; ')} [frame ${frame.url()} ${JSON.stringify(sampled.why)}]`
     );
   }
   return {
