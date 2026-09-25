@@ -86,12 +86,22 @@ export async function runBrowserTarget({
   // out from this machine, which is all DataDome asks — one address throughout.
   const proxy = configuredProxy ? pinSession(configuredProxy).url : undefined;
 
+  // Space-separated flags appended to the launch. The reason it exists is
+  // Lambda: @sparticuz/chromium runs Chromium with `--single-process` and site
+  // isolation off, and whether a target still solves under those flags is not
+  // something a default laptop launch can answer. `chromium_args='...'` here
+  // reproduces that launch against a local binary without deploying.
+  const extraArgs = (process.env['chromium_args'] ?? '')
+    .split(/\s+/u)
+    .filter(Boolean);
+
   const launchOptions: LaunchOptions = {
     args: [
       '--window-size=1200,904',
       '--disable-blink-features=AutomationControlled',
       '--no-first-run',
       '--no-default-browser-check',
+      ...extraArgs,
     ],
     headless: process.argv.includes('--headless'),
     ignoreDefaultArgs: ['--enable-automation', '--force-color-profile=srgb'],

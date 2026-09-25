@@ -1257,19 +1257,32 @@ async function assertInterstitialCarrier(
   const expectedBrands = PROFILE.brands
     .map(({ brand, version }) => `"${brand}";v="${version}"`)
     .join(', ');
-  if (
-    request.method() !== 'POST' ||
-    request.resourceType() !== 'xhr' ||
-    request.url() !== INTERSTITIAL_URL ||
-    solved.url !== INTERSTITIAL_URL ||
-    header(headers, 'origin') !== solved.origin ||
-    header(headers, 'referer') !== solved.referer ||
-    header(headers, 'content-type') !== FORM_CONTENT_TYPE ||
-    header(headers, 'sec-ch-ua') !== expectedBrands ||
-    header(headers, 'sec-ch-ua-mobile') !== '?0' ||
-    header(headers, 'sec-ch-ua-platform') !== '"macOS"'
-  ) {
-    throw new Error('The native interstitial request identity did not match');
+  // Named individually for the same reason `sampleChallengeFrame` names its
+  // fields: "did not match" alone covers ten conditions, and which one tripped
+  // decides whether the fix is in the launch, the override or the solver.
+  const checks: Array<[string, unknown, unknown]> = [
+    ['method', request.method(), 'POST'],
+    ['resourceType', request.resourceType(), 'xhr'],
+    ['url', request.url(), INTERSTITIAL_URL],
+    ['solved.url', solved.url, INTERSTITIAL_URL],
+    ['origin', header(headers, 'origin'), solved.origin],
+    ['referer', header(headers, 'referer'), solved.referer],
+    ['content-type', header(headers, 'content-type'), FORM_CONTENT_TYPE],
+    ['sec-ch-ua', header(headers, 'sec-ch-ua'), expectedBrands],
+    ['sec-ch-ua-mobile', header(headers, 'sec-ch-ua-mobile'), '?0'],
+    ['sec-ch-ua-platform', header(headers, 'sec-ch-ua-platform'), '"macOS"'],
+  ];
+  const mismatched = checks
+    .filter(([, got, want]) => got !== want)
+    .map(
+      ([name, got, want]) =>
+        `${name}: ${JSON.stringify(got)} (wanted ${JSON.stringify(want)})`
+    );
+
+  if (mismatched.length) {
+    throw new Error(
+      `The native interstitial request identity did not match — ${mismatched.join('; ')}`
+    );
   }
 }
 
@@ -1822,7 +1835,29 @@ async function sampleChallengeFrame(
     webdriver: false,
   };
   if (JSON.stringify(sampled.identity) !== JSON.stringify(expectedIdentity)) {
-    throw new Error('The challenge frame did not inherit the Chrome profile');
+    // Name the fields that differ. Without them this error says only that the
+    // frame is wrong, and the two causes it covers want opposite fixes: an
+    // out-of-process frame that never received the override reports a real
+    // browser identity, while a frame that failed to load reports empty
+    // client hints because `navigator.userAgentData` is absent outside a
+    // secure context. Reading "did not inherit" as the former is what put the
+    // Lambda transport on `http`.
+    const mismatched = (
+      Object.keys(expectedIdentity) as Array<keyof typeof expectedIdentity>
+    )
+      .filter(
+        (key) =>
+          JSON.stringify(sampled.identity[key]) !==
+          JSON.stringify(expectedIdentity[key])
+      )
+      .map(
+        (key) =>
+          `${key}: ${JSON.stringify(sampled.identity[key])} (wanted ${JSON.stringify(expectedIdentity[key])})`
+      );
+
+    throw new Error(
+      `The challenge frame did not inherit the Chrome profile — ${mismatched.join('; ')}`
+    );
   }
   return {
     ...(sampled.connection ? { connection: sampled.connection } : {}),
