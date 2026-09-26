@@ -37,6 +37,7 @@ import type { BrowserContext, Frame, Page, Route } from 'playwright-core';
 import { fetch, WebSocket } from 'undici';
 
 import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
+import { applySetCookie } from '#src/akamai/set-cookie.js';
 import { PROFILE, PROFILE_ID } from '#src/profile.js';
 import { checkRateLimit, RateLimitError } from '#src/rate-limit.js';
 
@@ -551,57 +552,16 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
     };
 
     /**
-     * Put a response's cookies in the browser's jar ourselves.
-     *
-     * `route.fulfill` takes one header map, so it can carry exactly one
-     * `set-cookie` — a response that sets four (Akamai sets `_abck`, `bm_sz`,
-     * `ak_bmsc`, `bm_sv`) loses three of them, and if `_abck` is one of the
-     * lost ones the session starts without the very cookie the protocol
-     * advances. That failure is invisible: every round returns the same
-     * `_abck` and `rval` never leaves -1.
+     * Put a response's cookies in the browser's jar ourselves. See
+     * `src/akamai/set-cookie.ts` for why `route.fulfill` cannot.
      *
      * Playwright applies cookies itself when `route.fetch` did the fetching,
      * so this only runs on the `fetchResponse` path.
      */
-    const applyCookies = async (
+    const applyCookies = (
       url: string,
       setCookie: string[] | undefined
-    ): Promise<void> => {
-      if (!setCookie || setCookie.length === 0) return;
-      const { hostname } = new URL(url);
-      const cookies = setCookie.flatMap((header) => {
-        const [pair, ...attributes] = header.split(';');
-        const index = pair?.indexOf('=') ?? -1;
-        if (!pair || index < 1) return [];
-        const attribute = (name: string): string | undefined =>
-          attributes
-            .map((a) => a.trim())
-            .find((a) => a.toLowerCase().startsWith(`${name}=`))
-            ?.slice(name.length + 1);
-        const expires = attribute('expires');
-        const maxAge = attribute('max-age');
-        const seconds = maxAge === undefined ? NaN : Number(maxAge);
-        const expiresAt = Number.isFinite(seconds)
-          ? Date.now() / 1000 + seconds
-          : expires
-            ? Date.parse(expires) / 1000
-            : NaN;
-        return [
-          {
-            domain: attribute('domain') ?? hostname,
-            ...(Number.isFinite(expiresAt) ? { expires: expiresAt } : {}),
-            httpOnly: attributes.some(
-              (a) => a.trim().toLowerCase() === 'httponly'
-            ),
-            name: pair.slice(0, index).trim(),
-            path: attribute('path') ?? '/',
-            secure: attributes.some((a) => a.trim().toLowerCase() === 'secure'),
-            value: pair.slice(index + 1).trim(),
-          },
-        ];
-      });
-      if (cookies.length > 0) await context.addCookies(cookies);
-    };
+    ): Promise<void> => applySetCookie(context, url, setCookie);
 
     /** Pass a fetched response back to the page, framing headers stripped. */
     const fulfillFetched = (

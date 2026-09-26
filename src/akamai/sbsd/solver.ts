@@ -61,6 +61,7 @@ import type {
 import { WebSocket } from 'undici';
 
 import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
+import { applySetCookie } from '#src/akamai/set-cookie.js';
 import { PROFILE_ID } from '#src/profile.js';
 import { checkRateLimit } from '#src/rate-limit.js';
 import { solverBaseUrl, solverWsUrl } from '#src/solver-url.js';
@@ -224,6 +225,28 @@ export type AttachOptions = {
    */
   discoveryTimeoutMs?: number;
   /**
+   * Fetch a script yourself instead of letting `route.fetch()` do it.
+   *
+   * `route.fetch()` runs in Playwright's request context, which syncs cookies
+   * with the browser — and against Lightpanda that context stops answering,
+   * after which every `route.fetch` waits out its full timeout and the run
+   * dies on a script that was already served. `src/mitm.ts` exposes `fetch`
+   * for exactly this, and the Lightpanda examples pass it.
+   *
+   * Whatever you give it must go out from the address the browser uses. A
+   * bundle fetched from somewhere else is scored as a different visitor, and
+   * the SBSD lane never opens.
+   */
+  fetchResponse?: (
+    // eslint-disable-next-line no-unused-vars -- function-type parameters
+    request: {
+      body?: string;
+      headers: Record<string, string>;
+      method: string;
+      url: string;
+    }
+  ) => Promise<Fetched>;
+  /**
    * `host=` from .env, in either form `src/solver-url.ts` accepts. Both the
    * ledger POST and the session socket are derived from it, so a TLS solver
    * gets `https://` and `wss://` together.
@@ -251,6 +274,15 @@ export type AttachOptions = {
    * script before it sets anything.
    */
   protectedHosts?: readonly (RegExp | string)[];
+  /**
+   * Read the live document yourself instead of calling `frame.content()`.
+   *
+   * `frame.content()` never returns on Lightpanda — see `src/lightpanda.ts`,
+   * which exports `outerHtml` for this. It reads the MAIN frame, so a
+   * property whose challenge lives in a subframe cannot use it; every
+   * Lightpanda example here is main-frame.
+   */
+  readHtml?: () => Promise<string>;
   /**
    * Who answers the `_abck` sensor on a property that runs both channels.
    *
@@ -338,6 +370,18 @@ export type EgressStats = {
    * is how an unmodelled fourth channel announces itself.
    */
   unmodelledOriginPosts: number;
+};
+
+/**
+ * A response, however it was fetched — `route.fetch()` or `fetchResponse`.
+ * Matching the sensor solver's shape, because `src/mitm.ts` satisfies both.
+ */
+export type Fetched = {
+  body: string;
+  headers: Record<string, string>;
+  /** Each `set-cookie` separately; a joined string cannot be parsed back. */
+  setCookie?: string[];
+  status: number;
 };
 
 /** Per-call options for {@link AkamaiHandle.solveAbck}. */
@@ -515,7 +559,11 @@ type BrowserRealm = {
   document: Document;
   history: { length: number };
   navigator: {
-    connection: {
+    /**
+     * Optional: the Network Information API is Chromium's, and Lightpanda
+     * ships no `navigator.connection`. See `readRealm`.
+     */
+    connection?: {
       downlink: number;
       effectiveType: string;
       rtt: number;
@@ -526,7 +574,12 @@ type BrowserRealm = {
     languages: readonly string[];
   };
   performance: {
-    memory: {
+    /**
+     * Optional for the same reason as `navigator.connection`:
+     * `performance.memory` is a Chrome extension to the standard and
+     * Lightpanda does not implement it. See `readRealm`.
+     */
+    memory?: {
       jsHeapSizeLimit: number;
       totalJSHeapSize: number;
       usedJSHeapSize: number;
@@ -543,7 +596,11 @@ type BrowserRealm = {
     width: number;
   };
   sessionStorage: { getItem: (key: string) => null | string };
-  speechSynthesis: { getVoices: () => Array<{ localService: boolean }> };
+  /**
+   * Optional, because Lightpanda has no Web Speech API at all — see the note
+   * on `waitForRealmReadings`. Chrome always has one.
+   */
+  speechSynthesis?: { getVoices: () => Array<{ localService: boolean }> };
   window: {
     devicePixelRatio: number;
     innerHeight: number;
@@ -557,7 +614,58 @@ type BrowserRealm = {
 /* eslint-enable no-unused-vars */
 
 /** What only the live page can answer. The identity is *not* in here. */
+/**
+ * Collapse a `document.cookie` string that names the same cookie twice.
+ *
+ * A real jar never does this and the ledger endpoint refuses it outright —
+ * `invalid-request: document.cookieHeader contains conflicting duplicate
+ * cookie name 'bm_lso'` — rather than guess which entry is current. It is not
+ * the page misbehaving: a cookie set once with no `Domain` (host-only) and
+ * again with one (`.hilton.com`) is two distinct entries in any jar, and
+ * Chrome's `document.cookie` hides that by returning them in a defined order
+ * while Lightpanda's returns both as equals.
+ *
+ * The rule, in the order it is applied:
+ *
+ *   1. an empty value loses to a non-empty one. `bm_lso=; bm_lso=<value>` is
+ *      the observed case, and an empty value is the residue of a deletion,
+ *      never the live cookie.
+ *   2. otherwise the last occurrence wins, because entries of equal path
+ *      specificity are ordered by creation time and the newer one is the one
+ *      the server just set.
+ *
+ * Position is the first occurrence's, so the order the page presented is not
+ * reshuffled by picking a later value — the order is itself a reading.
+ *
+ * This resolves an ambiguity rather than inventing anything: every name and
+ * every value sent was in the header the page gave us.
+ */
+export const dedupeCookieHeader = (header: string): string => {
+  const chosen = new Map<string, string>();
+  const order: string[] = [];
+  for (const part of header.split(';')) {
+    const pair = part.trim();
+    if (!pair) continue;
+    const index = pair.indexOf('=');
+    const name = (index < 0 ? pair : pair.slice(0, index)).trim();
+    if (!name) continue;
+    const value = index < 0 ? '' : pair.slice(index + 1);
+    const previous = chosen.get(name);
+    if (previous === undefined) order.push(name);
+    // Rules 1 and 2: a non-empty later value replaces what is there; an empty
+    // one only ever fills a name that has nothing yet.
+    if (previous === undefined || value !== '') chosen.set(name, value);
+  }
+  return order.map((name) => `${name}=${chosen.get(name) ?? ''}`).join('; ');
+};
+
 type RealmSnapshot = {
+  /**
+   * Readings this realm could not supply, by the name they would have had in
+   * `runtime`. Empty on Chrome. See `readRealm` for why they are reported
+   * rather than invented.
+   */
+  absentReadings: string[];
   documentCookie: string;
   resourceEntries: unknown[];
   runtime: Record<string, unknown>;
@@ -613,12 +721,18 @@ const waitForRealmReadings = async (page: Frame | Page): Promise<void> => {
   }, 10_000);
 
   await settle(
-    () =>
-      (
+    () => {
+      const speech = (
         globalThis as unknown as {
-          speechSynthesis: { getVoices: () => unknown[] };
+          speechSynthesis?: { getVoices: () => unknown[] };
         }
-      ).speechSynthesis.getVoices().length > 0,
+      ).speechSynthesis;
+      // A browser with no Web Speech API at all — Lightpanda — will never
+      // grow voices, so waiting the full ten seconds on every document buys
+      // nothing. Stop immediately and let the snapshot say zero.
+      if (!speech) return true;
+      return speech.getVoices().length > 0;
+    },
     // Ten seconds, not three: on a machine where a speech daemon has to be
     // spawned on first use the list can take several seconds to arrive, and
     // the cost of waiting is paid once per document.
@@ -633,6 +747,24 @@ const waitForRealmReadings = async (page: Frame | Page): Promise<void> => {
  * timings, the heap readings and the DOM inventory are compared against each
  * other, and reading them across three round-trips describes a page that never
  * existed.
+ *
+ * ## a reading the realm does not have is omitted, not invented
+ *
+ * Chrome has every API read here. Lightpanda does not: it ships no
+ * `speechSynthesis`, no `navigator.connection` and no `performance.memory`,
+ * and until this was written each of those was an uncaught `TypeError` inside
+ * the evaluate that took the whole snapshot with it. That surfaced as
+ * `No ledger for <host>: TypeError: Cannot read properties of undefined
+ * (reading 'downlink')` — one missing browser API, reported as the ledger
+ * failing, and the next one only visible after the first was fixed.
+ *
+ * So each is read through `?.` and left out of `runtime` when it is absent,
+ * with its name in `absentReadings` so the caller can say so once. Omitted
+ * rather than filled in with a plausible number: everything in this snapshot
+ * is cross-checked against everything else, a `downlink` the page cannot back
+ * up is the same class of mismatch as a screen reading that does not match
+ * the profile, and a refusal naming the missing reading is worth more than a
+ * forgery that gets further.
  */
 const readRealm = (page: Frame | Page): Promise<RealmSnapshot> =>
   page.evaluate(async () => {
@@ -670,9 +802,15 @@ const readRealm = (page: Frame | Page): Promise<RealmSnapshot> =>
       'SHA-256',
       new TextEncoder().encode(source)
     );
-    const voices = speechSynthesis.getVoices();
+    // See the header: a realm without these reports that it is without them.
+    const voices = speechSynthesis?.getVoices();
+    const absentReadings: string[] = [];
+    if (!connection) absentReadings.push('connectionInfo');
+    if (!memory) absentReadings.push('memoryInfo');
+    if (!voices) absentReadings.push('speechSynthesisVoices');
 
     return {
+      absentReadings,
       documentCookie: document.cookie,
       resourceEntries: performance.getEntriesByType('resource').map((e) => ({
         duration: e.duration,
@@ -681,12 +819,16 @@ const readRealm = (page: Frame | Page): Promise<RealmSnapshot> =>
         startTime: e.startTime,
       })),
       runtime: {
-        connectionInfo: {
-          downlink: connection.downlink,
-          effectiveType: connection.effectiveType,
-          rtt: connection.rtt,
-          saveData: connection.saveData,
-        },
+        ...(connection
+          ? {
+              connectionInfo: {
+                downlink: connection.downlink,
+                effectiveType: connection.effectiveType,
+                rtt: connection.rtt,
+                saveData: connection.saveData,
+              },
+            }
+          : {}),
         domResourceInventory: {
           capturedAtPerformanceMs: performance.now(),
           imgSrc: [...document.querySelectorAll('img[src]')].map((e) =>
@@ -721,23 +863,38 @@ const readRealm = (page: Frame | Page): Promise<RealmSnapshot> =>
             .join(''),
         },
         historyLength: history.length,
-        memoryInfo: {
-          jsHeapSizeLimit: memory.jsHeapSizeLimit,
-          totalJSHeapSize: memory.totalJSHeapSize,
-          usedJSHeapSize: memory.usedJSHeapSize,
-        },
+        ...(memory
+          ? {
+              memoryInfo: {
+                jsHeapSizeLimit: memory.jsHeapSizeLimit,
+                totalJSHeapSize: memory.totalJSHeapSize,
+                usedJSHeapSize: memory.usedJSHeapSize,
+              },
+            }
+          : {}),
         sessionStorage: { akBmTabId: session.getItem('ak_bm_tab_id') },
-        speechSynthesisVoices: {
-          localCount: voices.filter((v) => v.localService).length,
-          totalCount: voices.length,
-        },
+        ...(voices
+          ? {
+              speechSynthesisVoices: {
+                localCount: voices.filter((v) => v.localService).length,
+                totalCount: voices.length,
+              },
+            }
+          : {}),
       },
       timeOriginMs: performance.timeOrigin,
     };
   }) as Promise<RealmSnapshot>;
 
 export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
-  const { host, origin, sensor = 'solver', solverApiKey } = opts;
+  const {
+    fetchResponse,
+    host,
+    origin,
+    readHtml,
+    sensor = 'solver',
+    solverApiKey,
+  } = opts;
   const context: BrowserContext = page.context();
   const ledgerUrl = new URL(
     '/akamai/sbsd/generate-session',
@@ -1138,7 +1295,19 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
       );
     await waitForRealmReadings(frame);
     const realm = await readRealm(frame);
-    const liveHtml = await frame.content();
+    // Said once, before the POST, so a refusal that follows has its most
+    // likely cause already on the screen rather than being guessed at after.
+    if (realm.absentReadings.length > 0)
+      log(
+        `[sbsd] ${site.host}: this realm has no ${realm.absentReadings.join(', ')} ` +
+          '— those readings are omitted rather than invented. Chrome has all ' +
+          'of them and Lightpanda has none of them, so a profile claiming a ' +
+          'desktop Chrome is describing a browser this snapshot cannot fully ' +
+          'back up. If the ledger is refused, look here first.'
+      );
+    // `readHtml` when the caller gave one: `frame.content()` never returns on
+    // Lightpanda. See `src/lightpanda.ts`.
+    const liveHtml = await (readHtml ? readHtml() : frame.content());
     /* PROBE: is the sensor's own <script src> in the bytes the server sent, or
      * did the bootstrap inject it? That decides whether a caller holding only
      * the response document can satisfy `document.currentScript` at all. */
@@ -1156,7 +1325,9 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
          * held since it loaded, and which browser this body is from. */
         bundle: { scriptSrc: site.sbsdSrc, source: site.sbsdBody },
         document: {
-          cookieHeader: realm.documentCookie,
+          // Deduped: Lightpanda's jar can present one cookie twice, and the
+          // ledger endpoint refuses a repeated name rather than choose.
+          cookieHeader: dedupeCookieHeader(realm.documentCookie),
           /* LIVE DOM, not the served bytes. `runtime.domResourceInventory` is
            * read off this same live DOM, so reconciliation compares a document
            * against its own inventory and resolves to the identity case its
@@ -1230,15 +1401,61 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
   const handBack = async (
     route: Route,
     body: string,
-    response?: APIResponse
+    response?: Fetched
   ): Promise<void> => {
     const headers: Record<string, string> = response
-      ? { ...response.headers() }
+      ? { ...response.headers }
       : { 'content-type': 'application/javascript' };
     delete headers['content-encoding'];
     delete headers['content-length'];
     delete headers['set-cookie'];
-    await route.fulfill({ body, headers, status: response?.status() ?? 200 });
+    await route.fulfill({ body, headers, status: response?.status ?? 200 });
+    // AFTER the fulfill, never before. `route.fulfill` carries one header map
+    // and Akamai sets several cookies at once, so on the `fetchResponse` path
+    // they have to be placed by hand — but `context.addCookies` while a
+    // `Fetch.requestPaused` request is still open waits on the browser, and
+    // the browser is waiting on this very fulfill. That deadlock is what
+    // `aircanada-lightpanda.ts`'s header records; releasing the route first is
+    // the fix, and it is the same order `src/akamai/sensor/solver.ts` uses.
+    //
+    // A cookie the jar refuses must not take the request down with it either,
+    // now that this runs after the page already has its bytes.
+    try {
+      await applySetCookie(context, route.request().url(), response?.setCookie);
+    } catch (error) {
+      log(
+        `[egress] could not store cookies from ${route.request().url()}: ${(error as Error).message}`
+      );
+    }
+  };
+
+  /**
+   * Fetch what a route asked for, with whichever client the caller chose.
+   *
+   * `route.fetch()` puts the response's cookies in the jar itself;
+   * `fetchResponse` cannot, so `handBack` places them after the fulfill. See
+   * `src/akamai/set-cookie.ts` for why one header map is not enough, and the
+   * note in `handBack` for why the order is not negotiable.
+   */
+  const fetchForRoute = async (route: Route): Promise<Fetched> => {
+    if (!fetchResponse) {
+      const response: APIResponse = await route.fetch();
+      return {
+        body: await response.text(),
+        headers: response.headers(),
+        status: response.status(),
+      };
+    }
+    const request = route.request();
+    const postData = request.postData();
+    // The cookies this response sets are placed by `handBack`, once the route
+    // has been released — see the note there.
+    return await fetchResponse({
+      ...(postData === null ? {} : { body: postData }),
+      headers: await request.allHeaders(),
+      method: request.method(),
+      url: request.url(),
+    });
   };
 
   /**
@@ -1404,8 +1621,8 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         : handBack(route, cached.body);
     }
 
-    const response = await route.fetch();
-    const body = await response.text();
+    const response = await fetchForRoute(route);
+    const body = response.body;
     remember(url, body);
 
     if (isSbsdBundle(url)) {
@@ -1990,7 +2207,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     const readDocument = async (): Promise<string> => {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          return await frame.content();
+          return await (readHtml ? readHtml() : frame.content());
         } catch {
           await frame
             .waitForLoadState('domcontentloaded')
