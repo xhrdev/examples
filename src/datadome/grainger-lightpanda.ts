@@ -120,6 +120,26 @@ const CHALLENGE_FRAME_TIMEOUT_MS = 20_000;
 const NAVIGATION_TIMEOUT_MS = 45_000;
 
 /**
+ * On the challenge's own host — parsed, not matched as a substring.
+ *
+ * `url.includes('captcha-delivery.com')` is also true of
+ * `https://evil.example/?x=captcha-delivery.com`, and both callers use this to
+ * decide what gets treated as challenge material and handed to the solver.
+ * `GEO_HOST` is covered by the suffix arm.
+ */
+const isChallengeHost = (url: string): boolean => {
+  try {
+    const { hostname } = new URL(url);
+    return (
+      hostname === 'captcha-delivery.com' ||
+      hostname.endsWith('.captcha-delivery.com')
+    );
+  } catch {
+    return false;
+  }
+};
+
+/**
  * DataDome's `c.js` injects the challenge in an iframe. Waiting for the frame
  * is cheaper than rebuilding its URL, and it proves the page's script ran.
  */
@@ -130,7 +150,7 @@ const waitForChallengeFrame = async (
   for (;;) {
     const frame = page
       .frames()
-      .find((candidate) => candidate.url().includes(GEO_HOST));
+      .find((candidate) => isChallengeHost(candidate.url()));
     if (frame) return frame;
     if (Date.now() > deadline) return undefined;
     await sleep(250);
@@ -154,14 +174,17 @@ const attempt = async ({
   // browser has already fetched each one through this same proxy — so they
   // are here for free, as the bytes that were actually served.
   const captures = new Map<string, string>();
-  const isDocument = (url: string): boolean =>
-    /\/(?:captcha|interstitial)\//.test(url);
+  const isDocument = (url: string): boolean => {
+    try {
+      return /^\/(?:captcha|interstitial)\//.test(new URL(url).pathname);
+    } catch {
+      return false;
+    }
+  };
   const { mitm, context, page, stop } = await start({
     log: (message) => log(message),
     onResponse: ({ body, url }) => {
-      if (url.includes(GEO_HOST) || url.includes('captcha-delivery.com')) {
-        captures.set(url, body);
-      }
+      if (isChallengeHost(url)) captures.set(url, body);
     },
     ...(proxy ? { proxy } : {}),
   });
