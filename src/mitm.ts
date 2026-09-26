@@ -19,10 +19,44 @@
  *
  *   lightpanda --http-proxy http://127.0.0.1:port  ->  this  ->  your proxy
  *
- * Upstream, the request is undici's: the same client `grainger-undici.ts`
- * uses, with the same TLS fingerprint DataDome already accepts. Lightpanda
- * keeps the DOM, the cookie jar and the JavaScript; it just stops being the
- * thing that opens the socket.
+ * Lightpanda keeps the DOM, the cookie jar and the JavaScript; it just stops
+ * being the thing that opens the socket.
+ *
+ * ## what opens the socket instead
+ *
+ * By default, curl-impersonate, through the `src/impersonate.ts` sidecar:
+ * a BoringSSL build that puts Chrome's exact ClientHello and Chrome's exact
+ * HTTP/2 SETTINGS on the wire. `transport: 'undici'` keeps the previous
+ * client, which is node's — see `CHROME_TLS` below for what that can and
+ * cannot reach, and `src/impersonate.ts` for why it was not enough.
+ *
+ * What that is worth, measured with `src/fingerprint.ts` on 2026-09-25:
+ *
+ *   impersonate  ja4 t13d1516h2_8daaf6152771_806a8c22fdea
+ *                h2  1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p
+ *   undici       ja4 t13d1512h1_8daaf6152771_2c481c11c48b
+ *                h2  2:0;4:262144|458753|0|a,m,p,s
+ *
+ * The middle hash agrees, because that is the cipher list and `CHROME_TLS`
+ * sets it. The extension hash does not, and neither do the SETTINGS or the
+ * pseudo-header order — `m,a,s,p` is Chrome's and `a,m,p,s` is alphabetical,
+ * which is node sorting them and no browser at all.
+ *
+ * Against the examples, measured 2026-09-25, undici first:
+ *
+ *   hilton     OperationTimedout, 5s in,   serves the page; the SBSD lane
+ *              on the first navigation     runs to a carrier answered
+ *   aircanada  TimeoutError                SBSD solved end to end
+ *   grainger   —                           SUCCESS, first attempt
+ *   comcast    SUCCESS                     SUCCESS
+ *   ca-edd     _abck at ~-1~               _abck at ~-1~
+ *
+ * hilton is the one this file can take credit for on its own: the tarpit
+ * `CHROME_TLS`'s note describes, which node's ciphers were not enough to get
+ * out of. aircanada and grainger needed bugs fixed elsewhere as well — see
+ * `fetchResponse` in `src/akamai/sbsd/solver.ts` and `externalScripts` in
+ * `grainger-lightpanda.ts`. `ca-edd` does not move at all, so whatever that
+ * one is, it is not the fingerprint.
  *
  * ## what it does to a request
  *
@@ -54,6 +88,11 @@ import { promisify } from 'node:util';
 import { Agent, ProxyAgent, fetch as undiciFetch } from 'undici';
 
 import { PROFILE } from '#src/datadome/profile.js';
+import {
+  type HeaderPairs,
+  type Impersonator,
+  start as startImpersonator,
+} from '#src/impersonate.js';
 
 const execFileAsync = promisify(execFile);
 const CERT_DIR = join(process.cwd(), 'target', 'lightpanda-mitm');
@@ -67,8 +106,12 @@ const CERT_DIR = join(process.cwd(), 'target', 'lightpanda-mitm');
 const UPSTREAM_TIMEOUT_MS = 30_000;
 
 /**
- * Chrome's TLS parameters, in Chrome's order, for the connection this proxy
- * makes upstream.
+ * Chrome's TLS parameters, in Chrome's order, for the **undici fallback**
+ * only — `transport: 'undici'`. The default transport is
+ * `src/impersonate.ts`, which does not need any of this because it is
+ * Chrome's stack rather than an imitation of it. This is kept because it is
+ * the best node alone can do, and because the measurements below are why the
+ * sidecar exists.
  *
  * The header rewriting above was only ever half the job. The whole reason
  * this file exists is that a bot manager reads the connection and not just
@@ -97,8 +140,10 @@ const UPSTREAM_TIMEOUT_MS = 30_000;
  * **This gets close, not equal.** JA3/JA4 also cover the extension order and
  * GREASE values, and node's TLS bindings expose neither — a determined
  * fingerprint still says "not Chrome". Matching exactly needs a client built
- * on BoringSSL (curl-impersonate, or utls behind a sidecar). What is here is
- * the part reachable from Node, and it is evidently enough for these targets.
+ * on BoringSSL, which is now what `src/impersonate.ts` is and why it is the
+ * default. What is here is the part reachable from node, enough for some of
+ * these targets and, as the table at the top of this file shows, not enough
+ * for hilton, aircanada or ca-edd.
  *
  * ALPN is left alone deliberately, so this keeps negotiating http/1.1. Chrome
  * would speak h2, and undici can (`allowH2`) — but node's h2 SETTINGS frames
@@ -176,6 +221,7 @@ const CHROME_ORDER = [
   'sec-ch-ua-platform',
   'upgrade-insecure-requests',
   'user-agent',
+  'content-type',
   'accept',
   'origin',
   'referer',
@@ -183,10 +229,21 @@ const CHROME_ORDER = [
   'sec-fetch-mode',
   'sec-fetch-user',
   'sec-fetch-dest',
+  // Only present on the impersonate transport, and only because it is: node
+  // cannot decode zstd, so the undici fallback must not claim it. curl can,
+  // and placing it here rather than letting curl prepend its own is the
+  // difference between Chrome's order and curl's.
+  'accept-encoding',
   'accept-language',
   'cookie',
   'priority',
 ];
+
+/**
+ * Chrome's, including `zstd`, which is the giveaway: every other client in
+ * this repo sends the three-value list because that is all node can decode.
+ */
+const CHROME_ACCEPT_ENCODING = 'gzip, deflate, br, zstd';
 
 /**
  * Lightpanda sends six headers and no more: host, accept, accept-encoding,
@@ -257,7 +314,14 @@ export type Capture = {
 };
 
 export type Forwarded = {
+  /** The decoded body as text. Meaningless for an image; `bytes` is not. */
   body: string;
+  /**
+   * The decoded body as it came off the wire. The proxy relays this rather
+   * than `body`, because `body` is a utf-8 decode and every script, font and
+   * image that is not utf-8 comes out of one corrupted.
+   */
+  bytes: Buffer;
   headers: Record<string, string>;
   setCookie: string[];
   status: number;
@@ -297,12 +361,30 @@ export type MitmOptions = {
    * whatever profile the solver you are using was told about.
    */
   identity?: Record<string, string>;
+  // eslint-disable-next-line no-unused-vars -- function-type parameter
+  log?: (message: string) => void;
   /** Called for every response, after decoding. Errors here are swallowed. */
   // eslint-disable-next-line no-unused-vars -- function-type parameter
   onResponse?: (capture: Capture) => void;
   /** The real proxy to go out through. Direct when omitted. */
   proxy?: string;
+  /** Which client makes the upstream request. `auto` by default. */
+  transport?: Transport;
 };
+
+/**
+ * Which client makes the upstream request.
+ *
+ *   `impersonate`  curl-impersonate, via `src/impersonate.ts` — Chrome's own
+ *                  ClientHello and HTTP/2 SETTINGS, not an imitation
+ *   `undici`       node, with `CHROME_TLS` — no sidecar, no python
+ *   `auto`         impersonate, falling back to undici with a warning if the
+ *                  sidecar cannot start
+ *
+ * `auto` is the default so a checkout without the venv still runs, rather
+ * than failing on a dependency it never needed before.
+ */
+export type Transport = 'auto' | 'impersonate' | 'undici';
 
 /**
  * One self-signed certificate, generated on first use. `openssl` ships with
@@ -344,13 +426,96 @@ const readBody = async (req: IncomingMessage): Promise<Buffer | undefined> => {
   return chunks.length > 0 ? Buffer.concat(chunks) : undefined;
 };
 
+/** What a transport hands back, before `forward()` decodes and captures it. */
+type Upstream = {
+  bytes: Buffer;
+  headers: Record<string, string>;
+  /** Every `set-cookie`, unjoined — it is the one header that repeats. */
+  setCookie: string[];
+  status: number;
+};
+
+/** The sidecar: Chrome's ClientHello, Chrome's HTTP/2, Chrome's header order. */
+const viaImpersonate = async (
+  impersonator: Impersonator,
+  request: {
+    body?: Buffer | string;
+    method: string;
+    proxy?: string;
+    url: string;
+  },
+  headers: HeaderPairs
+): Promise<Upstream> => {
+  const response = await impersonator.request({
+    ...(request.body === undefined
+      ? {}
+      : {
+          body: Buffer.isBuffer(request.body)
+            ? request.body
+            : Buffer.from(request.body),
+        }),
+    headers,
+    method: request.method,
+    ...(request.proxy ? { proxy: request.proxy } : {}),
+    timeoutMs: UPSTREAM_TIMEOUT_MS,
+    url: request.url,
+  });
+  const collapsed: Record<string, string> = {};
+  const setCookie: string[] = [];
+  for (const [name, value] of response.headers) {
+    if (name.toLowerCase() === 'set-cookie') setCookie.push(value);
+    else collapsed[name.toLowerCase()] = value;
+  }
+  return {
+    bytes: response.body,
+    headers: collapsed,
+    setCookie,
+    status: response.status,
+  };
+};
+
+/**
+ * Node, with `CHROME_TLS`. Kept so a checkout with no python still works, and
+ * so the difference the sidecar makes stays measurable from one flag.
+ *
+ * undici's `fetch` and not `request`: `fetch` sends an `accept-encoding` and
+ * decompresses, `request` sends none at all, and DataDome answers a request
+ * without one with a captcha where the same request with one gets an
+ * interstitial.
+ */
+const viaUndici = async (
+  request: { body?: Buffer | string; method: string; url: string },
+  headers: HeaderPairs,
+  dispatcher?: Agent | ProxyAgent
+): Promise<Upstream> => {
+  const upstream = await undiciFetch(request.url, {
+    ...(dispatcher ? { dispatcher } : {}),
+    ...(request.body === undefined ? {} : { body: request.body }),
+    headers,
+    method: request.method,
+    redirect: 'manual',
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
+  const bytes = Buffer.from(await upstream.arrayBuffer());
+  const collapsed: Record<string, string> = {};
+  for (const [name, value] of upstream.headers) collapsed[name] = value;
+  return {
+    bytes,
+    headers: collapsed,
+    setCookie: upstream.headers.getSetCookie(),
+    status: upstream.status,
+  };
+};
+
 /** Start the proxy. Resolves once it is listening. */
 export const start = async (options: MitmOptions = {}): Promise<Mitm> => {
   const {
     debug = false,
     identity = DEFAULT_IDENTITY,
+    log = console.log,
     onResponse,
     proxy,
+    transport = 'auto',
   } = options;
   const { cert, key } = await ensureCertificate();
   // `requestTls` and not `connect`: on a ProxyAgent the origin is reached
@@ -362,6 +527,23 @@ export const start = async (options: MitmOptions = {}): Promise<Mitm> => {
     ? new ProxyAgent({ requestTls: CHROME_TLS, uri: proxy })
     : new Agent({ connect: CHROME_TLS });
   const sockets = new Set<Socket>();
+
+  // Started before the listener, so a sidecar that cannot run is a failure to
+  // start rather than a proxy that accepts connections and then 502s each one.
+  let impersonator: Impersonator | undefined;
+  if (transport !== 'undici') {
+    try {
+      impersonator = await startImpersonator({ log });
+      log(`mitm: upstream is curl-impersonate (${impersonator.target})`);
+    } catch (error) {
+      if (transport === 'impersonate') throw error;
+      log(
+        `mitm: falling back to undici — ${(error as Error).message}. ` +
+          "The TLS and HTTP/2 fingerprints will be node's, which hilton, " +
+          'aircanada and ca-edd all refuse; install it with: make install'
+      );
+    }
+  }
 
   /**
    * The one place a request leaves this process: header rewrite, upstream
@@ -377,59 +559,74 @@ export const start = async (options: MitmOptions = {}): Promise<Mitm> => {
     const incoming: Record<string, string> = {};
     for (const [name, value] of Object.entries(request.headers)) {
       if (HOP_BY_HOP.has(name) || value === undefined) continue;
-      // `host` becomes the authority from the URL; `accept-encoding` is
-      // undici's to negotiate, since we forward the response decoded.
-      if (name === 'host' || name === 'accept-encoding') continue;
+      // Three the client below reframes, so forwarding the browser's would
+      // be a lie: `host` becomes the authority from the URL, the body is
+      // re-sent so `content-length` is counted again, and `accept-encoding`
+      // is set by whichever transport is in use — Chrome's four below, or
+      // undici's three that it can actually decode.
+      if (
+        name === 'host' ||
+        name === 'accept-encoding' ||
+        name === 'content-length'
+      )
+        continue;
       incoming[name] = value;
     }
     const merged: Record<string, string> = {
       ...incoming,
       ...fetchMetadata(incoming, request.url, request.method),
       ...identity,
+      // Only the impersonate transport can honour this: curl decodes all four
+      // encodings, node decodes three, and a client that advertises zstd and
+      // then cannot read it gets an unreadable body rather than a block.
+      ...(impersonator ? { 'accept-encoding': CHROME_ACCEPT_ENCODING } : {}),
     };
-    // Reassemble in Chrome's order: header order is fingerprinted too.
-    const headers: Record<string, string> = {};
+    // Reassemble in Chrome's order: header order is fingerprinted too. Pairs
+    // rather than an object from here down, because that is the only shape
+    // that survives being handed to another process with its order intact.
+    const headers: HeaderPairs = [];
+    const seen = new Set<string>();
     for (const name of CHROME_ORDER) {
-      if (merged[name] !== undefined) headers[name] = merged[name];
+      const value = merged[name];
+      if (value === undefined) continue;
+      headers.push([name, value]);
+      seen.add(name);
     }
     for (const [name, value] of Object.entries(merged)) {
-      if (headers[name] === undefined) headers[name] = value;
+      if (!seen.has(name)) headers.push([name, value]);
     }
 
     if (debug) {
       console.log(
         `[mitm] ${request.method} ${request.url}\n` +
-          Object.entries(headers)
-            .map(([name, value]) => `        ${name}: ${value}`)
-            .join('\n')
+          headers.map(([name, value]) => `        ${name}: ${value}`).join('\n')
       );
     }
 
-    // undici's `fetch`, deliberately: it is the client the browser-free
-    // examples use, down to the `accept-encoding` it adds and the
-    // decompression it does. `request` sends no `accept-encoding` at all, and
-    // DataDome answers a request without one with a captcha where the same
-    // request with one gets an interstitial.
-    const upstream = await undiciFetch(request.url, {
-      ...(dispatcher ? { dispatcher } : {}),
-      ...(request.body === undefined ? {} : { body: request.body }),
-      headers,
-      method: request.method,
-      redirect: 'manual',
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-    });
-    const text = await upstream.text();
-
-    const upstreamHeaders: Record<string, string> = {};
-    for (const [name, value] of upstream.headers) upstreamHeaders[name] = value;
+    const {
+      bytes,
+      headers: upstreamHeaders,
+      setCookie,
+      status,
+    } = impersonator
+      ? // The sidecar dials the real proxy itself, so it is passed per
+        // request rather than baked into a dispatcher.
+        await viaImpersonate(
+          impersonator,
+          { ...request, ...(proxy ? { proxy } : {}) },
+          headers
+        )
+      : await viaUndici(request, headers, dispatcher);
+    // One decode, here, so `body` and the `onResponse` capture agree and
+    // nothing downstream decodes the same bytes a second time.
+    const text = bytes.toString('utf8');
 
     const forwarded: Forwarded = {
       body: text,
+      bytes,
       headers: upstreamHeaders,
-      // `set-cookie` is the one header that legitimately repeats, and joining
-      // it with commas would corrupt Expires dates.
-      setCookie: upstream.headers.getSetCookie(),
-      status: upstream.status,
+      setCookie,
+      status,
     };
 
     if (onResponse) {
@@ -437,8 +634,8 @@ export const start = async (options: MitmOptions = {}): Promise<Mitm> => {
         onResponse({
           body: text,
           headers: upstreamHeaders,
-          setCookie: forwarded.setCookie,
-          status: upstream.status,
+          setCookie,
+          status,
           url: request.url,
         });
       } catch {
@@ -488,7 +685,10 @@ export const start = async (options: MitmOptions = {}): Promise<Mitm> => {
         }
 
         res.writeHead(upstream.status, outHeaders);
-        res.end(upstream.body);
+        // `bytes` and not `body`: an image or a non-utf-8 script relayed as a
+        // utf-8 string arrives corrupted, and a challenge page that fails to
+        // load its own assets looks exactly like a block.
+        res.end(upstream.bytes);
       } catch (error) {
         // 502 is the honest answer, and it surfaces in the browser as a failed
         // request rather than a hang.
@@ -541,6 +741,9 @@ export const start = async (options: MitmOptions = {}): Promise<Mitm> => {
         new Promise<void>((resolve) => inner.close(() => resolve())),
       ]);
       await dispatcher?.close();
+      // Last, and always: a leaked sidecar is a python process nothing owns,
+      // and `loadtest.ts --concurrency` would leave one per session behind.
+      await impersonator?.stop();
     },
     url: `http://127.0.0.1:${port}`,
   };

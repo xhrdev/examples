@@ -27,6 +27,7 @@
     "mcp:solve": "node --env-file=.env src/mcp/solve.ts",
     "mcp:webfetch": "node --env-file=.env src/mcp/webfetch.ts",
     "emit:profile": "node dev-resources/emit-profile.mjs",
+    "fingerprint": "node --env-file=.env src/fingerprint.ts",
     "grainger:browser": "node --env-file=.env src/datadome/grainger.ts",
     "grainger:extension": "node --env-file=.env src/playwright-with-extension/grainger.ts",
     "idealista": "node --env-file=.env src/datadome/idealista.ts",
