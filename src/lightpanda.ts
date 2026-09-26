@@ -15,7 +15,9 @@
  *
  * By default the browser does not talk to your proxy directly. It talks to a
  * local MITM proxy (`src/mitm.ts`) that terminates TLS and makes the upstream
- * request itself, with undici. Without that, DataDome answers Lightpanda with
+ * request itself — with curl-impersonate, which puts Chrome's own ClientHello
+ * and HTTP/2 SETTINGS on the wire rather than node's approximation of them
+ * (`src/impersonate.ts`). Without that, DataDome answers Lightpanda with
  * a `t:"bv"` — banned visitor — challenge before any JavaScript runs, purely
  * on the connection: undici sending `User-Agent: Lightpanda/1.0` over the same
  * proxy still gets a plain `t:"fe"`. Pass `reoriginate: false` to see that for
@@ -41,6 +43,18 @@
  *     ignored on the wire. `mitm.ts` rewrites it upstream instead.
  *   - **`page.content()` and `frame.content()` never return.** Use
  *     `outerHtml()` below, which reads the DOM through `evaluate`.
+ *   - **`document.cookie`'s setter matches attribute names case-sensitively.**
+ *     `document.cookie = 'a=1; Path=/'` is dropped silently and
+ *     `'a=1; path=/'` is kept, so replaying a real `set-cookie` header
+ *     verbatim does nothing at all. Lower-case the attribute names first.
+ *     Measured 2026-09-26; nothing here depends on it, and it is recorded
+ *     because the write appears to succeed.
+ *   - **A `set-cookie` arriving on an XHR is not reflected into
+ *     `document.cookie`**, where Chrome's would be. It is not lost —
+ *     `context.cookies()` has it and the next request carries it — it just
+ *     never becomes visible to script. No example here needs it: the cookies
+ *     these challenges hide behind (`sbsd`, `_abck`) are `HttpOnly`, which no
+ *     browser shows to script.
  *
  * The proxy is a process-level flag rather than a per-context option, so a
  * session that needs its own exit IP needs its own process — which is what
@@ -61,7 +75,12 @@ import {
   type Page,
 } from 'playwright-core';
 
-import { type Capture, type Mitm, start as startMitm } from '#src/mitm.js';
+import {
+  type Capture,
+  type Mitm,
+  start as startMitm,
+  type Transport,
+} from '#src/mitm.js';
 
 // `npm install` downloads the binary here, via `npm run lightpanda:download`.
 // One fixed location, so a run cannot pick up some other copy off $PATH and
@@ -137,6 +156,12 @@ export type StartOptions = {
    * straight to `proxy`. On by default; see the header for why.
    */
   reoriginate?: boolean;
+  /**
+   * Which client the MITM proxy makes its upstream requests with. Defaults to
+   * curl-impersonate, falling back to undici if the sidecar cannot start —
+   * see `src/impersonate.ts`. Pass `'undici'` to see what node alone manages.
+   */
+  transport?: Transport;
 };
 
 /** The whole DOM, as a string. `frame.content()` never returns on Lightpanda. */
@@ -155,6 +180,7 @@ export const start = async (options: StartOptions = {}): Promise<Session> => {
     onResponse,
     proxy,
     reoriginate = true,
+    transport,
   } = options;
 
   // Checked before anything is started, so a missing binary does not leave a
@@ -169,8 +195,10 @@ export const start = async (options: StartOptions = {}): Promise<Session> => {
     ? await startMitm({
         debug: process.env['MITM_DEBUG'] === '1',
         ...(identity ? { identity } : {}),
+        log,
         ...(onResponse ? { onResponse } : {}),
         ...(proxy ? { proxy } : {}),
+        ...(transport ? { transport } : {}),
       })
     : undefined;
   if (mitm) {
