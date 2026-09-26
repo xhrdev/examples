@@ -43,6 +43,18 @@
  *     ignored on the wire. `mitm.ts` rewrites it upstream instead.
  *   - **`page.content()` and `frame.content()` never return.** Use
  *     `outerHtml()` below, which reads the DOM through `evaluate`.
+ *   - **`document.cookie`'s setter matches attribute names case-sensitively.**
+ *     `document.cookie = 'a=1; Path=/'` is dropped silently and
+ *     `'a=1; path=/'` is kept, so replaying a real `set-cookie` header
+ *     verbatim does nothing at all. Lower-case the attribute names first.
+ *     Measured 2026-09-26; nothing here depends on it, and it is recorded
+ *     because the write appears to succeed.
+ *   - **A `set-cookie` arriving on an XHR is not reflected into
+ *     `document.cookie`**, where Chrome's would be. It is not lost —
+ *     `context.cookies()` has it and the next request carries it — it just
+ *     never becomes visible to script. No example here needs it: the cookies
+ *     these challenges hide behind (`sbsd`, `_abck`) are `HttpOnly`, which no
+ *     browser shows to script.
  *
  * The proxy is a process-level flag rather than a per-context option, so a
  * session that needs its own exit IP needs its own process — which is what

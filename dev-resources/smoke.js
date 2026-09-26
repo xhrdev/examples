@@ -20,11 +20,17 @@ const LOADTEST_PATH = path.join(PROJECT_ROOT, 'src/loadtest.ts');
 //
 // `advisory` runs a script and reports it without letting it fail the suite.
 //
-// The undici/axios/fetch HTTP-client grainger scripts and every *-lightpanda
-// script are no longer tracked in this repo (kept locally only) — CI's fresh,
-// proxyless runner address gets `dd.solve.failed` / "Access Denied" from them
-// consistently, where the same commits solve locally. They are not in this
-// list any more because the files themselves are gone from the checkout.
+// The undici/axios/fetch HTTP-client grainger scripts, and the ca-edd, hilton
+// and aircanada Lightpanda ones, are not tracked in this repo (kept locally
+// only) — CI's fresh, proxyless runner address gets `dd.solve.failed` /
+// "Access Denied" from them consistently, where the same commits solve
+// locally. They are not in this list because the files are not in the
+// checkout.
+//
+// The other two Lightpanda examples came back on 2026-09-26, once src/mitm.ts
+// started putting Chrome's real ClientHello and HTTP/2 SETTINGS on the wire
+// rather than node's approximation of them. Both are advisory, for the address
+// reason this block is about rather than any doubt about the scripts.
 const SCRIPTS = [
   // Advisory as of 2026-09-23: failing on CI's fresh runner address
   // (exit=1, DataDome not cleared) while the same commit solves locally —
@@ -32,6 +38,24 @@ const SCRIPTS = [
   // not a code regression. Promote back to blocking once a run of green
   // ones on CI says the address problem has gone away.
   { advisory: true, headless: true, script: 'src/datadome/grainger' },
+  // Lightpanda, via the MITM proxy — the same DataDome flow with a browser
+  // that has no renderer. It was untracked because it could not get past
+  // `422 dd.script.missing`: it never sent `externalScripts` after the
+  // /dd/solve change in #74/#75, so it failed every time for a reason that
+  // had nothing to do with the address problem above. That is fixed.
+  //
+  // What is left is the flakiness this script's own header documents and
+  // quantifies — DataDome scores a solve computed from a Lightpanda page as
+  // borderline and accepts it perhaps one attempt in four, which `run()`'s
+  // three attempts turn into a bit over half of runs. Measured 2026-09-26:
+  // one green run in three, the green one verifying on its first attempt
+  // with the real page title. Advisory, and not a candidate for promotion
+  // until that ratio changes rather than until CI's address does.
+  {
+    advisory: true,
+    headless: true,
+    script: 'src/datadome/grainger-lightpanda',
+  },
   // Advisory: exercising the i -> c escalation means racing idealista's own
   // escalation timer against the solver's answer for the interstitial round,
   // and the round model assumes one document per round. A fix landed for the
@@ -42,6 +66,15 @@ const SCRIPTS = [
   // model to allow a same-type retry, which is a bigger change than fits here.
   { advisory: true, headless: true, script: 'src/datadome/idealista' },
   { headless: true, script: 'src/akamai/sensor/comcast' },
+  // The same property on Lightpanda, and the one Lightpanda example that has
+  // never needed anything but the proxy: `_abck` accepted on round 3, both
+  // before and after the curl-impersonate change. Advisory only for the exit
+  // address, like its neighbours.
+  {
+    advisory: true,
+    headless: true,
+    script: 'src/akamai/sensor/comcast-lightpanda',
+  },
   // Advisory as of 2026-09-17: two runs in a row, each on a fresh CI runner
   // address, came back "Access Denied" — the same exit-address sensitivity
   // that already makes hilton/aa/aircanada advisory below, not a code
