@@ -21,10 +21,7 @@ __pycache__/
 
 # Example scripts that don't clear their target yet — kept locally for
 # reference, not committed until they do.
-src/datadome/agrizone.ts
 src/datadome/etsy-listing.ts
-src/datadome/github.ts
-src/datadome/book-secure.ts
 src/akamai/sensor/kroger.ts
 
 # CI's fresh, proxyless runner address consistently gets dd.solve.failed /
