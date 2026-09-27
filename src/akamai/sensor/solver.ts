@@ -46,7 +46,7 @@ export type SolveOptions = {
    * Fetch intercepted requests with this instead of Playwright's
    * `route.fetch`. Only needed for browsers where route.fetch is unreliable —
    * `src/mitm.ts` exposes exactly this shape, and
-   * `src/akamai/sensor/comcast-lightpanda.ts` passes it. Whatever you give it must
+   * `dev-resources/lightpanda/comcast-lightpanda.ts` passes it. Whatever you give it must
    * come from the same address the browser uses, or the telemetry will be
    * scored against the wrong client.
    */

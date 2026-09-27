@@ -3,12 +3,6 @@ import { config } from '@skilbjo/config-rc';
 export default [
   ...config,
   {
-    ignores: [
-      'dev-resources/repl.cjs',
-      'dist/**',
-      'target/**',
-      'venv/**',
-      'src/**/*-lightpanda.ts',
-    ],
+    ignores: ['dev-resources/repl.cjs', 'dist/**', 'target/**', 'venv/**'],
   },
 ];

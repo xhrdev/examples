@@ -1,17 +1,16 @@
 {
   "extends": "@skilbjo/config-rc/tsconfig.json",
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "dev-resources/**/*.ts"
   ],
   "exclude": [
     "dev-resources/repl.cjs",
     "dist",
-    "node_modules",
-    "src/**/*-lightpanda.ts"
+    "node_modules"
   ],
   "compilerOptions": {
     "lib": ["ES2025", "DOM"],
-    "rootDir": "./src",
     "paths": {
       "#src/*": ["./src/*"]
     },

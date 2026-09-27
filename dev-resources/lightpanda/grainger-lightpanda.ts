@@ -1,8 +1,8 @@
 /**
  * Run with:
  *
- * node --env-file=.env src/datadome/grainger-lightpanda.ts
- * node --env-file=.env src/datadome/grainger-lightpanda.ts --url=https://www.idealista.com/
+ * node --env-file=.env dev-resources/lightpanda/grainger-lightpanda.ts
+ * node --env-file=.env dev-resources/lightpanda/grainger-lightpanda.ts --url=https://www.idealista.com/
  *
  * The DataDome flow driven by **Lightpanda** instead of Chrome — a headless
  * browser with no renderer, a ~70MB binary that starts in milliseconds. See
@@ -181,7 +181,7 @@ const attempt = async ({
       return false;
     }
   };
-  const { mitm, context, page, stop } = await start({
+  const { context, mitm, page, stop } = await start({
     log: (message) => log(message),
     onResponse: ({ body, url }) => {
       if (isChallengeHost(url)) captures.set(url, body);
@@ -255,7 +255,9 @@ const attempt = async ({
     for (const url of extractExternalScriptUrls(documentHtml, documentUrl)) {
       const captured = captures.get(url);
       if (captured !== undefined) {
-        log(`  external script ${url} (${captured.length} bytes, from the proxy)`);
+        log(
+          `  external script ${url} (${captured.length} bytes, from the proxy)`
+        );
         externalScripts.push({ body: captured, url });
         continue;
       }

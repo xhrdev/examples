@@ -19,8 +19,7 @@ const PROJECT_ROOT = path.resolve(
 );
 const LOADTEST_PATH = path.join(PROJECT_ROOT, 'src/loadtest.ts');
 
-// Browser-driven examples accept --headless; the HTTP-only ones and the
-// Lightpanda ones (always headless, no flag) don't.
+// Browser-driven examples accept --headless; the HTTP-only ones don't.
 //
 // `advisory` runs a script and reports it without letting it fail the suite.
 // It should be rare: `NOT_A_REGRESSION` below already keeps an infra-only
@@ -29,17 +28,20 @@ const LOADTEST_PATH = path.join(PROJECT_ROOT, 'src/loadtest.ts');
 // unreliable for a reason neither of those cover — not a default to reach for
 // whenever a target is a little slow.
 //
-// The undici/axios/fetch HTTP-client grainger scripts, and the ca-edd, hilton
-// and aircanada Lightpanda ones, are not tracked in this repo (kept locally
-// only) — CI's fresh, proxyless runner address gets `dd.solve.failed` /
-// "Access Denied" from them consistently, where the same commits solve
-// locally. They are not in this list because the files are not in the
-// checkout.
+// The undici/axios/fetch HTTP-client grainger scripts are not tracked in this
+// repo (kept locally only) — CI's fresh, proxyless runner address gets
+// `dd.solve.failed` / "Access Denied" from them consistently, where the same
+// commits solve locally. They are not in this list because the files are not
+// in the checkout.
 //
-// The other two Lightpanda examples came back on 2026-09-26, once src/mitm.ts
-// started putting Chrome's real ClientHello and HTTP/2 SETTINGS on the wire
-// rather than node's approximation of them. Both are advisory, for the address
-// reason this block is about rather than any doubt about the scripts.
+// Every Lightpanda example (`*-lightpanda.ts`) lives in
+// `dev-resources/lightpanda/` instead of under `src/`, and none of them are
+// in this list: CI never gets a reliable pass from any of them (the linux
+// Lightpanda build behaves differently from macOS, on top of the exit-address
+// sensitivity every other advisory entry here has), so rather than carry them
+// as permanently-advisory noise in the suite, they're kept out of it entirely
+// — still present, still linted, runnable by hand, just not part of what
+// decides whether this suite is green.
 const SCRIPTS = [
   // Verified 2026-09-26 against trial.xhr.dev through the shared residential
   // proxy: clean i -> c escalation, HTTP 200 in 52s (one transient timeout on
@@ -47,24 +49,11 @@ const SCRIPTS = [
   // treated as a pattern on a single occurrence). The 2026-09-23 "not cleared"
   // advisory note no longer describes reality; promoted to blocking.
   { headless: true, script: 'src/datadome/grainger' },
-  // Lightpanda, via the MITM proxy — the same DataDome flow with a browser
-  // that has no renderer. It was untracked because it could not get past
-  // `422 dd.script.missing`: it never sent `externalScripts` after the
-  // /dd/solve change in #74/#75, so it failed every time for a reason that
-  // had nothing to do with the address problem above. That is fixed.
-  //
-  // What is left is the flakiness this script's own header documents and
-  // quantifies — DataDome scores a solve computed from a Lightpanda page as
-  // borderline and accepts it perhaps one attempt in four, which `run()`'s
-  // three attempts turn into a bit over half of runs. Measured 2026-09-26:
-  // one green run in three, the green one verifying on its first attempt
-  // with the real page title. Advisory, and not a candidate for promotion
-  // until that ratio changes rather than until CI's address does.
-  {
-    advisory: true,
-    headless: true,
-    script: 'src/datadome/grainger-lightpanda',
-  },
+  // github.com/signup — added 2026-09-27 alongside oakley below to broaden
+  // DataDome coverage past grainger/idealista. Not yet run enough through the
+  // suite's actual network paths to promote off a single verification the
+  // way grainger/hilton/chewy were; advisory until it has one.
+  { advisory: true, headless: true, script: 'src/datadome/github-signup' },
   // Not advisory — verified 2026-09-26 that its only current failure mode is
   // already covered by `NOT_A_REGRESSION` below. Two consecutive runs through
   // the shared proxy both came back `BANNED` (exit=4): DataDome reports that
@@ -76,15 +65,6 @@ const SCRIPTS = [
   // keep reporting without failing the suite until that happens.
   { headless: true, script: 'src/datadome/idealista' },
   { headless: true, script: 'src/akamai/sensor/comcast' },
-  // The same property on Lightpanda, and the one Lightpanda example that has
-  // never needed anything but the proxy: `_abck` accepted on round 3, both
-  // before and after the curl-impersonate change. Advisory only for the exit
-  // address, like its neighbours.
-  {
-    advisory: true,
-    headless: true,
-    script: 'src/akamai/sensor/comcast-lightpanda',
-  },
   // Still advisory. A promotion here on 2026-09-26 was based on one run
   // through the shared residential proxy (clean 3-round solve, 17s) — which
   // is not this repo's own CI path: build-and-test.yml runs this suite with
@@ -142,6 +122,10 @@ const SCRIPTS = [
   // sensitivity as hilton/aa/aircanada, not a code regression. Advisory for
   // the same reason.
   { advisory: true, headless: true, script: 'src/akamai/sbsd/ana' },
+  // oakley.com sign-in — added 2026-09-27 for a second SBSD property besides
+  // hilton/aa/aircanada/chewy. No verification run through this suite's
+  // network paths yet; advisory until it has one, same as github-signup.
+  { advisory: true, headless: true, script: 'src/akamai/sbsd/oakley' },
   // Shape (formerly F5) has no example in this repo yet — add an entry here
   // once one exists rather than gating xhrdev's smoke suite on a target it
   // can't yet exercise.
