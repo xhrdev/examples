@@ -5,9 +5,13 @@ name: smoke
 # targets — any src/datadome, src/akamai/sensor or src/akamai/sbsd script,
 # src/mitm.ts, a solver — shows its own pass/fail in the Actions UI instead
 # of being folded into the unit-test job. Shared by pr.yml, release.yml and
-# smoke-schedule.yml, the same "one file, not three hand-copied step lists"
-# reasoning as build-and-test.yml.
+# the daily schedule below — one file with three triggers, not a separate
+# smoke-schedule.yml wrapper that just called this one — same "one file, not
+# hand-copied step lists" reasoning as build-and-test.yml.
 on:
+  schedule:
+    - cron: '0 12 * * *' # daily, 12:00 UTC — independent canary against the live targets, not gated on a push
+  workflow_dispatch:
   workflow_call:
     inputs:
       checkout-ref:
