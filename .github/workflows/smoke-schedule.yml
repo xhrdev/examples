@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: smoke schedule
+
+# An independent canary against the live targets, on its own cadence — not
+# gated on a push, so it also catches upstream target drift (DataDome/Akamai
+# changes) between releases. Runs `npm run test:smoke` directly rather than
+# `make test`: unit tests and the semantic-release dry run in build-and-test.
+# yml don't belong on a cron.
+on:
+  schedule:
+    - cron: '0 12 * * *' # daily, 12:00 UTC
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: none
+      id-token: none
+      packages: none
+
+    steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Write .env
+        env:
+          ENV_HOST: ${{ secrets.HOST }}
+          ENV_API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          {
+            echo "host=$ENV_HOST"
+            echo "api_key=$ENV_API_KEY"
+          } > .env
+
+      - run: npm run test:smoke | tee -a "$GITHUB_STEP_SUMMARY"

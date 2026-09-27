@@ -159,15 +159,12 @@ function runIteration(i: number): Promise<{ code: number; elapsed: string }> {
 // ---------------------------------------------------------------------------
 
 console.log(`\n=== Load Test ===`);
-console.log(`Script:      ${SCRIPT}`);
-console.log(`Iterations:  ${ITERATIONS}`);
-console.log(`Concurrency: ${CONCURRENCY}`);
-console.log(`Headless:    ${HEADLESS}`);
-console.log(`Quiet:       ${QUIET}`);
-console.log(`Host:        ${HOST || process.env['host'] || '(not set)'}`);
-console.log(`Proxy:       ${PROXY_RAW ? 'set' : 'NOT SET'}`);
+console.log(`Script: ${SCRIPT}`);
 console.log(
-  `Credentials: ${process.env['username'] ? 'set' : 'NOT SET'} / ${process.env['password'] ? 'set' : 'NOT SET'}`
+  `Iterations: ${ITERATIONS}   Concurrency: ${CONCURRENCY}   Headless: ${HEADLESS}`
+);
+console.log(
+  `Host: ${HOST || process.env['host'] || '(not set)'}   Proxy: ${PROXY_RAW ? 'set' : 'NOT SET'}   Credentials: ${process.env['username'] && process.env['password'] ? 'set' : 'NOT SET'}`
 );
 console.log();
 

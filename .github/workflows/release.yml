@@ -11,9 +11,9 @@ defaults:
 
 jobs:
   make-ci:
-    runs-on: ubuntu-latest
-    # runs-on: ubuntu-24.04-arm # not until q2 2026: https://blog.chromium.org/2026/03/bringing-chrome-to-arm64-linux-devices.html
-    timeout-minutes: 15
+    if: github.repository == 'xhrdev/examples' # Security: Only run on pushes to the main repository
+    uses: ./.github/workflows/build-and-test.yml
+    secrets: inherit
     permissions:
       pull-requests: write
       contents: write
@@ -21,81 +21,6 @@ jobs:
       actions: none
       id-token: none
       packages: none
-    if: github.repository == 'xhrdev/examples' # Security: Only run on pushes to the main repository
-
-    outputs:
-      new_release_version:   ${{ steps.semantic.outputs.new_release_version }}
-      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
-
-    steps:
-      - uses: step-security/harden-runner@v2
-        with:
-          egress-policy: audit
-      - uses: actions/checkout@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }} # keep it as `secrets.GITHUB_TOKEN` as repo is public and this token has limited privs
-          persist-credentials: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - uses: getsentry/action-setup-venv@v3.2.0
-        with:
-          venv-dir: venv
-          cache-dependency-path: |
-            requirements.txt
-          install-cmd: pip install -r requirements.txt
-
-      - name: Write .env for the live example/smoke suite
-        env:
-          ENV_HOST: ${{ secrets.HOST }}
-          ENV_API_KEY: ${{ secrets.API_KEY }}
-        run: |
-          # No proxy= line. The suite runs direct from the runner's own
-          # address, which is a fresh one per job — better for these targets
-          # than one static IP shared by every script in sequence with no
-          # session token to rotate, where a target that turns against it stays
-          # turned for the whole run.
-          #
-          # The scripts all still take proxy= if you set one locally; it is
-          # optional everywhere and required nowhere.
-          {
-            echo "host=$ENV_HOST"
-            echo "api_key=$ENV_API_KEY"
-          } > .env
-
-          # GitHub withholds repository secrets from runs it triggers for
-          # Dependabot, so on those `host=` is empty and every script in the
-          # suite dies on `set host= in .env`. That is twelve failures saying
-          # nothing about the bump under test, and it is what kept every
-          # Dependabot PR red and its auto-merge job skipped.
-          #
-          # Keyed on the secret being absent rather than on the actor being
-          # dependabot, because the thing that actually stops the suite running
-          # is the missing host, and anything else that removes it should take
-          # the same path rather than fail confusingly.
-          if [[ -z "$ENV_HOST" ]]; then
-            echo 'no host= available for this run: skipping the live smoke suite' >&2
-            echo 'skip_live_checks=1' >> "$GITHUB_ENV"
-          fi
-
-      # No CHROME_PATH: the scripts fall back to Playwright's own Chrome, which
-      # `npm ci` installs via the postinstall hook. That used to be a snap
-      # instead, and `snap install chromium` failed the whole job on an HTTP 408
-      # from the snap store.
-      - name: make test
-        run: make test
-
-      - uses: cycjimmy/semantic-release-action@v6.0.0
-        id: semantic # need an `id` for output variables
-        with:
-          dry_run: true
-          semantic_version: 24
-          extra_plugins: |
-            @semantic-release/exec@6.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # keep it as `secrets.GITHUB_TOKEN` as repo is public and this token has limited privs
 
   docker-build:
     runs-on: ubuntu-24.04-arm

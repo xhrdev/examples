@@ -4,6 +4,10 @@
  * that they still start up and run end-to-end. This is what `npm test`
  * invokes; it needs a working .env (proxy, solver, credentials) same as
  * the scripts themselves do.
+ *
+ * Runs with bounded concurrency (default 4, override with --concurrency=N) —
+ * see the comment above CONCURRENCY below for why that's safe against these
+ * particular targets.
  */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +23,11 @@ const LOADTEST_PATH = path.join(PROJECT_ROOT, 'src/loadtest.ts');
 // Lightpanda ones (always headless, no flag) don't.
 //
 // `advisory` runs a script and reports it without letting it fail the suite.
+// It should be rare: `NOT_A_REGRESSION` below already keeps an infra-only
+// outcome (banned exit IP, spent rate-limit budget) from failing the suite on
+// its own, so `advisory: true` is for a script that's still genuinely
+// unreliable for a reason neither of those cover — not a default to reach for
+// whenever a target is a little slow.
 //
 // The undici/axios/fetch HTTP-client grainger scripts, and the ca-edd, hilton
 // and aircanada Lightpanda ones, are not tracked in this repo (kept locally
@@ -32,12 +41,12 @@ const LOADTEST_PATH = path.join(PROJECT_ROOT, 'src/loadtest.ts');
 // rather than node's approximation of them. Both are advisory, for the address
 // reason this block is about rather than any doubt about the scripts.
 const SCRIPTS = [
-  // Advisory as of 2026-09-23: failing on CI's fresh runner address
-  // (exit=1, DataDome not cleared) while the same commit solves locally —
-  // the same exit-address sensitivity noted below for ca-edd/hilton/aa/ana,
-  // not a code regression. Promote back to blocking once a run of green
-  // ones on CI says the address problem has gone away.
-  { advisory: true, headless: true, script: 'src/datadome/grainger' },
+  // Verified 2026-09-26 against trial.xhr.dev through the shared residential
+  // proxy: clean i -> c escalation, HTTP 200 in 52s (one transient timeout on
+  // an earlier attempt through the same proxy, not reproduced on retry — not
+  // treated as a pattern on a single occurrence). The 2026-09-23 "not cleared"
+  // advisory note no longer describes reality; promoted to blocking.
+  { headless: true, script: 'src/datadome/grainger' },
   // Lightpanda, via the MITM proxy — the same DataDome flow with a browser
   // that has no renderer. It was untracked because it could not get past
   // `422 dd.script.missing`: it never sent `externalScripts` after the
@@ -56,15 +65,16 @@ const SCRIPTS = [
     headless: true,
     script: 'src/datadome/grainger-lightpanda',
   },
-  // Advisory: exercising the i -> c escalation means racing idealista's own
-  // escalation timer against the solver's answer for the interstitial round,
-  // and the round model assumes one document per round. A fix landed for the
-  // half of that where the site escalates to a captcha while the interstitial
-  // solve is still in flight (the stale relay used to corrupt the new round);
-  // it did not cover the other shape seen live, where the interstitial simply
-  // repeats itself post-relay rather than escalating — that needs the round
-  // model to allow a same-type retry, which is a bigger change than fits here.
-  { advisory: true, headless: true, script: 'src/datadome/idealista' },
+  // Not advisory — verified 2026-09-26 that its only current failure mode is
+  // already covered by `NOT_A_REGRESSION` below. Two consecutive runs through
+  // the shared proxy both came back `BANNED` (exit=4): DataDome reports that
+  // exact exit IP banned for idealista.com specifically (grainger and every
+  // Akamai target passed through the same IP in the same session, so this is
+  // per-property, not a dead proxy). The previously-documented escalation-
+  // timer race is not what's happening now — this needs a fresh/rotating exit
+  // IP to re-verify the code path, not a round-model change. `BANNED` will
+  // keep reporting without failing the suite until that happens.
+  { headless: true, script: 'src/datadome/idealista' },
   { headless: true, script: 'src/akamai/sensor/comcast' },
   // The same property on Lightpanda, and the one Lightpanda example that has
   // never needed anything but the proxy: `_abck` accepted on round 3, both
@@ -75,25 +85,20 @@ const SCRIPTS = [
     headless: true,
     script: 'src/akamai/sensor/comcast-lightpanda',
   },
-  // Advisory as of 2026-09-17: two runs in a row, each on a fresh CI runner
-  // address, came back "Access Denied" — the same exit-address sensitivity
-  // that already makes hilton/aa/aircanada advisory below, not a code
-  // regression (the solve itself completes; the property gates on the IP
-  // afterward). Promote back to blocking once a run of green ones says the
-  // address problem has gone away.
-  { advisory: true, headless: true, script: 'src/akamai/sensor/ca-edd' },
+  // Verified 2026-09-26 against trial.xhr.dev through the shared proxy: clean
+  // 3-round _abck solve, login page reached in 17s. The 2026-09-17 "Access
+  // Denied" advisory note no longer describes reality; promoted to blocking.
+  { headless: true, script: 'src/akamai/sensor/ca-edd' },
   // The SBSD channel, and all three run headless as of 2026-09-08. hilton was
   // the last headed entry — it used to refuse a headless Chrome outright — and
   // three headless runs now land `_abck` on round 5 and reach the results
   // page. Nothing here needs a virtual display any more.
   //
-  // Advisory because hilton is the target here most sensitive to the exit
-  // address, and that sensitivity is cumulative: one desktop address measured
-  // 2/4 direct, then 0/2 after another handful of runs, while an ISP proxy held
-  // 4/4 across the same window. CI gets a fresh address per job, which is the
-  // good end of that range — so this may well be steady. Promote it to blocking
-  // once a run of green ones says so, rather than assuming either way.
-  { advisory: true, headless: true, script: 'src/akamai/sbsd/hilton' },
+  // Verified 2026-09-26 against trial.xhr.dev through the shared proxy: clean
+  // solve in 21.7s. hilton was historically the target most sensitive to a
+  // reused exit address, but that hasn't reproduced here; promoted to
+  // blocking. Revisit if the address-sensitivity pattern comes back.
+  { headless: true, script: 'src/akamai/sbsd/hilton' },
   // The same channel on two properties that serve the bundle from an
   // obfuscated path rather than /.well-known/sbsd, which is what these are here
   // to exercise: the path is discovered from the bundle's UUID `v=`, and if
@@ -102,28 +107,37 @@ const SCRIPTS = [
   // Both solve end to end, headless included — the ledger request no longer
   // carries speech-synthesis voice counts, which is what used to make these
   // desktop-only. Verified against aa.com headless with `getVoices` stubbed to
-  // return [], which is a runner exactly. Advisory for the exit-address reason
-  // hilton has — aa.com in particular serves "Access Denied" to an
-  // uninstrumented browser from an address it has seen too much of, which is
-  // what makes its pass meaningful and also what makes it worth watching
-  // before it gates CI.
+  // return [], which is a runner exactly.
   //
   // aircanada is the SBSD-only one: it does not score that document on _abck,
   // so the example runs sensor: 'page' and asserts on the booking page. If it
   // ever starts failing, check whether the property has started gating on the
   // sensor before assuming the SBSD lane broke.
+  //
+  // Still advisory — mixed results the same day (2026-09-26) undercut an
+  // earlier promotion here. An isolated run against trial.xhr.dev through the
+  // shared proxy passed clean (aa 19.4s, aircanada 28.1s), but a later run
+  // through the same proxy — after several hours of heavier use against it —
+  // failed both (aa in 14.5s, aircanada in 72.1s). That's consistent with the
+  // exit-address sensitivity this comment used to document (cumulative, not
+  // a one-shot thing) rather than a code regression, but one clean run
+  // doesn't outweigh it. Needs a genuine green streak, not a single pass,
+  // before promoting again.
   { advisory: true, headless: true, script: 'src/akamai/sbsd/aa' },
   { advisory: true, headless: true, script: 'src/akamai/sbsd/aircanada' },
-  // chewy.com, verified working (commit 5de75f4) but not yet run through this
-  // suite in CI. Advisory until a run of green ones on CI's address gives it
-  // the same track record as the targets above.
-  { advisory: true, headless: true, script: 'src/akamai/sbsd/chewy' },
+  // chewy.com, verified working (commit 5de75f4) and now has a green CI-shaped
+  // run too: 19.1s against trial.xhr.dev through the shared proxy, 2026-09-26.
+  // Promoted to blocking.
+  { headless: true, script: 'src/akamai/sbsd/chewy' },
   // ana.co.jp — the multi-realm SBSD/abck example (#70), brought up to date in
   // #72. Local runs on 2026-09-19: 1/2 (one system-error page, one clean
   // solve reaching the flight-search results) — the same exit-address
   // sensitivity as hilton/aa/aircanada, not a code regression. Advisory for
   // the same reason.
   { advisory: true, headless: true, script: 'src/akamai/sbsd/ana' },
+  // Shape (formerly F5) has no example in this repo yet — add an entry here
+  // once one exists rather than gating xhrdev's smoke suite on a target it
+  // can't yet exercise.
 ];
 
 /**
@@ -145,6 +159,30 @@ const SCRIPTS = [
 const needsVirtualDisplay =
   process.platform === 'linux' && !process.env['DISPLAY'];
 
+// Scripts run with bounded concurrency rather than one at a time — a
+// sequential run of everything in SCRIPTS, each potentially riding out a
+// 90-150s solver/kill timeout on its own, made the suite take 10+ minutes
+// wall-clock for no reason: every target here is a different site behind a
+// different vendor (DataDome / Akamai sensor / Akamai SBSD), so running them
+// at once is ordinary multi-tab browsing from one exit IP, not a burst
+// against any single target. Override with --concurrency=N; keep it modest
+// if you ever add two scripts against the *same* property (that would be a
+// real burst).
+const CONCURRENCY = Number(
+  process.argv.find((a) => a.startsWith('--concurrency='))?.split('=')[1] ?? 4
+);
+
+/** `src/datadome/grainger` -> `DataDome`, `src/akamai/sbsd/hilton` -> `Akamai SBSD`. */
+function laneOf(script) {
+  if (script.startsWith('src/datadome/')) return 'DataDome';
+  if (script.startsWith('src/akamai/sensor/')) return 'Akamai Sensor';
+  if (script.startsWith('src/akamai/sbsd/')) return 'Akamai SBSD';
+  return '—';
+}
+
+// Output is buffered per script and flushed as one block when it finishes,
+// rather than inherited straight to the terminal — with several scripts
+// running at once, interleaved live output would be unreadable.
 function runOne({ advisory, headed, headless, script, useEnvProxy }) {
   return new Promise((resolve) => {
     const args = [
@@ -162,17 +200,39 @@ function runOne({ advisory, headed, headless, script, useEnvProxy }) {
         ? ['xvfb-run', ['-a', 'node', ...nodeArgs]]
         : ['node', nodeArgs];
 
-    console.log(`\n--- ${script} ---`);
-    const child = spawn(command, commandArgs, {
-      cwd: PROJECT_ROOT,
-      stdio: 'inherit',
-    });
-    child.on('exit', (code) => resolve({ advisory, code: code ?? 1, script }));
+    const started = Date.now();
+    const child = spawn(command, commandArgs, { cwd: PROJECT_ROOT });
+    let output = '';
+    child.stdout?.on('data', (chunk) => (output += chunk));
+    child.stderr?.on('data', (chunk) => (output += chunk));
+
+    const elapsed = () => `${((Date.now() - started) / 1000).toFixed(1)}s`;
+    const finish = (code) => {
+      console.log(`\n--- ${script} ---\n${output}`);
+      resolve({ advisory, code, elapsed: elapsed(), script });
+    };
+    child.on('exit', (code) => finish(code ?? 1));
     child.on('error', (err) => {
-      console.error(`  spawn error: ${err.message}`);
-      resolve({ advisory, code: 1, script });
+      output += `  spawn error: ${err.message}\n`;
+      finish(1);
     });
   });
+}
+
+/** Runs `items` through `worker`, at most `limit` at a time, preserving `items`' order in the returned array. */
+async function runPool(items, worker, limit) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function lane() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await worker(items[i]);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, lane)
+  );
+  return results;
 }
 
 // Outcomes that are about where the request left from, not about whether the
@@ -188,25 +248,48 @@ const NOT_A_REGRESSION = new Map([
   [RATE_LIMIT_EXIT_CODE, 'RATE LIMITED'],
 ]);
 
-const results = [];
-for (const entry of SCRIPTS) {
-  results.push(await runOne(entry));
-}
+const suiteStarted = Date.now();
+const results = await runPool(SCRIPTS, runOne, CONCURRENCY);
+const totalElapsed = `${((Date.now() - suiteStarted) / 1000).toFixed(1)}s`;
 
 const failed = results.filter(
   (r) => r.code !== 0 && !r.advisory && !NOT_A_REGRESSION.has(r.code)
 );
 
-console.log('\n=== Smoke Test Summary ===');
-for (const { advisory, code, script } of results) {
+/** One line per column per row — reused for CI (piped into $GITHUB_STEP_SUMMARY), local runs, and the scheduled canary, so there's exactly one report format. */
+function printReport(rows, totalElapsed) {
+  const headers = ['Script', 'Lane', 'State', 'Elapsed'];
+  const widths = headers.map((h, i) =>
+    Math.max(h.length, ...rows.map((r) => r[i].length))
+  );
+  const rule = `+${widths.map((w) => '-'.repeat(w + 2)).join('+')}+`;
+  const printRow = (cells) =>
+    console.log(
+      `|${cells.map((c, i) => ` ${c.padEnd(widths[i])} `).join('|')}|`
+    );
+
+  console.log('\n=== Smoke Test Summary ===');
+  console.log(rule);
+  printRow(headers);
+  console.log(rule);
+  for (const row of rows) printRow(row);
+  console.log(rule);
+  // Wall-clock for the whole run, not the sum of each script's own Elapsed
+  // column — with CONCURRENCY > 1 those overlap, so this is what actually
+  // answers "how long did `npm run smoke` take".
+  console.log(`Total: ${totalElapsed}`);
+}
+
+const rows = results.map(({ advisory, code, elapsed, script }) => {
   const infrastructural = NOT_A_REGRESSION.get(code);
-  const status =
+  const state =
     code === 0
       ? 'PASS'
       : infrastructural
-        ? `${infrastructural} (exit=${code}) — not a regression, not failing the suite`
-        : `FAIL (exit=${code})${advisory ? ', advisory — not failing the suite' : ''}`;
-  console.log(`  ${status}  ${script}`);
-}
+        ? `${infrastructural} (not a regression)`
+        : `FAIL${advisory ? ' (advisory)' : ''}`;
+  return [script, laneOf(script), state, elapsed];
+});
+printReport(rows, totalElapsed);
 
 process.exit(failed.length > 0 ? 1 : 0);
