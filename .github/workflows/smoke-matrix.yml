@@ -1,0 +1,72 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: smoke matrix
+
+# Manual only — runs dev-resources/smoke-matrix.js, the no-proxy /
+# datacenter / ISP exit-IP comparison, and posts all three summary tables to
+# the step summary. Not on any schedule or push: it's for producing a
+# fresh, real comparison on demand (e.g. before a public write-up), not a
+# routine check, and DATACENTER_PROXY/ISP_PROXY are paid, reusable proxy
+# credentials that don't need exercising on every push.
+#
+# The datacenter/ISP exit IPs are partially masked in the printed tables
+# (smoke-matrix.js's own doing) — the datacenter one is already public via
+# trial.xhr.dev's own DNS, but the ISP one is a private resource, and
+# publishing either invites anti-bot vendors' OSINT to blocklist it faster.
+on:
+  workflow_dispatch:
+    inputs:
+      concurrency:
+        description: >-
+          Scripts per profile run at once (x3 profiles = total concurrent
+          browser sessions). Lower it if a leg times out under load.
+        required: false
+        type: string
+        default: '2'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  smoke-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: none
+      id-token: none
+      packages: none
+
+    steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Write .env
+        env:
+          ENV_HOST: ${{ secrets.HOST }}
+          ENV_API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          {
+            echo "host=$ENV_HOST"
+            echo "api_key=$ENV_API_KEY"
+          } > .env
+
+      - name: Run smoke matrix
+        env:
+          DATACENTER_PROXY: ${{ secrets.DATACENTER_PROXY }}
+          ISP_PROXY: ${{ secrets.ISP_PROXY }}
+        run: |
+          node --env-file=.env dev-resources/smoke-matrix.js \
+            --concurrency=${{ inputs.concurrency }} \
+            | tee -a "$GITHUB_STEP_SUMMARY"

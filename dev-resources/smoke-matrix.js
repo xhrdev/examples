@@ -47,12 +47,14 @@ const ALL_PROFILES = [
   { label: 'No proxy', proxy: '', slug: 'no-proxy' },
   {
     label: 'Datacenter proxy',
+    mask: true,
     proxy: process.env['DATACENTER_PROXY'] || '',
     requiredEnv: 'DATACENTER_PROXY',
     slug: 'datacenter',
   },
   {
     label: 'ISP proxy',
+    mask: true,
     proxy: process.env['ISP_PROXY'] || '',
     requiredEnv: 'ISP_PROXY',
     slug: 'isp',
@@ -83,6 +85,13 @@ for (const { label, proxy, requiredEnv } of PROFILES) {
     console.error(`missing proxy for "${label}" — set ${requiredEnv}`);
     process.exit(1);
   }
+}
+
+/** `1.2.3.4` -> `x.x.x.4` — enough to show a screenshot has a real, distinct exit IP per profile without handing over the exact address (a reusable paid resource, and a target for anti-bot vendors' own OSINT-built blocklists). Left alone if it isn't a plain IPv4 (the "unknown (...)" error string, or some future proxy's IPv6 address). */
+function partiallyMask(ip) {
+  const octets = ip.split('.');
+  if (octets.length !== 4) return ip;
+  return `x.x.x.${octets[3]}`;
 }
 
 /** The exit IP a profile's traffic actually leaves from, for the table header — a marketing screenshot should show the real address, not just the label. */
@@ -134,6 +143,21 @@ function runProfile({ label, proxy }) {
 }
 
 const exitIps = await Promise.all(PROFILES.map((p) => resolveExitIp(p.proxy)));
+
+// `::add-mask::` is a GitHub Actions log command — it tells the runner to
+// redact this exact string everywhere in the job's log from here on, not
+// just the line we print it on. Belt-and-suspenders alongside the partial
+// masking below: this catches the full address if it turns up incidentally
+// elsewhere (e.g. a proxy connection error). Harmless outside CI (just an
+// unrecognised line nobody parses). The datacenter/ISP IPs are a paid,
+// reusable resource of ours; the no-proxy IP is just this run's ephemeral
+// runner address, so it isn't masked.
+for (const [i, { mask }] of PROFILES.entries()) {
+  if (mask && !exitIps[i].startsWith('unknown (')) {
+    console.log(`::add-mask::${exitIps[i]}`);
+  }
+}
+
 const results = await Promise.all(PROFILES.map(runProfile));
 
 for (const [i, { elapsed, label, output }] of results.entries()) {
@@ -145,8 +169,9 @@ for (const [i, { elapsed, label, output }] of results.entries()) {
 
   const summaryStart = output.indexOf('=== Smoke Test Summary ===');
   const summary = summaryStart === -1 ? output : output.slice(summaryStart);
+  const displayIp = PROFILES[i].mask ? partiallyMask(exitIps[i]) : exitIps[i];
   console.log(`\n${'#'.repeat(60)}`);
-  console.log(`# ${label} — exit IP ${exitIps[i]} — ${elapsed} wall-clock`);
+  console.log(`# ${label} — exit IP ${displayIp} — ${elapsed} wall-clock`);
   console.log('#'.repeat(60));
   console.log(summary);
   console.log(

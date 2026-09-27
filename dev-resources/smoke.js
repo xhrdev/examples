@@ -54,6 +54,12 @@ const SCRIPTS = [
   // suite's actual network paths to promote off a single verification the
   // way grainger/hilton/chewy were; advisory until it has one.
   { advisory: true, headless: true, script: 'src/datadome/github-signup' },
+  // saksfifthavenue.com and anthropologie.com — added 2026-09-27, two more
+  // straightforward DataDome interstitials (same shape as grainger, no
+  // login/SBSD). Advisory until each has a verification run, same policy as
+  // github-signup/oakley above.
+  { advisory: true, headless: true, script: 'src/datadome/saks' },
+  { advisory: true, headless: true, script: 'src/datadome/anthropologie' },
   // Not advisory — verified 2026-09-26 that its only current failure mode is
   // already covered by `NOT_A_REGRESSION` below. Two consecutive runs through
   // the shared proxy both came back `BANNED` (exit=4): DataDome reports that
