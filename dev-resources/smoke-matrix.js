@@ -12,13 +12,15 @@
  *
  *   DATACENTER_PROXY=http://user:pass@host:port \
  *   ISP_PROXY=http://user:pass@host:port \
- *     node --env-file=.env dev-resources/smoke-matrix.js [--concurrency=N]
+ *     node --env-file=.env dev-resources/smoke-matrix.js [--concurrency=N] [--profile=slug[,slug...]]
  *
  * Neither proxy URL is committed anywhere — pass them as env vars each time.
  * `--concurrency=N` is forwarded to every profile's own smoke.js run
  * (default 4 there); with three profiles running at once that's up to 3xN
  * concurrent browser sessions, so drop it to --concurrency=2 on a modest
- * machine.
+ * machine. `--profile=` restricts the run to one or more of no-proxy,
+ * datacenter, isp (comma-separated) instead of all three — e.g.
+ * --profile=isp to run just that leg on its own.
  */
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -41,20 +43,44 @@ const CONCURRENCY_FLAG = process.argv.find((a) =>
   a.startsWith('--concurrency=')
 );
 
-const PROFILES = [
-  { label: 'No proxy', proxy: '' },
+const ALL_PROFILES = [
+  { label: 'No proxy', proxy: '', slug: 'no-proxy' },
   {
     label: 'Datacenter proxy',
     proxy: process.env['DATACENTER_PROXY'] || '',
+    requiredEnv: 'DATACENTER_PROXY',
+    slug: 'datacenter',
   },
-  { label: 'ISP proxy', proxy: process.env['ISP_PROXY'] || '' },
+  {
+    label: 'ISP proxy',
+    proxy: process.env['ISP_PROXY'] || '',
+    requiredEnv: 'ISP_PROXY',
+    slug: 'isp',
+  },
 ];
 
-for (const { label, proxy } of PROFILES) {
-  if (label !== 'No proxy' && !proxy) {
-    console.error(
-      `missing proxy for "${label}" — set ${label === 'Datacenter proxy' ? 'DATACENTER_PROXY' : 'ISP_PROXY'}`
-    );
+const PROFILE_FLAG = process.argv.find((a) => a.startsWith('--profile='));
+const requestedSlugs = PROFILE_FLAG
+  ? new Set(PROFILE_FLAG.slice('--profile='.length).split(','))
+  : null;
+if (requestedSlugs) {
+  const known = new Set(ALL_PROFILES.map((p) => p.slug));
+  for (const slug of requestedSlugs) {
+    if (!known.has(slug)) {
+      console.error(
+        `unknown profile "${slug}" — choose from ${[...known].join(', ')}`
+      );
+      process.exit(1);
+    }
+  }
+}
+const PROFILES = requestedSlugs
+  ? ALL_PROFILES.filter((p) => requestedSlugs.has(p.slug))
+  : ALL_PROFILES;
+
+for (const { label, proxy, requiredEnv } of PROFILES) {
+  if (requiredEnv && !proxy) {
+    console.error(`missing proxy for "${label}" — set ${requiredEnv}`);
     process.exit(1);
   }
 }
