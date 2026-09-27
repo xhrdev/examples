@@ -85,10 +85,17 @@ const SCRIPTS = [
     headless: true,
     script: 'src/akamai/sensor/comcast-lightpanda',
   },
-  // Verified 2026-09-26 against trial.xhr.dev through the shared proxy: clean
-  // 3-round _abck solve, login page reached in 17s. The 2026-09-17 "Access
-  // Denied" advisory note no longer describes reality; promoted to blocking.
-  { headless: true, script: 'src/akamai/sensor/ca-edd' },
+  // Still advisory. A promotion here on 2026-09-26 was based on one run
+  // through the shared residential proxy (clean 3-round solve, 17s) — which
+  // is not this repo's own CI path: build-and-test.yml runs this suite with
+  // no proxy= (deliberately, for a fresh IP per job, see the .env step
+  // above). Under that direct path a CI run the same day still got "Access
+  // Denied" at 121s — exactly the exit-address sensitivity the pre-2026-09-26
+  // comment here already described. Proxied and direct are different
+  // network paths for this target; promoting off proxied evidence alone was
+  // the mistake. Needs a green run through the *actual* no-proxy CI path
+  // before promoting again.
+  { advisory: true, headless: true, script: 'src/akamai/sensor/ca-edd' },
   // The SBSD channel, and all three run headless as of 2026-09-08. hilton was
   // the last headed entry — it used to refuse a headless Chrome outright — and
   // three headless runs now land `_abck` on round 5 and reach the results
