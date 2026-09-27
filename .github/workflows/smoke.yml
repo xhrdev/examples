@@ -1,0 +1,76 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: smoke
+
+# Split out from build-and-test.yml so a change that touches the live
+# targets — any src/datadome, src/akamai/sensor or src/akamai/sbsd script,
+# src/mitm.ts, a solver — shows its own pass/fail in the Actions UI instead
+# of being folded into the unit-test job. Shared by pr.yml, release.yml and
+# smoke-schedule.yml, the same "one file, not three hand-copied step lists"
+# reasoning as build-and-test.yml.
+on:
+  workflow_call:
+    inputs:
+      checkout-ref:
+        description: >-
+          Ref to check out. A PR passes its head SHA (github.event doesn't
+          otherwise pin one for a workflow_call); a push or schedule leaves
+          this empty and checkout uses the default ref for the triggering
+          event.
+        required: false
+        type: string
+        default: ''
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: none
+      id-token: none
+      packages: none
+
+    steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.checkout-ref || github.sha }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Write .env
+        env:
+          ENV_HOST: ${{ secrets.HOST }}
+          ENV_API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          {
+            echo "host=$ENV_HOST"
+            echo "api_key=$ENV_API_KEY"
+          } > .env
+
+          # GitHub withholds repository secrets from runs it triggers for
+          # Dependabot, so host/api_key come out empty here and every script
+          # in the suite would die on `set host= in .env` — a dozen failures
+          # saying nothing about the bump under test. Skip instead of failing
+          # loudly; pr.yml's automerge job only waits on build-and-test
+          # (unit tests), not this job, for the same reason.
+          if [[ -z "$ENV_HOST" ]]; then
+            echo 'no host= available for this run: skipping the smoke suite' >&2
+            echo 'skip_smoke=1' >> "$GITHUB_ENV"
+          fi
+
+      - name: npm run test:smoke
+        if: env.skip_smoke != '1'
+        run: npm run test:smoke | tee -a "$GITHUB_STEP_SUMMARY"

@@ -23,6 +23,19 @@ jobs:
       id-token: none
       packages: none
 
+  smoke:
+    needs:
+      - build-and-test
+    uses: ./.github/workflows/smoke.yml
+    with:
+      checkout-ref: ${{ github.event.pull_request.head.sha }}
+    secrets: inherit
+    permissions:
+      contents: read
+      actions: none
+      id-token: none
+      packages: none
+
   docker-build:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 8
