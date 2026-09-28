@@ -28,20 +28,20 @@ const LOADTEST_PATH = path.join(PROJECT_ROOT, 'src/loadtest.ts');
 // unreliable for a reason neither of those cover — not a default to reach for
 // whenever a target is a little slow.
 //
-// The undici/axios/fetch HTTP-client grainger scripts are not tracked in this
-// repo (kept locally only) — CI's fresh, proxyless runner address gets
-// `dd.solve.failed` / "Access Denied" from them consistently, where the same
-// commits solve locally. They are not in this list because the files are not
-// in the checkout.
-//
-// Every Lightpanda example (`*-lightpanda.ts`) lives in
-// `dev-resources/lightpanda/` instead of under `src/`, and none of them are
-// in this list: CI never gets a reliable pass from any of them (the linux
-// Lightpanda build behaves differently from macOS, on top of the exit-address
-// sensitivity every other advisory entry here has), so rather than carry them
-// as permanently-advisory noise in the suite, they're kept out of it entirely
-// — still present, still linted, runnable by hand, just not part of what
-// decides whether this suite is green.
+// Every HTTP-client example (undici/axios/fetch grainger scripts,
+// comcast-http.ts) lives in `dev-resources/http/` instead of under `src/`,
+// and none of them are in this list: not being a real browser is the whole
+// point of these, but it is also why CI's fresh, proxyless runner address
+// gets `dd.solve.failed` / "Access Denied" from them where the same commits
+// solve locally against a residential exit. Same story for every Lightpanda
+// example (`*-lightpanda.ts`, `dev-resources/lightpanda/`): CI never gets a
+// reliable pass from any of them (the linux Lightpanda build behaves
+// differently from macOS, on top of the exit-address sensitivity above).
+// Rather than carry either set as permanently-advisory noise in the suite,
+// they're kept out of it entirely — still committed, still type-checked and
+// linted, runnable by hand, just not part of what decides whether this
+// suite is green, and not part of `npm run build` either (dev-resources is
+// excluded from `tsconfig.build.json`), so none of it reaches customers.
 const SCRIPTS = [
   // Verified 2026-09-26 against trial.xhr.dev through the shared residential
   // proxy: clean i -> c escalation, HTTP 200 in 52s (one transient timeout on

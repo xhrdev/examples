@@ -1,7 +1,7 @@
 /**
  * Run with:
  *
- * node --env-file=.env dev-resources/lightpanda/ca-edd-lightpanda.ts
+ * node --env-file=.env dev-resources/lightpanda/akamai/ca-edd-lightpanda.ts
  *
  * `ca-edd.ts` with **Lightpanda** in place of Chrome. The sensor lane's second
  * target, alongside `comcast-lightpanda.ts`, and it needed nothing new — the

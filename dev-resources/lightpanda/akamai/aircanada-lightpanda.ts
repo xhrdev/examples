@@ -1,7 +1,7 @@
 /**
  * Run with:
  *
- * node --env-file=.env dev-resources/lightpanda/aircanada-lightpanda.ts
+ * node --env-file=.env dev-resources/lightpanda/akamai/aircanada-lightpanda.ts
  *
  * `aircanada.ts` with **Lightpanda** in place of Chrome — the same shape of
  * swap `comcast-lightpanda.ts` does for the sensor lane. It only became worth

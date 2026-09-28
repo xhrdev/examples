@@ -1,7 +1,7 @@
 /**
  * Run with:
  *
- * node --env-file=.env dev-resources/lightpanda/comcast-lightpanda.ts
+ * node --env-file=.env dev-resources/lightpanda/akamai/comcast-lightpanda.ts
  *
  * `comcast.ts` with **Lightpanda** in place of Chrome — a headless browser
  * with no renderer, a ~70MB binary that starts in milliseconds. See

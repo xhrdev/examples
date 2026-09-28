@@ -4,7 +4,7 @@
  *   npm run mcp:grainger
  *   npm run mcp:grainger -- --url=https://www.idealista.com/
  *
- * The same clearance-cookie flow as src/datadome/grainger-undici.ts, but with
+ * The same clearance-cookie flow as dev-resources/http/datadome/grainger-undici.ts, but with
  * the middle of it done by the hosted MCP server instead of by this process.
  *
  * That is the whole point of the comparison. Locally you make four requests

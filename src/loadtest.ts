@@ -1,11 +1,11 @@
 /**
  * Run with:
  *
- * node --env-file=.env src/loadtest.ts --script=src/datadome/grainger-undici --iterations=20 --concurrency=3
+ * node --env-file=.env src/loadtest.ts --script=dev-resources/http/datadome/grainger-undici --iterations=20 --concurrency=3
  * node --env-file=.env src/loadtest.ts --script=src/akamai/sensor/ca-edd --headless --iterations=50 --concurrency=5
  *
- * Spawns any src/ script repeatedly with a rotating proxy session per
- * iteration and reports pass/fail/error rates. Pass --help for every flag.
+ * Spawns any script repeatedly with a rotating proxy session per iteration
+ * and reports pass/fail/error rates. Pass --help for every flag.
  */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

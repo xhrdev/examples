@@ -43,9 +43,13 @@ and both lanes declare the same profile to the solver.
 
 ## a note on the other integration styles
 
-The `_abck` sensor lane runs anywhere a browser does, Lightpanda included, and
-DataDome has HTTP-client and Python flows besides. SBSD has neither, because it
-rewrites a POST the page itself makes rather than sending one — see
+The `_abck` sensor lane runs anywhere a browser does — Lightpanda included
+([`dev-resources/lightpanda/akamai/`](../../dev-resources/lightpanda/akamai/))
+— and plain HTTP besides
+([`dev-resources/http/akamai/comcast-http.ts`](../../dev-resources/http/akamai/comcast-http.ts)).
+DataDome has HTTP-client and Python flows besides too. SBSD has neither,
+because it rewrites a POST the page itself makes rather than sending one —
+see
 [`sbsd/README.md`](sbsd/README.md#why-there-is-no-http-python-or-lightpanda-variant).
 
 ## shared pieces

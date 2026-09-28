@@ -177,12 +177,25 @@ Three things that decide the outcome more than the script does:
 node --env-file=.env src/datadome/idealista.ts --headless
 ```
 
-### lightpanda
+### lightpanda and plain HTTP
 
 `src/lightpanda.ts` and `src/mitm.ts` drive a challenge with [Lightpanda], a
-headless browser with no renderer, instead of Chrome. The example that ran them
-against grainger.com, `grainger-lightpanda.ts`, is not committed: see
-`.gitignore`.
+headless browser with no renderer, instead of Chrome. The example that runs
+them against grainger.com is
+[`dev-resources/lightpanda/datadome/grainger-lightpanda.ts`](../../dev-resources/lightpanda/datadome/grainger-lightpanda.ts).
+
+There are also three examples that skip the browser entirely and drive
+`http-utils.ts` directly — undici, axios and fetch versions of the same
+four-request flow — in
+[`dev-resources/http/datadome/`](../../dev-resources/http/datadome/).
+
+Neither Lightpanda nor a plain HTTP client is a real browser, and DataDome can
+tell: both sets solve reliably against a residential exit run locally but not
+against CI's proxyless runner, so they live in `dev-resources/` instead of
+here and are excluded from the smoke suite and from `npm run build` — kept
+committed and runnable by hand, not part of what customers get or what CI
+gates on. See the comment above `SCRIPTS` in `dev-resources/smoke.js` for the
+full reasoning.
 
 [Lightpanda]: https://lightpanda.io
 

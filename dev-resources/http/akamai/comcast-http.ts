@@ -1,7 +1,7 @@
 /**
  * Run with:
  *
- * node --env-file=.env src/akamai/sensor/comcast-http.ts
+ * node --env-file=.env dev-resources/http/akamai/comcast-http.ts
  *
  * `_abck` for business.comcast.com with **nothing but Node** — no browser, no
  * Lightpanda, no WebSocket session. `POST /akamai/solve` is a different shape

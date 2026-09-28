@@ -1,8 +1,8 @@
 /**
  * Run with:
  *
- * node --env-file=.env dev-resources/lightpanda/grainger-lightpanda.ts
- * node --env-file=.env dev-resources/lightpanda/grainger-lightpanda.ts --url=https://www.idealista.com/
+ * node --env-file=.env dev-resources/lightpanda/datadome/grainger-lightpanda.ts
+ * node --env-file=.env dev-resources/lightpanda/datadome/grainger-lightpanda.ts --url=https://www.idealista.com/
  *
  * The DataDome flow driven by **Lightpanda** instead of Chrome — a headless
  * browser with no renderer, a ~70MB binary that starts in milliseconds. See

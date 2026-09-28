@@ -1,7 +1,7 @@
 /**
  * Run with:
  *
- * node --env-file=.env dev-resources/lightpanda/hilton-lightpanda.ts
+ * node --env-file=.env dev-resources/lightpanda/akamai/hilton-lightpanda.ts
  *
  * `hilton.ts` with **Lightpanda** in place of Chrome, and the target that
  * makes the pairing worth having: hilton.com runs *both* Akamai lanes, so this
@@ -9,9 +9,9 @@
  * are driven through a browser with no renderer at the same time.
  *
  * Each lane already had its own Lightpanda proof and they were separate files:
- * `sensor/comcast-lightpanda.ts` for `_abck`, `sbsd/aircanada-lightpanda.ts`
- * for SBSD — and aircanada is `sensor: 'page'`, so there is no session in it at
- * all. What was untested until here is whether the two coexist on this browser:
+ * `comcast-lightpanda.ts` for `_abck`, `aircanada-lightpanda.ts` for SBSD —
+ * and aircanada is `sensor: 'page'`, so there is no session in it at all.
+ * What was untested until here is whether the two coexist on this browser:
  * the bundle gates the first document, the reload lands, and only then does the
  * sensor script on the real page have to hold a WebSocket conversation open
  * across a page Lightpanda is still assembling.
