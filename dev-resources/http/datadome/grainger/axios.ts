@@ -1,11 +1,12 @@
 /**
  * Run with:
  *
- * node --env-file=.env dev-resources/http/datadome/grainger-axios.ts
- * node --env-file=.env dev-resources/http/datadome/grainger-axios.ts --url=https://www.idealista.com/
+ * node --env-file=.env dev-resources/http/datadome/grainger/axios.ts
  *
  * DataDome clearance cookies for grainger.com with **axios** — no browser.
- * Same four requests as grainger-undici.ts; see that file for the flow.
+ * Same four requests as undici.ts in this directory; see that file for the
+ * flow. The same requests against a different target, idealista.com, are in
+ * ../idealista/.
  *
  * Two axios specifics worth copying:
  *

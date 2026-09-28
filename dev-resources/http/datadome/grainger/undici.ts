@@ -1,29 +1,37 @@
 /**
  * Run with:
  *
- * node --use-env-proxy --env-file=.env dev-resources/http/datadome/grainger-fetch.ts
- * node --use-env-proxy --env-file=.env dev-resources/http/datadome/grainger-fetch.ts --url=https://www.idealista.com/
+ * node --env-file=.env dev-resources/http/datadome/grainger/undici.ts
  *
- * DataDome clearance cookies for grainger.com with **nothing but Node** — no
- * browser, and no dependencies at all. Same four requests as
- * grainger-undici.ts; see that file for the flow.
+ * DataDome clearance cookies for grainger.com with **undici** — no browser.
  *
- * Note the `--use-env-proxy` flag, which matters only when `proxy=` is set —
- * with no proxy the script just goes out from this machine and the flag is
- * harmless either way. Node's `fetch` takes its proxy from
- * `HTTP_PROXY` / `HTTPS_PROXY` rather than a per-request option, and only
- * reads them when started with that flag (or `NODE_USE_ENV_PROXY=1`). This
- * script sets them from `proxy=` in your `.env`, and sets `NO_PROXY` so the
- * call to your own solver goes direct — that one is required, not a nicety:
- * a datacenter proxy will not tunnel to the solver's port, so without it the
- * solve request simply fails.
+ * There are three interchangeable versions of this example, one per HTTP
+ * client, all in this directory. They do exactly the same four requests;
+ * only the client differs:
  *
- * The only thing you give up versus the undici version is that this
- * configuration is per-process, not per-request, so one process cannot use
- * two different proxies at once. Every example here uses a single proxy, and
- * the load-test runner spawns a process per iteration, so in practice it
- * makes no difference.
+ *   undici.ts   undici          (this file)
+ *   axios.ts    axios + axios-cookiejar-support
+ *   fetch.ts    Node's built-in fetch, no dependencies
+ *
+ * The same four requests against a different target, idealista.com, are in
+ * ../idealista/.
+ *
+ * The four requests:
+ *
+ *   1. GET the target. DataDome answers 403 with an inline `var dd = {...}`.
+ *   2. GET the challenge document from geo.captcha-delivery.com.
+ *   3. POST /dd/solve — the solver returns a prepared submission.
+ *   4. Send that submission yourself. DataDome returns the clearance cookie.
+ *
+ * Step 4 has to come from your own IP: DataDome binds the cookie to whoever
+ * submitted it, which is why the solver hands back the submission instead of
+ * sending it. See http-utils.ts.
  */
+// undici's `fetch` is the same implementation Node exposes globally, but its
+// types expose `dispatcher`, which is how a per-request proxy is set. Leaving
+// it undefined is how you go direct.
+import { fetch, ProxyAgent } from 'undici';
+
 import {
   challengeDocumentUrl,
   checkPreparedSubmission,
@@ -49,40 +57,22 @@ import {
 } from '#src/datadome/external-scripts.js';
 import { checkRateLimit } from '#src/rate-limit.js';
 
-// Only a problem when there is a proxy to ignore. Without `proxy=` this script
-// is meant to go out from your own address, so the flag is beside the point.
-if (
-  process.env['proxy'] &&
-  !process.execArgv.includes('--use-env-proxy') &&
-  !process.env['NODE_USE_ENV_PROXY']
-) {
-  throw new Error(
-    'run this one with --use-env-proxy (or NODE_USE_ENV_PROXY=1), otherwise ' +
-      "Node's built-in fetch ignores the proxy and you will be making " +
-      'requests from your own address'
-  );
-}
-
 const attempt = async ({
   proxy,
   solverApiKey,
   solverUrl,
   targetUrl,
 }: Context): Promise<null | Outcome> => {
-  if (proxy) {
-    // Node reads these once per request, so setting them here is enough to pin
-    // this attempt's session.
-    process.env['HTTP_PROXY'] = proxy;
-    process.env['HTTPS_PROXY'] = proxy;
-    // Required: the solver is on your own network, and a datacenter proxy will
-    // refuse to tunnel to it. Node matches this against the bare host, so an
-    // IP works as well as a name.
-    process.env['NO_PROXY'] = new URL(solverUrl).hostname;
-  }
+  // Spread rather than assigned: an explicit `dispatcher: undefined` is not
+  // the same as leaving the option off, and undici wants it off.
+  const via = proxy ? { dispatcher: new ProxyAgent(proxy) } : {};
 
   // 1. Trip the challenge.
   log(`GET ${targetUrl}`);
-  const blocked = await fetch(targetUrl, { headers: navigationHeaders() });
+  const blocked = await fetch(targetUrl, {
+    ...via,
+    headers: navigationHeaders(),
+  });
   const blockedHtml = await blocked.text();
   log(`  <- HTTP ${blocked.status} (${blockedHtml.length} bytes)`);
 
@@ -99,6 +89,7 @@ const attempt = async ({
   const documentUrl = challengeDocumentUrl(dd, targetUrl);
   log('GET challenge document');
   const document = await fetch(documentUrl, {
+    ...via,
     headers: documentHeaders(targetUrl),
   });
   const documentHtml = await document.text();
@@ -109,10 +100,11 @@ const attempt = async ({
   //     was served. Same session as the document above, so they arrive under
   //     the same clearance.
   const stylesheetAssets = await collectStylesheetAssets({
-    documentHtml: documentHtml,
+    documentHtml,
     documentUrl,
     fetchAsset: async (url) => {
       const asset = await fetch(url, {
+        ...via,
         headers: documentHeaders(targetUrl),
       });
       if (!asset.ok) throw new Error(`HTTP ${asset.status}`);
@@ -128,7 +120,10 @@ const attempt = async ({
   const externalScripts: ExternalScript[] = [];
   for (const url of extractExternalScriptUrls(documentHtml, documentUrl)) {
     log(`GET external script ${url}`);
-    const script = await fetch(url, { headers: documentHeaders(targetUrl) });
+    const script = await fetch(url, {
+      ...via,
+      headers: documentHeaders(targetUrl),
+    });
     if (!script.ok) throw new Error(`HTTP ${script.status}`);
     externalScripts.push({ body: await script.text(), url });
   }
@@ -171,6 +166,7 @@ const attempt = async ({
   log(`${prepared.body ? 'POST' : 'GET'} submission`);
   const submitted = await fetch(prepared.url, {
     ...(prepared.body === undefined ? {} : { body: prepared.body }),
+    ...via,
     headers: submissionHeaders(prepared),
     method: prepared.body === undefined ? 'GET' : 'POST',
   });
@@ -181,6 +177,7 @@ const attempt = async ({
   // Prove it: the request that 403'd should now return the real page.
   log('verifying against the target');
   const verified = await fetch(targetUrl, {
+    ...via,
     headers: { ...navigationHeaders(), cookie: `datadome=${cookie}` },
   });
   const html = await verified.text();

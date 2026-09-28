@@ -1,16 +1,18 @@
 /**
  * This is a helper library, not a script. It holds the request-building and
- * response-parsing shared by the browser-free examples, so each of those
- * files shows only its own HTTP client:
+ * response-parsing shared by the browser-free examples under
+ * dev-resources/http/datadome/, one directory per target
+ * (grainger/, idealista/) and one file per HTTP client in each:
  *
- *   grainger-undici.ts  undici
- *   grainger-axios.ts   axios + axios-cookiejar-support
- *   grainger-fetch.ts   Node's built-in fetch, no dependencies
+ *   undici.ts  undici
+ *   axios.ts   axios + axios-cookiejar-support
+ *   fetch.ts   Node's built-in fetch, no dependencies
  *
  * The browser identity itself lives in profile.ts, which solver.ts shares.
  *
- * The challenge handling is identical in all three. Pick the file that matches
- * the client you already use; see src/datadome/README.md for the flow.
+ * The challenge handling is identical across all of them. Pick the client
+ * that matches what you already use; see src/datadome/README.md for the
+ * flow.
  */
 import { GEO_ORIGIN, PROFILE, PROFILE_ID } from '#src/datadome/profile.js';
 import { ACCESS_DENIED_EXIT_CODE, isAccessDenied } from '#src/access-denied.js';
@@ -292,14 +294,15 @@ const isTransport = (error: unknown): boolean =>
  */
 export const run = async (
   // eslint-disable-next-line no-unused-vars -- function-type parameter
-  attempt: (context: Context) => Promise<null | Outcome>
+  attempt: (context: Context) => Promise<null | Outcome>,
+  defaultUrl: string = DEFAULT_URL
 ): Promise<void> => {
   const solverHost = process.env['host'];
   const configuredProxy = process.env['proxy'];
   if (!solverHost) throw new Error('set host= in .env');
 
   const attempts = Number(readFlag('--attempts') ?? 3);
-  const targetUrl = readFlag('--url') ?? DEFAULT_URL;
+  const targetUrl = readFlag('--url') ?? defaultUrl;
   const solverUrl = solverBaseUrl(solverHost);
   const requireChallenge = process.argv.includes('--require-challenge');
 
