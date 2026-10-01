@@ -4,10 +4,8 @@ name: smoke
 # Split out from build-and-test.yml so a change that touches the live
 # targets — any src/datadome, src/akamai/sensor or src/akamai/sbsd script,
 # src/mitm.ts, a solver — shows its own pass/fail in the Actions UI instead
-# of being folded into the unit-test job. Shared by pr.yml, release.yml and
-# the daily schedule below — one file with three triggers, not a separate
-# smoke-schedule.yml wrapper that just called this one — same "one file, not
-# hand-copied step lists" reasoning as build-and-test.yml.
+# of the unit-test job. Shared by pr.yml and release.yml; the daily scheduled
+# run lives in smoke-matrix.yml instead (three exit-IP profiles, not one).
 on:
   workflow_dispatch:
   workflow_call:
