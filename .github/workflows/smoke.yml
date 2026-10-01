@@ -9,15 +9,13 @@ name: smoke
 # smoke-schedule.yml wrapper that just called this one — same "one file, not
 # hand-copied step lists" reasoning as build-and-test.yml.
 on:
-  schedule:
-    - cron: '0 12 * * *' # daily, 12:00 UTC — independent canary against the live targets, not gated on a push
   workflow_dispatch:
   workflow_call:
     inputs:
       checkout-ref:
         description: >-
           Ref to check out. A PR passes its head SHA (github.event doesn't
-          otherwise pin one for a workflow_call); a push or schedule leaves
+          otherwise pin one for a workflow_call); a push leaves
           this empty and checkout uses the default ref for the triggering
           event.
         required: false

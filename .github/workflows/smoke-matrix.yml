@@ -1,18 +1,20 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: smoke matrix
 
-# Manual only — runs dev-resources/smoke-matrix.js, the no-proxy /
-# datacenter / ISP exit-IP comparison, and posts all three summary tables to
-# the step summary. Not on any schedule or push: it's for producing a
-# fresh, real comparison on demand (e.g. before a public write-up), not a
-# routine check, and DATACENTER_PROXY/ISP_PROXY are paid, reusable proxy
-# credentials that don't need exercising on every push.
+# Runs dev-resources/smoke-matrix.js, the no-proxy / datacenter / ISP
+# exit-IP comparison, and posts all three summary tables to the step
+# summary. This is the repo's scheduled run (daily) and is also runnable on
+# demand; it is NOT on push/PR — smoke.yml (no proxy, gating) covers those,
+# and DATACENTER_PROXY/ISP_PROXY are paid, reusable proxy credentials that
+# don't need exercising on every push.
 #
 # The datacenter/ISP exit IPs are partially masked in the printed tables
 # (smoke-matrix.js's own doing) — the datacenter one is already public via
 # trial.xhr.dev's own DNS, but the ISP one is a private resource, and
 # publishing either invites anti-bot vendors' OSINT to blocklist it faster.
 on:
+  schedule:
+    - cron: '0 12 * * *' # daily, 12:00 UTC
   workflow_dispatch:
     inputs:
       concurrency:
@@ -68,5 +70,5 @@ jobs:
           ISP_PROXY: ${{ secrets.ISP_PROXY }}
         run: |
           node --env-file=.env dev-resources/smoke-matrix.js \
-            --concurrency=${{ inputs.concurrency }} \
+            --concurrency=${{ inputs.concurrency || '2' }} \
             | tee -a "$GITHUB_STEP_SUMMARY"
