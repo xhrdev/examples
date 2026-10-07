@@ -125,7 +125,9 @@ export async function runBrowserTarget({
   };
 
   const holdBrowser = async (): Promise<void> => {
-    if (closing || !browser.isConnected()) return;
+    // Nobody is watching a headless browser, and the 30s per run adds up fast
+    // across a multi-iteration load test.
+    if (closing || !browser.isConnected() || launchOptions.headless) return;
     log(`Keeping browser open for ${BROWSER_HOLD_MS}ms (Ctrl+C to close now)`);
     await new Promise<void>((resolve) => {
       const done = () => {

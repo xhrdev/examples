@@ -47,6 +47,7 @@
     "yelp": "node --env-file=.env src/datadome/yelp.ts",
     "etsy": "node --env-file=.env src/datadome/etsy.ts",
     "bestwestern": "node --env-file=.env src/datadome/bestwestern.ts",
+    "viator": "node --env-file=.env src/datadome/viator.ts",
     "lowes": "node --env-file=.env src/akamai/sensor/lowes.ts",
     "cvs": "node --env-file=.env src/akamai/sensor/cvs.ts",
     "oakley": "node --env-file=.env src/akamai/sbsd/oakley.ts",
