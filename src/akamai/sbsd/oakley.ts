@@ -195,7 +195,27 @@ try {
     await loginForm.locator('input[name="j_username"]').fill(username);
     await loginForm.locator('input[name="j_password"]').fill(password);
     log('Filled credentials, submitting...');
-    await loginForm.locator('button[type="submit"]').click();
+    /* Submitted without a click, and that is the fix rather than a shortcut.
+     *
+     * The page's OneTrust cookie banner takes any click or keypress as a
+     * consent decision, and Tealium (`utag.js`) applies consent with
+     * `location.reload()`. Clicking Sign In therefore started the login POST
+     * and queued a reload that superseded it: the POST never left, the page
+     * came back as an empty login form, and the run reported "sign-in
+     * rejected" with nothing rejected. Seen with CDP's
+     * `frameRequestedNavigation` — `formSubmissionPost`, then `reload`, the
+     * reload's initiator stack running utag.js under otBannerSdk.js. Enter in
+     * the password field does the same.
+     *
+     * Accepting the banner first removes the reload but not the problem: the
+     * POST that follows is denied by Akamai (5/5), so the consent reload costs
+     * the session something this script cannot see. `requestSubmit()` fires
+     * the form's own `submit` event — the site's validator and its login
+     * handler both run, as they would for a person — without the click or
+     * key event the banner listens for. 6/6 signed in, 2026-10-10. */
+    await loginForm.evaluate((form) =>
+      (form as HTMLFormElement).requestSubmit()
+    );
   } catch (e) {
     log(`ERROR: Sign-in actions failed: ${(e as Error).message}`);
     await cleanup(1);
