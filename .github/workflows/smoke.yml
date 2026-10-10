@@ -54,10 +54,24 @@ jobs:
         env:
           ENV_HOST: ${{ secrets.HOST }}
           ENV_API_KEY: ${{ secrets.API_KEY }}
+          # oakley's sign-in account. Target-scoped on purpose: the generic
+          # `username=`/`password=` pair is one account for a suite that has
+          # more than one credentialed script coming, and `src/loadtest.ts`
+          # already reads that pair for its own pass-through. Absent, the
+          # script reports NOT CONFIGURED and the suite stays green — it does
+          # not throw, which is what it did until 2026-10-10.
+          ENV_OAKLEY_USERNAME: ${{ secrets.OAKLEY_USERNAME }}
+          ENV_OAKLEY_PASSWORD: ${{ secrets.OAKLEY_PASSWORD }}
         run: |
           {
             echo "host=$ENV_HOST"
             echo "api_key=$ENV_API_KEY"
+            # Written as a pair or not at all: a username with no password is a
+            # failed login that reads like a solver result.
+            if [[ -n "$ENV_OAKLEY_USERNAME" && -n "$ENV_OAKLEY_PASSWORD" ]]; then
+              echo "oakley_username=$ENV_OAKLEY_USERNAME"
+              echo "oakley_password=$ENV_OAKLEY_PASSWORD"
+            fi
           } > .env
 
           # GitHub withholds repository secrets from runs it triggers for

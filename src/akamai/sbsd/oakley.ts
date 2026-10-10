@@ -5,16 +5,26 @@
  * node --env-file=.env src/akamai/sbsd/oakley.ts --headless
  *
  * oakley.com. Answers both Akamai channels — the SBSD bundle and the `_abck`
- * sensor — on www.oakley.com, then signs in with `username=` and `password=`
- * from .env.
+ * sensor — on www.oakley.com, then signs in with `oakley_username=` and
+ * `oakley_password=` from .env (or the generic `username=`/`password=`; see
+ * `#src/credentials.js`).
  *
  * Oakley runs both channels: the sensor (`_abck`, `bm_sz`) and the SBSD bundle
  * (`bm_s`, `bm_so`). The login POST to `/en-us/j_spring_security_check` is
  * gated on Akamai, so the two channels have to be in a good state before the
  * form is submitted. That is what this script checks:
  *
- *   Access Denied  -> the solver did not get us through (RESULT: FAIL, exit 2)
- *   signed in      -> the solver works (RESULT: SUCCESS, exit 0)
+ *   Access Denied   -> the solver did not get us through (RESULT: FAIL, exit 2)
+ *   signed in       -> the solver works (RESULT: SUCCESS, exit 0)
+ *   no credentials  -> nothing was measured (RESULT: NOT CONFIGURED, exit 5)
+ *
+ * That last one used to be a `throw` on the second statement of this file,
+ * which is what every CI run of this script has actually done since it was
+ * added: `smoke.yml` writes `host=` and `api_key=` and no account, so this
+ * died in 0.7s without launching a browser and `advisory: true` let the suite
+ * stay green around it. It is now an outcome rather than a crash — see
+ * `#src/credentials.js` for why it is classed with a banned IP rather than
+ * with a failure.
  *
  * Anything in between (the form comes back with an error) is a credentials
  * problem, not an Akamai block, and is reported as its own outcome.
@@ -29,6 +39,10 @@ import { chromium } from 'playwright-core';
 
 import { applyIdentity, USER_AGENT, VIEWPORT } from '#src/akamai/identity.js';
 import { attach } from '#src/akamai/sbsd/solver.js';
+import {
+  NOT_CONFIGURED_EXIT_CODE,
+  resolveCredentials,
+} from '#src/credentials.js';
 import { toLaunchProxy } from '#src/proxy.js';
 import {
   RATE_LIMIT_EXIT_CODE,
@@ -41,16 +55,26 @@ const url = `${ORIGIN}/en-us/login`;
 const solverHost = process.env['host'];
 const proxy = process.env['proxy'];
 const solverApiKey = process.env['api_key'];
-const username = process.env['username'];
-const password = process.env['password'];
+const credentials = resolveCredentials('oakley');
 let closing = false;
 
 const log = (msg: string, ...extra: unknown[]): void =>
   console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
 
 if (!solverHost) throw new Error('set host= in .env');
-if (!username || !password)
-  throw new Error('set username= and password= in .env for the sign-in step');
+/* Reported and skipped, not thrown. The distinction is the whole point: a
+ * crash here is indistinguishable in the summary table from a target that
+ * blocked us, and this script is in a suite whose job is to tell those
+ * apart. */
+if (!credentials) {
+  log(
+    'RESULT: NOT CONFIGURED - set oakley_username= and oakley_password= in ' +
+      '.env (or the generic username=/password=) for the sign-in step'
+  );
+  process.exit(NOT_CONFIGURED_EXIT_CODE);
+}
+
+const { password, username } = credentials;
 
 const CHROME_PATH = process.env['CHROME_PATH'] || '';
 const launchOpts: Record<string, unknown> = {

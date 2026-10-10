@@ -129,8 +129,15 @@ const SCRIPTS = [
   // the same reason.
   { advisory: true, headless: true, script: 'src/akamai/sbsd/ana' },
   // oakley.com sign-in — added 2026-09-27 for a second SBSD property besides
-  // hilton/aa/aircanada/chewy. No verification run through this suite's
-  // network paths yet; advisory until it has one, same as github-signup.
+  // hilton/aa/aircanada/chewy. Still advisory, and still for the reason below,
+  // but the reason is now the real one: until 2026-10-10 this entry could not
+  // run here at all. It needs a sign-in account, the workflow has never
+  // written one, and the script threw on startup — so every CI run of it was a
+  // 0.7s crash that `advisory: true` quietly absorbed. It now reports NOT
+  // CONFIGURED when the account is absent and actually runs when `smoke.yml`
+  // has the secrets, so "no verification run through this suite's network
+  // paths yet" is finally a statement about the target rather than about the
+  // harness. Advisory until it has one, same as github-signup.
   { advisory: true, headless: true, script: 'src/akamai/sbsd/oakley' },
   // Shape (formerly F5) has no example in this repo yet — add an entry here
   // once one exists rather than gating xhrdev's smoke suite on a target it
@@ -240,8 +247,21 @@ async function runPool(items, worker, limit) {
 // is the same reasoning that made grainger-lightpanda advisory.
 const RATE_LIMIT_EXIT_CODE = 3;
 const BANNED_EXIT_CODE = 4;
+// A script that needs a sign-in account and was not given one — see
+// `src/credentials.ts`. Third member of this family for the same reason as the
+// other two: no commit can fix a missing secret, so gating on it means master
+// goes red for something no change can turn green.
+//
+// It is here rather than left as a plain failure because of what it was doing
+// instead. `oakley.ts` threw on its second statement when the pair was absent,
+// and this workflow has never written one — so the suite's only credentialed
+// script has spent every CI run dying in 0.7s with `advisory: true` hiding it.
+// A named state in the table is the point: NOT CONFIGURED says the target was
+// never asked, where FAIL (advisory) said it was asked and said no.
+const NOT_CONFIGURED_EXIT_CODE = 5;
 const NOT_A_REGRESSION = new Map([
   [BANNED_EXIT_CODE, 'BANNED'],
+  [NOT_CONFIGURED_EXIT_CODE, 'NOT CONFIGURED'],
   [RATE_LIMIT_EXIT_CODE, 'RATE LIMITED'],
 ]);
 
@@ -282,9 +302,13 @@ const rows = results.map(({ advisory, code, elapsed, script }) => {
   const state =
     code === 0
       ? 'PASS'
-      : infrastructural
-        ? `${infrastructural} (not a regression)`
-        : `FAIL${advisory ? ' (advisory)' : ''}`;
+      : code === NOT_CONFIGURED_EXIT_CODE
+        ? // No "(not a regression)" tail: the other two are outcomes the
+          // target produced, and this one means nothing ran at all.
+          infrastructural
+        : infrastructural
+          ? `${infrastructural} (not a regression)`
+          : `FAIL${advisory ? ' (advisory)' : ''}`;
   return [script, laneOf(script), state, elapsed];
 });
 printReport(rows, totalElapsed);

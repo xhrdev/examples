@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 import { pinSession } from '#src/proxy.js';
+import { NOT_CONFIGURED_EXIT_CODE } from '#src/credentials.js';
 import { RATE_LIMIT_EXIT_CODE } from '#src/rate-limit.js';
 import { BANNED_EXIT_CODE } from '#src/datadome/ban.js';
 
@@ -173,6 +174,7 @@ const results = {
   completed: 0,
   denied: 0,
   error: 0,
+  notConfigured: 0,
   rateLimited: 0,
   success: 0,
 };
@@ -193,6 +195,14 @@ let rateLimited = false;
  */
 let banned = false;
 
+/**
+ * Set the moment any iteration exits with NOT_CONFIGURED_EXIT_CODE. The
+ * strongest of the three: a missing account does not change between
+ * iterations, so every remaining one would exit the same way in the same few
+ * hundred milliseconds, and N identical lines say nothing the first did not.
+ */
+let notConfigured = false;
+
 function recordResult(i: number, code: number, elapsed: string): void {
   results.completed++;
   let status: string;
@@ -212,6 +222,13 @@ function recordResult(i: number, code: number, elapsed: string): void {
     status = 'BANNED';
     results.banned++;
     banned = true;
+  } else if (code === NOT_CONFIGURED_EXIT_CODE) {
+    // Not an error and not a denial: the script never reached the target.
+    // Before this branch the code fell through to `ERROR (exit=5)` below, and
+    // `smoke.js` — which runs every script through here — saw a plain failure.
+    status = 'NOT CONFIGURED';
+    results.notConfigured++;
+    notConfigured = true;
   } else {
     status = `ERROR (exit=${code})`;
     results.error++;
@@ -224,7 +241,7 @@ function recordResult(i: number, code: number, elapsed: string): void {
 
 if (CONCURRENCY <= 1) {
   for (let i = 0; i < ITERATIONS; i++) {
-    if (rateLimited || banned) break;
+    if (rateLimited || banned || notConfigured) break;
     if (!QUIET) console.log(`[${i + 1}/${ITERATIONS}] Starting...`);
     const { code, elapsed } = await runIteration(i);
     recordResult(i, code, elapsed);
@@ -234,7 +251,7 @@ if (CONCURRENCY <= 1) {
 
   async function worker(): Promise<void> {
     while (nextIndex < ITERATIONS) {
-      if (rateLimited) return;
+      if (rateLimited || notConfigured) return;
       const i = nextIndex++;
       if (!QUIET) console.log(`  Starting #${i + 1}...`);
       const { code, elapsed } = await runIteration(i);
@@ -283,6 +300,18 @@ if (results.rateLimited > 0) {
   );
 }
 
+if (results.notConfigured > 0) {
+  console.log(
+    `  Not configured:          ${results.notConfigured} (${pct(results.notConfigured)}%)`
+  );
+  console.log(
+    `\n  Stopped early after ${results.completed}/${total} iterations: the` +
+      ' script needs a sign-in account and .env has none. See' +
+      ' src/credentials.ts for the variable names.'
+  );
+}
+
 if (results.rateLimited > 0) process.exit(RATE_LIMIT_EXIT_CODE);
 if (results.banned > 0) process.exit(BANNED_EXIT_CODE);
+if (results.notConfigured > 0) process.exit(NOT_CONFIGURED_EXIT_CODE);
 process.exit(results.denied > 0 || results.error > 0 ? 1 : 0);
