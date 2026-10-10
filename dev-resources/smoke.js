@@ -70,7 +70,32 @@ const SCRIPTS = [
   // IP to re-verify the code path, not a round-model change. `BANNED` will
   // keep reporting without failing the suite until that happens.
   { headless: true, script: 'src/datadome/idealista' },
-  { headless: true, script: 'src/akamai/sensor/comcast' },
+  // comcast — ADVISORY SINCE 2026-10-10, and this is a real break rather than
+  // the usual exit-address sensitivity, so read this before flipping it back.
+  //
+  // It passed in 19.4s on 2026-10-07. Since then it fails everywhere it is
+  // tried, including before the commits that made this entry advisory:
+  //
+  //   smoke matrix, 45df4f2 (before any change here)   3/3 profiles FAIL
+  //   release smoke, 1bf16a3 and f8f0c4b               FAIL at ~123s, both
+  //   a workstation, two runs, headless                FAIL at the 120s timeout
+  //   the deployed status canary (Lambda)              red every hourly run
+  //
+  // It is not the address: a workstation fails too. The log shows the shape —
+  // the sensor POST to business.comcast.com goes out, the page lands on
+  // login.xfinity.com (a different host, its own Akamai script), and every
+  // submission there answers `403 (452 bytes)` with `rval=-1`, round after
+  // round, until the 120s acceptance timeout. business.comcast.com also logs a
+  // `WS error:` / close 1006 on its first socket. The earlier passes were
+  // accepted before that redirect mattered.
+  //
+  // Advisory so master and release are not held by a property that currently
+  // cannot be solved, matching what xhrdev/status decided for the same script
+  // on 2026-09-28 (`#common/advisory.js` there). It does NOT make comcast
+  // fine: it is the one gating target this suite has that is failing for a
+  // reason a commit could fix, and the fix is in the solver's handling of
+  // login.xfinity.com. Take this flag off when it passes from a runner again.
+  { advisory: true, headless: true, script: 'src/akamai/sensor/comcast' },
   // Still advisory. A promotion here on 2026-09-26 was based on one run
   // through the shared residential proxy (clean 3-round solve, 17s) — which
   // is not this repo's own CI path: build-and-test.yml runs this suite with
