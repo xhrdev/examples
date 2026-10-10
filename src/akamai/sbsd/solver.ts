@@ -63,7 +63,7 @@ import { WebSocket } from 'undici';
 import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
 import { applySetCookie } from '#src/akamai/set-cookie.js';
 import { PROFILE_ID } from '#src/profile.js';
-import { checkRateLimit } from '#src/rate-limit.js';
+import { checkRateLimit, RateLimitError } from '#src/rate-limit.js';
 import { solverBaseUrl, solverWsUrl } from '#src/solver-url.js';
 
 /**
@@ -77,6 +77,28 @@ import { solverBaseUrl, solverWsUrl } from '#src/solver-url.js';
  * than a per-build stem: the hex rotates per session, `/akam/<n>/` does not.
  */
 const AKAMAI_PIXEL_PREFIX = /^\/akam\/\d+\//u;
+
+/**
+ * The collector script's path, given the path it POSTs to.
+ *
+ * `/akam/<n>/<hex>` serves the script and `/akam/<n>/pixel_<hex>` is its
+ * target, so this strips `pixel_` off the basename and leaves the directory
+ * alone. Exported for its own test: the pairing is a product convention read
+ * off captures rather than anything observable at load time, so it is the one
+ * part of answering this channel that is a guess, and a silent change to the
+ * convention should fail a test rather than a sign-in.
+ *
+ * Returns null when the basename does not carry the prefix — the caller falls
+ * back to any script cached in the same directory rather than inventing a path.
+ */
+export const akamaiPixelCollectorPath = (pathname: string): null | string => {
+  const cut = pathname.lastIndexOf('/') + 1;
+  const directory = pathname.slice(0, cut);
+  const basename = pathname.slice(cut);
+  if (!basename.startsWith('pixel_')) return null;
+  const stem = basename.slice('pixel_'.length);
+  return stem ? `${directory}${stem}` : null;
+};
 
 /**
  * A script URL that could be a challenge script, judged without fetching it.
@@ -358,6 +380,24 @@ export type EgressStats = {
    * seeing.
    */
   navigationPostsAllowed: number;
+  /**
+   * Pixel collector POSTs the solver authored and let through.
+   *
+   * Akamai's third channel (`AKAMAI_PIXEL_PREFIX`). Counted apart from
+   * `solverBodiesIssued` because that pair is conserved against the SBSD
+   * ledger's rows, and a pixel body comes from a different route with no
+   * ledger behind it.
+   */
+  pixelBodiesIssued: number;
+  /**
+   * Pixel collector POSTs that could not be answered and were denied.
+   *
+   * Not folded into `deniedPosts`: a denied pixel is a channel the solver
+   * knows about and failed to answer, which is a different thing from a body
+   * no rule recognises, and the two were worth telling apart the moment this
+   * channel got a route of its own.
+   */
+  pixelPostsDenied: number;
   /** POSTs to a challenge endpoint that were allowed to leave. */
   postsAllowed: number;
   /** Bodies the solver authored and handed to a route. */
@@ -900,6 +940,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     '/akamai/sbsd/generate-session',
     solverBaseUrl(host)
   ).href;
+  const pixelUrl = new URL('/akamai/pixel/generate', solverBaseUrl(host)).href;
   const sessionUrl = solverWsUrl(host, '/akamai/session');
 
   /**
@@ -1026,6 +1067,8 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     deniedPosts: 0,
     deniedSockets: 0,
     navigationPostsAllowed: 0,
+    pixelBodiesIssued: 0,
+    pixelPostsDenied: 0,
     postsAllowed: 0,
     solverBodiesIssued: 0,
     unmodelledOriginPosts: 0,
@@ -1598,6 +1641,146 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
    * Node process, on a connection that is not even the browser's. Answering
    * out of the cache puts nothing on the wire.
    */
+  /**
+   * The collector script that POSTs to a given pixel endpoint.
+   *
+   * Akamai's convention is `/akam/<n>/<hex>` for the script and
+   * `/akam/<n>/pixel_<hex>` for what it POSTs to, so the script path is the
+   * target with `pixel_` stripped off the basename. Derived rather than
+   * remembered, because the two rotate together per session and nothing
+   * observes the pairing at load time.
+   *
+   * The fallback matters more than the derivation. If the stem convention ever
+   * changes, any script already cached from the same directory is still a far
+   * better guess than nothing — that directory is a rotating challenge stem
+   * (`markAkamai` only widens onto one when `safePrefix` agrees), so what sits
+   * in it is Akamai's. A wrong guess costs a 422 from the route and the same
+   * denial we would have made anyway.
+   */
+  const collectorFor = (target: URL): { body: string; url: string } | null => {
+    const directory = target.pathname.slice(
+      0,
+      target.pathname.lastIndexOf('/') + 1
+    );
+    const collectorPath = akamaiPixelCollectorPath(target.pathname);
+    const derived = collectorPath
+      ? scripts.get(`${target.host}${collectorPath}`)
+      : undefined;
+    if (derived) return derived;
+    for (const [key, script] of scripts)
+      if (key.startsWith(`${target.host}${directory}`)) return script;
+    return null;
+  };
+
+  /**
+   * Answer a pixel collector POST with a body the solver authored.
+   *
+   * ## why this is not just denied
+   *
+   * It was, until 2026-10-10, and the denial was load-bearing in the wrong
+   * direction. `route.abort()` on this POST leaves the document that triggered
+   * it unable to reach its `load` event: measured on oakley's sign-in, 14
+   * consecutive canary runs split 3 PASS / 11 FAIL on exactly this, with the
+   * passes being the runs where no pixel POST arrived after the login POST.
+   * A pass reached the landing page in 1.2-3.3s; every failure sat until a 30s
+   * timeout, on a navigation whose URL had in fact changed immediately. The
+   * channel was not scoring us down — it was holding the page open.
+   *
+   * So the choice here is not "leak or deny". It is "answer or hang", and the
+   * solver has had a route for this since `/akamai/pixel/generate` landed: it
+   * runs the collector in a realm of its own and returns the POST it would
+   * have sent, which is exactly the shape this router already uses for the
+   * SBSD carrier and the `_abck` sensor.
+   *
+   * ⚠ STILL FAIL-CLOSED ON EVERY ERROR PATH. A refusal, a timeout, a missing
+   * collector, an unparseable answer — all of them abort, the same denial as
+   * before, counted and logged. The native body never goes out: that is the
+   * invariant this file exists to hold, and the fix does not relax it.
+   */
+  const answerPixel = async (route: Route, url: URL): Promise<void> => {
+    const deny = (reason: string): Promise<void> => {
+      stats.pixelPostsDenied++;
+      log(`[pixel] DENIED POST to ${url.host}${url.pathname} — ${reason}`);
+      return route.abort();
+    };
+
+    const collector = collectorFor(url);
+    if (!collector)
+      return deny('no collector script was captured for this directory');
+
+    const frame = frameFor(url.host);
+    if (!frame) return deny(`no live frame on ${url.host} to snapshot`);
+
+    try {
+      // The live DOM and the live jar, for the same reason the ledger uses
+      // them: the collector reads the document it was injected into, and a
+      // served-bytes snapshot has none of the injected third-party tags.
+      const html = await (readHtml ? readHtml() : frame.content());
+      const cookieHeader = dedupeCookieHeader(
+        await frame.evaluate(() => document.cookie)
+      );
+      const response = await fetch(pixelUrl, {
+        body: JSON.stringify({
+          document: {
+            ...(cookieHeader ? { cookieHeader } : {}),
+            html,
+            url: frame.url(),
+          },
+          profile: { id: PROFILE_ID },
+          script: { source: collector.body, url: collector.url },
+        }),
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+          ...(solverApiKey ? { 'x-api-key': solverApiKey } : {}),
+        },
+        method: 'POST',
+      });
+      // Throws RateLimitError on 429, the same as the ledger route — a spent
+      // budget is reported by the caller, not retried here.
+      checkRateLimit(response.status, response.headers);
+
+      const answer = (await response.json()) as {
+        error?: { code?: string; message?: string };
+        ok?: boolean;
+        request?: { body?: string; contentType?: null | string; url?: string };
+      };
+      if (!answer.ok || typeof answer.request?.body !== 'string')
+        return deny(
+          `the pixel route refused (${response.status})` +
+            (answer.error?.code ? `: ${answer.error.code}` : '')
+        );
+
+      stats.pixelBodiesIssued++;
+      stats.postsAllowed++;
+      log(
+        `[pixel] ${url.host}${url.pathname}: ` +
+          `${Buffer.byteLength(answer.request.body, 'utf8')} bytes`
+      );
+      /* The solver's URL is ignored in favour of the one the page chose.
+       *
+       * The collector ran in a realm whose document URL we supplied, so the
+       * endpoint it computed is a reconstruction; the page's own target is the
+       * measurement. Same reasoning as the carrier arm stripping the query
+       * string: replace the body and nothing else. */
+      return route.continue({
+        ...(answer.request.contentType
+          ? {
+              headers: {
+                ...route.request().headers(),
+                'content-type': answer.request.contentType,
+              },
+            }
+          : {}),
+        postData: answer.request.body,
+        url: `${url.origin}${url.pathname}`,
+      });
+    } catch (error) {
+      if (error instanceof RateLimitError) throw error;
+      return deny((error as Error).message);
+    }
+  };
+
   const serveScript = async (route: Route, url: URL): Promise<void> => {
     const key = pathKey(url);
     const cached = scripts.get(key);
@@ -1799,6 +1982,19 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         checkConserved(site);
         return route.continue({ url: target });
       }
+
+      /* Akamai's third channel, answered rather than denied.
+       *
+       * Last of the POST arms on purpose: the SBSD carrier and the `_abck`
+       * sensor above are identified by the body the solver authored, and this
+       * one is identified by its path alone, so it must not get a chance to
+       * claim a request either of them would have matched.
+       *
+       * See `answerPixel` for why a denial here hangs the page rather than
+       * merely scoring it down, which is the whole reason this arm exists.
+       */
+      if (AKAMAI_PIXEL_PREFIX.test(url.pathname))
+        return answerPixel(route, url);
 
       stats.deniedPosts++;
       log(
