@@ -16,7 +16,23 @@ import {
   reportRateLimit,
 } from '#src/rate-limit.js';
 
-const url = 'https://business.comcast.com/account/';
+/* The homepage, not `/account/`, and the reason is on login.xfinity.com.
+ *
+ * `/account/` redirects within a second into Xfinity's OAuth login, so the
+ * session that decided this check was always login.xfinity.com's — and since
+ * 2026-10 that host answers *every* sensor POST with a 403 (450 bytes) and
+ * never moves `_abck` off `~-1~`. Not the solver: an uninstrumented Chrome
+ * running the page's own sensor script gets the same 403, headless and headed,
+ * from a residential address, through the ISP proxy, and from a person's own
+ * everyday Chrome profile — all measured 2026-10-10. The sign-in form renders
+ * regardless, so Akamai there is no longer scoring anything a browser can
+ * earn, and a check that waits for acceptance on it can only time out.
+ *
+ * business.comcast.com still runs the sensor normally: the solver's bodies
+ * are answered 201 and `_abck` is accepted in ~3 rounds (~4s), 2/2 on `/` and
+ * `/shop/offers`. This is the same property and the same Akamai config the
+ * check was measuring before the redirect took it elsewhere. */
+const url = 'https://business.comcast.com/';
 const solverHost = process.env['host'];
 const proxy = process.env['proxy'];
 const solverApiKey = process.env['api_key'];
@@ -118,28 +134,15 @@ await sleep(7000);
 
 // Check result: the goal is to get a real page instead of Akamai's block, not
 // to complete a login (no real Comcast credentials are available in CI, so a
-// genuine sign-in attempt would always fail).
-//
-// The OAuth chain does not always land in the same place: usually it redirects
-// to the login form, but it also serves the dashboard shell directly. Both
-// mean Akamai let us through, so treat either as a pass and only fail on an
-// actual denial. Asserting on the login form alone made this flaky.
+// genuine sign-in attempt would always fail). `solve()` resolving is the
+// accepted `_abck`; this only checks the page we were served is not the block.
 log(`Final URL: ${page.url()}`);
 const html = await page.content();
 
 const denied =
   /<H1>\s*Access Denied\s*<\/H1>/i.test(html) || html.includes('Access Denied');
 
-const loginFormReached = denied
-  ? false
-  : await page
-      .waitForSelector('#user', { timeout: 10000 })
-      .then(() => true)
-      .catch(() => false);
-
 if (denied) log('RESULT: FAIL - Access Denied');
-else if (loginFormReached)
-  log('RESULT: SUCCESS - Akamai solved, login form reached');
 else
   log(
     `RESULT: SUCCESS - Akamai solved, reached ${new URL(page.url()).pathname}`
