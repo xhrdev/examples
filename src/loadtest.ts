@@ -12,7 +12,10 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 import { pinSession } from '#src/proxy.js';
-import { NOT_CONFIGURED_EXIT_CODE } from '#src/credentials.js';
+import {
+  hasAnyCredentials,
+  NOT_CONFIGURED_EXIT_CODE,
+} from '#src/credentials.js';
 import { RATE_LIMIT_EXIT_CODE } from '#src/rate-limit.js';
 import { BANNED_EXIT_CODE } from '#src/datadome/ban.js';
 
@@ -165,7 +168,7 @@ console.log(
   `Iterations: ${ITERATIONS}   Concurrency: ${CONCURRENCY}   Headless: ${HEADLESS}`
 );
 console.log(
-  `Host: ${HOST || process.env['host'] || '(not set)'}   Proxy: ${PROXY_RAW ? 'set' : 'NOT SET'}   Credentials: ${process.env['username'] && process.env['password'] ? 'set' : 'NOT SET'}`
+  `Host: ${HOST || process.env['host'] || '(not set)'}   Proxy: ${PROXY_RAW ? 'set' : 'NOT SET'}   Credentials: ${hasAnyCredentials() ? 'set' : 'NOT SET'}`
 );
 console.log();
 

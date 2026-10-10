@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  hasAnyCredentials,
   NOT_CONFIGURED_EXIT_CODE,
   resolveCredentials,
 } from '#src/credentials.js';
@@ -77,4 +78,19 @@ test('nothing configured is null', () => {
 test('the exit code does not collide with the other infrastructural ones', () => {
   // 3 is a spent rate-limit budget, 4 a banned exit IP; smoke.js keys on all three.
   assert.equal(NOT_CONFIGURED_EXIT_CODE, 5);
+});
+
+test('the banner sees a target-scoped pair, which it used to miss', () => {
+  assert.equal(
+    hasAnyCredentials({ oakley_password: 'p', oakley_username: 'u' }),
+    true
+  );
+  assert.equal(hasAnyCredentials({ password: 'p', username: 'u' }), true);
+});
+
+test('the banner wants a whole pair, and none is not set', () => {
+  assert.equal(hasAnyCredentials({ oakley_username: 'u' }), false);
+  assert.equal(hasAnyCredentials({ password: 'p' }), false);
+  assert.equal(hasAnyCredentials({ api_key: 'k', host: 'h' }), false);
+  assert.equal(hasAnyCredentials({}), false);
 });

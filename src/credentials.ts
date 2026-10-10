@@ -70,3 +70,21 @@ export const resolveCredentials = (
 
   return null;
 };
+
+/**
+ * Whether any complete pair is configured, for any target.
+ *
+ * For a banner, not a decision: `src/loadtest.ts` drives scripts it knows
+ * nothing about, so it cannot ask `resolveCredentials` for a target. It used
+ * to test the generic pair alone, which printed `Credentials: NOT SET` on a run
+ * that had `oakley_username=` and `oakley_password=` and then went on to sign
+ * in with them. A banner that contradicts the run is worse than none.
+ */
+export const hasAnyCredentials = (
+  env: Record<string, string | undefined> = process.env
+): boolean =>
+  Object.keys(env).some((key) => {
+    if (key !== 'username' && !key.endsWith('_username')) return false;
+    if (!env[key]) return false;
+    return Boolean(env[`${key.slice(0, -'username'.length)}password`]);
+  });
