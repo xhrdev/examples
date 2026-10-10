@@ -79,6 +79,62 @@ import { solverBaseUrl, solverWsUrl } from '#src/solver-url.js';
 const AKAMAI_PIXEL_PREFIX = /^\/akam\/\d+\//u;
 
 /**
+ * Wrap a route handler so that nothing it throws can leave the handler.
+ *
+ * ## why
+ *
+ * `context.route(() => true, router)` hands the router to Playwright, which
+ * calls it and does not await a result anyone can catch: a handler that
+ * rejects has nobody to reject TO, and under Node 24 that is an unhandled
+ * rejection that ends the process. Measured on the deployed canary on
+ * 2026-10-10, during `hilton`:
+ *
+ *     route.fetch: Timeout 30000ms exceeded.
+ *       at fetchForRoute (solver.ts)
+ *       at serveScript   (solver.ts)
+ *       at router        (solver.ts)
+ *     Node.js v24.21.0
+ *     Status: error  Error Type: Runtime.ExitError
+ *
+ * The response headers had arrived and the body stalled, so one script fetch
+ * took down the Lambda and every check still queued behind it. The same
+ * invocation had been shown as an "unexplained" `Runtime.ExitError` in three
+ * of the previous 24 scheduled runs.
+ *
+ * ## what it does with the fault
+ *
+ * Fails closed: the request is aborted, the fault is reported through
+ * `onFault`, and nothing propagates. Aborting rather than continuing is the
+ * point -- a handler that died partway has not finished deciding what the
+ * request is, and `continue()` on a challenge script or beacon is the one
+ * outcome this router exists to prevent. The check that needed the request
+ * then fails loudly on its own terms instead of the process vanishing.
+ *
+ * `abort()` is itself guarded: if the fault happened after the route was
+ * already fulfilled or continued, aborting throws "already handled", and that
+ * must not become the new uncaught error.
+ */
+export const failClosed =
+  (
+    // eslint-disable-next-line no-unused-vars -- function-type parameter
+    handler: (route: Route) => Promise<void>,
+    // eslint-disable-next-line no-unused-vars -- function-type parameter
+    onFault: (route: Route, error: unknown) => void
+  ) =>
+  async (route: Route): Promise<void> => {
+    try {
+      await handler(route);
+    } catch (error) {
+      try {
+        onFault(route, error);
+      } catch {
+        // Reporting a fault must not itself be able to throw out of here.
+      }
+      await route.abort().catch(() => undefined);
+    }
+  };
+
+/**
  * The collector script's path, given the path it POSTs to.
  *
  * `/akam/<n>/<hex>` serves the script and `/akam/<n>/pixel_<hex>` is its
@@ -400,6 +456,16 @@ export type EgressStats = {
   pixelPostsDenied: number;
   /** POSTs to a challenge endpoint that were allowed to leave. */
   postsAllowed: number;
+  /**
+   * Requests the router faulted on and aborted (see `failClosed`).
+   *
+   * Zero on a healthy run. A non-zero count is a request whose handling threw
+   * -- a stalled script fetch, a closed page -- and which was denied rather
+   * than allowed to end the process. It is counted at all because that denial
+   * is silent to the page and the process otherwise carries on as if nothing
+   * happened.
+   */
+  routerFaults: number;
   /** Bodies the solver authored and handed to a route. */
   solverBodiesIssued: number;
   /**
@@ -1070,6 +1136,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     pixelBodiesIssued: 0,
     pixelPostsDenied: 0,
     postsAllowed: 0,
+    routerFaults: 0,
     solverBodiesIssued: 0,
     unmodelledOriginPosts: 0,
   };
@@ -1776,8 +1843,15 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         url: `${url.origin}${url.pathname}`,
       });
     } catch (error) {
-      if (error instanceof RateLimitError) throw error;
-      return deny((error as Error).message);
+      /* A spent rate-limit budget is a denial here, the same as the ledger
+       * arm treats one, and for the same reason it must not be rethrown: this
+       * is a route handler, so a rejection has nobody to reject TO and takes
+       * the process down. The first version of this rethrew it. */
+      return deny(
+        error instanceof RateLimitError
+          ? `rate limited: ${error.message}`
+          : (error as Error).message
+      );
     }
   };
 
@@ -2068,7 +2142,21 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
    * Callers must await `installed` before the first navigation.
    */
   const installed = Promise.all([
-    context.route(() => true, router),
+    context.route(
+      () => true,
+      failClosed(router, (route, error) => {
+        stats.routerFaults++;
+        const target = route.request();
+        log(
+          `[egress] ROUTER FAULT on ${target.method()} ` +
+            `${target.url().slice(0, 140)} — aborted: ${
+              error instanceof Error
+                ? error.message.split('\n')[0]
+                : String(error)
+            }`
+        );
+      })
+    ),
     context.routeWebSocket(() => true, socketRouter),
   ]).then(() => undefined);
   installed.catch(() => undefined);
