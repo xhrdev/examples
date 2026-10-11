@@ -43,7 +43,12 @@ import {
 } from '#src/rate-limit.js';
 
 const ORIGIN = 'https://www.aircanada.com';
-const url = `${ORIGIN}/ca/en/aco/home.html`;
+/* The flights booking page, the URL the status canary checks. `home.html`,
+ * which this used to open, has started answering this script with Akamai's
+ * Access Denied after the carrier is spent (4/4 on 2026-10-10, direct and
+ * through the ISP proxy) while `/flights` serves the booking app from the same
+ * addresses in the same minutes. */
+const url = `${ORIGIN}/home/ca/en/aco/flights`;
 const solverHost = process.env['host'];
 const proxy = process.env['proxy'];
 const solverApiKey = process.env['api_key'];
@@ -186,10 +191,17 @@ try {
       `_abck: ~${(await cookies())['_abck']?.split('~')[1]}~`
   );
 
+  /* The booking app's own Angular component elements, which is what the
+   * status canary asserts on. The `where can we take you` heading this used to
+   * wait for has been gone since 2026-09-09, so every run waited 60s on it and
+   * then reported whatever the catch below guessed. Component selectors are
+   * part of the app's source, not its copy or stylesheet, and Akamai's denial
+   * page does not boot the app, so neither exists on a block. */
+  await page.locator('ac-bkmg-desktop').first().waitFor({ timeout: 60_000 });
   await page
-    .getByRole('heading', { name: /where can we take you/iu })
+    .locator('ac-dynamic-locations')
     .first()
-    .waitFor({ timeout: 60_000 });
+    .waitFor({ timeout: 10_000 });
 
   const title = await page.title();
   log(`Final URL: ${page.url()}`);
