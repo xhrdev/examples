@@ -9,10 +9,15 @@
  * three tried here that DataDome actually fronts — labor.alaska.gov serves
  * directly and www.alaska.gov did not answer at all. Serves a 403 with an
  * inline dd object to a plain client.
+ *
+ * The URL carries the `www.` on purpose: once the challenge clears, the bare
+ * commerce.alaska.gov host 301s to www.commerce.alaska.gov, and `solve` only
+ * accepts a target document on the host it was given — so the bare host
+ * solved fine and then timed out waiting for a navigation it never matched.
  */
 import { runBrowserTarget } from '#src/datadome/browser-target.js';
 
 await runBrowserTarget({
   name: 'alaska',
-  url: 'https://commerce.alaska.gov/cbp/main/search/entities',
+  url: 'https://www.commerce.alaska.gov/cbp/main/search/entities',
 });
