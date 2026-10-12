@@ -141,11 +141,12 @@ const SCRIPTS = [
   // before promoting again.
   //
   // aa has one: gating since 2026-10-12, after six straight passes from a
-  // runner (2026-10-10 x3, 2026-10-12 x3). aircanada stays advisory. It
-  // failed 2026-10-10 on a stale landmark, fixed in c67bc71, and has passed
-  // all three runs since, which is a good day, not a streak yet.
+  // runner (2026-10-10 x3, 2026-10-12 x3). aircanada followed later the same
+  // day. It failed 2026-10-10 on a stale landmark, fixed in c67bc71, and has
+  // passed all five runner runs since, plus 56 of 57 from status's Lambda
+  // canary over 2026-10-10 to 2026-10-12.
   { headless: true, script: 'src/akamai/sbsd/aa' },
-  { advisory: true, headless: true, script: 'src/akamai/sbsd/aircanada' },
+  { headless: true, script: 'src/akamai/sbsd/aircanada' },
   // chewy.com, verified working (commit 5de75f4) and now has a green CI-shaped
   // run too: 19.1s against trial.xhr.dev through the shared proxy, 2026-09-26.
   // Promoted to blocking.
@@ -166,7 +167,13 @@ const SCRIPTS = [
   // has the secrets, so "no verification run through this suite's network
   // paths yet" is finally a statement about the target rather than about the
   // harness. Advisory until it has one, same as github-signup.
-  { advisory: true, headless: true, script: 'src/akamai/sbsd/oakley' },
+  //
+  // It has one: gating since 2026-10-12. Every runner run before that date
+  // failed (the runner never got `_abck` accepted). Every one on it passed,
+  // five of five, after the Chrome 154 profile (400eba0). Status's Lambda
+  // canary, through an ISP proxy, signed in 55 of 57 times over 2026-10-10 to
+  // 2026-10-12. If it goes red, check `_abck` acceptance on the runner first.
+  { headless: true, script: 'src/akamai/sbsd/oakley' },
   // Shape (formerly F5) has no example in this repo yet — add an entry here
   // once one exists rather than gating xhrdev's smoke suite on a target it
   // can't yet exercise.
