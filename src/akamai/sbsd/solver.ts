@@ -33,7 +33,7 @@
  * ## The ledger is bound to one document
  *
  * The bodies the solver returns are computed from a snapshot of the live page:
- * its HTML, its cookies, its resource timings, its runtime readings. They are
+ * its HTML, its cookies, the tab id its bundle stored. They are
  * not portable. Replaying a ledger against a second document, a second tab or
  * a later load is a mismatch, and the server will not issue one for a snapshot
  * older than five minutes. Generate per document, use in order, discard.
@@ -1069,8 +1069,8 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     const site = siteFor(documentHost);
     // A new document on this host is a new snapshot, so the ledger issued for
     // the last one is retired here rather than carried across the bootstrap's
-    // self-reload. The rows are computed from a document's HTML, cookies,
-    // timings and runtime readings; feeding leftovers to the carriers of the
+    // self-reload. The rows are computed from a document's HTML, cookies and
+    // tab id; feeding leftovers to the carriers of the
     // page that replaced it describes a visitor that was never on either.
     site.ledger = null;
     site.cursor = 0;

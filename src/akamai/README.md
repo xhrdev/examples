@@ -38,7 +38,7 @@ server-side on your behalf.
 Both also depend on the identity in [`src/profile.ts`](../profile.ts) being the
 identity the browser actually presents. That is the single most common cause of
 a solve that never lands: nothing errors, the rounds simply count up forever.
-[`identity.ts`](identity.ts) installs the profile on a real Chrome over CDP,
+[`identity.ts`](../identity.ts) installs the profile on a real Chrome over CDP,
 and both lanes declare the same profile to the solver.
 
 ## a note on the other integration styles
@@ -56,7 +56,9 @@ see
 
 | file | what it does |
 |---|---|
-| [`identity.ts`](identity.ts) | installs the profile on a live Chrome — user agent, client hints, device metrics |
+| [`../identity.ts`](../identity.ts) | installs the profile on a live Chrome — user agent, client hints, screen and window |
+| [`route-fetch.ts`](route-fetch.ts) | the request plumbing both lanes share: route fetch, decoded fulfill, in-page XHR |
+| [`session.ts`](session.ts) | launches Chrome as the profile and reports a run's result |
 | [`../profile.ts`](../profile.ts) | the one place the claimed Chrome identity is written down |
 | [`../solver-url.ts`](../solver-url.ts) | turns `host=` from `.env` into an HTTP or WebSocket solver URL |
 | [`../rate-limit.ts`](../rate-limit.ts) | what to do when the solver answers 429 (stop — it is not retryable) |

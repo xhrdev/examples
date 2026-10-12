@@ -239,11 +239,11 @@ work; `sensor/comcast-lightpanda.ts` already shows the `_abck` lane there.
 
 `solve()` in the sensor lane sends the *declared* profile — the values written
 down in [`src/profile.ts`](../../profile.ts). The obvious thing to do for SBSD,
-since the ledger request wants a realm snapshot anyway, is to read the identity
-off the live page instead. Do not.
+since the ledger request reads the live page anyway, is to read the identity
+off it too. Do not.
 
-`identity.ts` installs the profile with `Emulation.setDeviceMetricsOverride`,
-and that leaves the window emulated rather than real:
+Device-metrics emulation (`Emulation.setDeviceMetricsOverride`, which an
+earlier `identity.ts` used) leaves the window emulated rather than real:
 
 ```
 emulated  availLeft: 0   availTop: 0    outerWidth: 1202
@@ -256,16 +256,17 @@ payload built from the emulated readings describes a browser that cannot exist.
 Nothing errors. `_abck` simply never leaves `~-1~`, which is the same symptom as
 a dozen unrelated causes.
 
-So `profile.overrides` carries the declared identity, and the live snapshot is
-kept to the things only the page can answer: its cookies, its resource timings,
-its heap and connection readings, its DOM inventory. The two lanes then declare
-the same identity as each other, which is the property that actually matters.
+So the ledger request carries only `profile.id`, the declared identity, and
+reads from the live page only what nothing else can answer: its jar, its DOM
+and the tab id the bundle stores. Every other reading the server defaults from
+the profile. The two lanes then declare the same identity as each other, which
+is the property that actually matters.
 
 ## gotchas
 
 - **One ledger per document, not per page.** The bootstrap reloads itself, and
-  the document that replaces it is a new snapshot: its own HTML, cookies,
-  timings and readings. `solver.ts` retires the ledger on every main-frame
+  the document that replaces it is a new snapshot: its own HTML, cookies and
+  tab id. `solver.ts` retires the ledger on every main-frame
   document and lets the next carrier ask for a fresh one. Carrying rows across
   the reload describes a visitor who was on neither document.
 - **Two ledgers for one document** — carriers fire concurrently, so a naive
