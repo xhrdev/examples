@@ -1159,11 +1159,11 @@ export async function solve(
       if (completion.kind === 'escalated') return completion;
       if (
         submitted.expectedNavigationUrl &&
-        new URL(completion.navigation.url).href !==
-          new URL(submitted.expectedNavigationUrl).href
+        withoutDdReferrer(completion.navigation.url) !==
+          withoutDdReferrer(submitted.expectedNavigationUrl)
       ) {
         throw new Error(
-          'The organic post-captcha navigation used an unexpected URL'
+          `The organic post-captcha navigation used an unexpected URL (expected ${submitted.expectedNavigationUrl}, got ${completion.navigation.url})`
         );
       }
 
@@ -2038,4 +2038,15 @@ async function waitForCookieRotation(
     await raceFatal(delay(50), fatal);
   }
   throw new Error('The target datadome cookie did not rotate');
+}
+
+/**
+ * DataDome's own captcha script reloads the page with an empty `dd_referrer`
+ * query parameter appended, so the reload it performs is the reload URL plus
+ * that one parameter. Anything else differing is still a foreign navigation.
+ */
+function withoutDdReferrer(href: string): string {
+  const url = new URL(href);
+  url.searchParams.delete('dd_referrer');
+  return url.href;
 }
