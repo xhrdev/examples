@@ -414,10 +414,10 @@ HTTP 403
 
 ## hot reload
 
-Point `dev-resources/watch-file` at the script you are working on and run it:
+Run `dev-resources/watch-file` with the script you are working on; it re-runs on every change:
 
 ```bash
-dev-resources/watch-file
+dev-resources/watch-file src/datadome/grainger.ts
 ```
 
 ## contributing

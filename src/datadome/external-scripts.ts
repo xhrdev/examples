@@ -1,4 +1,4 @@
-export const MAX_EXTERNAL_SCRIPTS = 4;
+const MAX_EXTERNAL_SCRIPTS = 4;
 
 const SCRIPT_OPEN_TAG = /<script\b([^>]*)>/gi;
 const SRC_ATTRIBUTE = /(?:^|\s)src\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i;

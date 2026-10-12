@@ -40,6 +40,7 @@ import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
 import { applySetCookie } from '#src/akamai/set-cookie.js';
 import { PROFILE, PROFILE_ID } from '#src/profile.js';
 import { checkRateLimit, RateLimitError } from '#src/rate-limit.js';
+import { log } from '#src/util.js';
 
 export type SolveOptions = {
   /**
@@ -107,9 +108,6 @@ type SolverMessage = {
   type: string;
   url?: string;
 };
-
-const log = (msg: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
 
 const cookiesToRecord = (
   cookies: Array<{ name: string; value: string }>

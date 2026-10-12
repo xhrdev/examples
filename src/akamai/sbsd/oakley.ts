@@ -34,34 +34,19 @@
  * accepted at POST time — reaching the login page would not. Only run it with
  * credentials you are authorised to use.
  */
-import fs from 'node:fs';
-import { chromium } from 'playwright-core';
 
-import { applyIdentity, USER_AGENT, VIEWPORT } from '#src/akamai/identity.js';
+import { openAkamaiSession, reportRunError } from '#src/akamai/session.js';
+import { trackSettle } from '#src/akamai/sbsd/settle.js';
 import { attach } from '#src/akamai/sbsd/solver.js';
 import {
   NOT_CONFIGURED_EXIT_CODE,
   resolveCredentials,
 } from '#src/credentials.js';
-import { toLaunchProxy } from '#src/proxy.js';
-import {
-  RATE_LIMIT_EXIT_CODE,
-  RateLimitError,
-  reportRateLimit,
-} from '#src/rate-limit.js';
+import { log, sleep } from '#src/util.js';
 
 const ORIGIN = 'https://www.oakley.com';
 const url = `${ORIGIN}/en-us/login`;
-const solverHost = process.env['host'];
-const proxy = process.env['proxy'];
-const solverApiKey = process.env['api_key'];
 const credentials = resolveCredentials('oakley');
-let closing = false;
-
-const log = (msg: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
-
-if (!solverHost) throw new Error('set host= in .env');
 /* Reported and skipped, not thrown. The distinction is the whole point: a
  * crash here is indistinguishable in the summary table from a target that
  * blocked us, and this script is in a suite whose job is to tell those
@@ -76,80 +61,18 @@ if (!credentials) {
 
 const { password, username } = credentials;
 
-const CHROME_PATH = process.env['CHROME_PATH'] || '';
-const launchOpts: Record<string, unknown> = {
-  args: [
-    '--disable-blink-features=AutomationControlled',
-    '--no-first-run',
-    '--no-default-browser-check',
-  ],
-  headless: process.argv.includes('--headless'),
-  ...(proxy ? { proxy: toLaunchProxy(proxy) } : {}),
-};
-// eslint-disable-next-line security/detect-non-literal-fs-filename
-if (CHROME_PATH && fs.existsSync(CHROME_PATH))
-  launchOpts['executablePath'] = CHROME_PATH;
-else launchOpts['channel'] = 'chrome';
-
-const browser = await chromium.launch(launchOpts);
-const context = await browser.newContext({
+const session = await openAkamaiSession({
   ignoreHTTPSErrors: true,
   locale: 'en-US',
   serviceWorkers: 'block',
-  timezoneId: 'America/New_York',
-  userAgent: USER_AGENT,
-  viewport: VIEWPORT,
 });
-const page = await context.newPage();
-
-const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-let lastDocumentAt = Date.now();
-page.on('response', (response) => {
-  const request = response.request();
-  if (
-    request.resourceType() === 'document' &&
-    request.frame() === page.mainFrame() &&
-    !(response.status() >= 300 && response.status() < 400)
-  )
-    lastDocumentAt = Date.now();
-});
-
-async function cleanup(exitCode = 0): Promise<void> {
-  if (closing) return;
-  closing = true;
-  const forceKill = setTimeout(() => {
-    process.exit(exitCode);
-  }, 5000);
-  forceKill.unref();
-  try {
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
-    await browser.close();
-  } catch {
-    // ignore
-  }
-  process.exit(exitCode);
-}
-process.on('SIGINT', () => {
-  log('Caught SIGINT');
-  void cleanup(0);
-});
-process.on('SIGTERM', () => {
-  log('Caught SIGTERM');
-  void cleanup(0);
-});
-process.on('uncaughtException', (err) => {
-  log(`Uncaught exception: ${err.message}`);
-  void cleanup(1);
-});
-process.on('unhandledRejection', (reason) => {
-  log(`Unhandled rejection: ${String(reason)}`);
-  void cleanup(1);
-});
-
-const cdp = await context.newCDPSession(page);
-await applyIdentity(cdp);
+const {
+  apiKey: solverApiKey,
+  context,
+  exit: cleanup,
+  host: solverHost,
+  page,
+} = session;
 
 const akamai = attach(page, {
   host: solverHost,
@@ -157,23 +80,9 @@ const akamai = attach(page, {
   ...(solverApiKey ? { solverApiKey } : {}),
 });
 
-const QUIET_MS = 5000;
-const settle = async (): Promise<void> => {
-  const deadline = Date.now() + 60_000;
-  while (
-    (akamai.carriersAnswered() === 0 ||
-      Date.now() - lastDocumentAt < QUIET_MS) &&
-    Date.now() < deadline
-  )
-    await sleep(500);
-  await page.waitForLoadState('domcontentloaded');
-  await sleep(1500);
-};
+const settle = trackSettle(page, akamai);
 
-const cookies = async (): Promise<Record<string, string>> =>
-  Object.fromEntries(
-    (await context.cookies(ORIGIN)).map((c) => [c.name, c.value])
-  );
+const cookies = (): Promise<Record<string, string>> => session.cookies(ORIGIN);
 
 try {
   await page.goto(url, { timeout: 90_000, waitUntil: 'domcontentloaded' });
@@ -275,11 +184,5 @@ try {
     await cleanup(1);
   }
 } catch (e) {
-  if (e instanceof RateLimitError) {
-    reportRateLimit(e);
-    await cleanup(RATE_LIMIT_EXIT_CODE);
-  } else {
-    log(`ERROR: Solver failed: ${(e as Error).message}`);
-    await cleanup(1);
-  }
+  await reportRunError(session, e);
 }

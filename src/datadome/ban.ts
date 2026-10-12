@@ -1,3 +1,4 @@
+import { log } from '#src/util.js';
 /**
  * This is a helper library, not a script. It holds what every DataDome example
  * needs to agree on: what it means when DataDome has already decided about
@@ -38,9 +39,6 @@ export class BannedError extends Error {
     this.name = 'BannedError';
   }
 }
-
-const log = (message: string): void =>
-  console.log(`[${new Date().toISOString()}] ${message}`);
 
 /**
  * What every example prints when it stops because of a ban. Kept here so they

@@ -10,7 +10,8 @@
  * caller headers that carry the whole configuration survive the trip through
  * CloudFront. Run it before blaming a solve for something the transport did.
  */
-import { callTool, connect, log, MCP_URL } from '#src/mcp/client.js';
+import { callTool, connect, MCP_URL } from '#src/mcp/client.js';
+import { log } from '#src/util.js';
 
 const solverHost = process.env['host'];
 const apiKey = process.env['api_key'];

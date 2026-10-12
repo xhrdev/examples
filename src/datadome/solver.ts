@@ -78,6 +78,7 @@ import {
 } from '#src/datadome/external-scripts.js';
 import { collectStylesheetAssets } from '#src/datadome/stylesheets.js';
 import { checkRateLimit } from '#src/rate-limit.js';
+import { log } from '#src/util.js';
 
 type CaptchaRelayContext = {
   headers: Readonly<Record<string, string | undefined>>;
@@ -667,9 +668,6 @@ const UA_OVERRIDE = {
     wow64: false,
   },
 };
-
-const log = (message: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${message}`, ...extra);
 
 /** Solve a DataDome interstitial, captcha, or interstitial-to-captcha flow. */
 export async function solve(

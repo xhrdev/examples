@@ -32,34 +32,13 @@
  * again — see `sbsd/aa.ts` for what that looks like measured across four
  * providers. Suspect the exit before the payloads.
  */
-import fs from 'node:fs';
-import { chromium } from 'playwright-core';
 
-import { applyIdentity, USER_AGENT, VIEWPORT } from '#src/akamai/identity.js';
+import { openAkamaiSession, reportRunError } from '#src/akamai/session.js';
 import { attach } from '#src/akamai/sbsd/solver.js';
-import { PROFILE } from '#src/profile.js';
-import { toLaunchProxy } from '#src/proxy.js';
-import {
-  RATE_LIMIT_EXIT_CODE,
-  RateLimitError,
-  reportRateLimit,
-} from '#src/rate-limit.js';
+import { log, sleep } from '#src/util.js';
 
 const ORIGIN = 'https://www.hilton.com';
 const url = `${ORIGIN}/en/`;
-const solverHost = process.env['host'];
-const proxy = process.env['proxy'];
-const solverApiKey = process.env['api_key'];
-let closing = false;
-
-const log = (msg: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
-
-if (!solverHost) throw new Error('set host= in .env');
-
-const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
 const DESTINATION = 'Orlando, Florida';
 const day = (offset: number): string =>
   new Date(Date.now() + offset * 864e5).toISOString().slice(0, 10);
@@ -74,72 +53,17 @@ const longDate = (iso: string): string =>
     year: 'numeric',
   });
 
-const CHROME_PATH = process.env['CHROME_PATH'] || '';
-const launchOpts: Record<string, unknown> = {
-  args: [
-    '--disable-blink-features=AutomationControlled',
-    '--no-first-run',
-    '--no-default-browser-check',
-  ],
-  headless: process.argv.includes('--headless'),
-  ...(proxy ? { proxy: toLaunchProxy(proxy) } : {}),
-};
-// eslint-disable-next-line security/detect-non-literal-fs-filename
-if (CHROME_PATH && fs.existsSync(CHROME_PATH))
-  launchOpts['executablePath'] = CHROME_PATH;
-else launchOpts['channel'] = 'chrome';
-
-const browser = await chromium.launch(launchOpts);
-const context = await browser.newContext({
+const session = await openAkamaiSession({
   locale: 'en-US',
-  // The SBSD bundle registers one, and a service worker that outlives the
-  // document would answer requests this script never sees.
   serviceWorkers: 'block',
-  timezoneId: PROFILE.timezone,
-  userAgent: USER_AGENT,
-  viewport: VIEWPORT,
 });
-const page = await context.newPage();
-
-async function cleanup(exitCode = 0): Promise<void> {
-  if (closing) return;
-  closing = true;
-  const forceKill = setTimeout(() => {
-    process.exit(exitCode);
-  }, 5000);
-  forceKill.unref();
-  try {
-    // Retire the route handler before the browser goes. Closing underneath an
-    // in-flight route makes Playwright print the whole intercepted response
-    // back as an unhandled "route callback" error, which buries the actual
-    // result in CI logs under a few hundred lines of headers.
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
-    await browser.close();
-  } catch {
-    // ignore
-  }
-  process.exit(exitCode);
-}
-process.on('SIGINT', () => {
-  log('Caught SIGINT');
-  void cleanup(0);
-});
-process.on('SIGTERM', () => {
-  log('Caught SIGTERM');
-  void cleanup(0);
-});
-process.on('uncaughtException', (err) => {
-  log(`Uncaught exception: ${err.message}`);
-  void cleanup(1);
-});
-process.on('unhandledRejection', (reason) => {
-  log(`Unhandled rejection: ${String(reason)}`);
-  void cleanup(1);
-});
-
-// The identity the solver was told to model, installed on the real browser.
-const cdp = await context.newCDPSession(page);
-await applyIdentity(cdp);
+const {
+  apiKey: solverApiKey,
+  context,
+  exit: cleanup,
+  host: solverHost,
+  page,
+} = session;
 
 // Installed before the first navigation: the SBSD carrier fires during the
 // bootstrap document, and a router attached afterwards would miss it.
@@ -149,10 +73,7 @@ const akamai = attach(page, {
   ...(solverApiKey ? { solverApiKey } : {}),
 });
 
-const cookies = async (): Promise<Record<string, string>> =>
-  Object.fromEntries(
-    (await context.cookies(ORIGIN)).map((c) => [c.name, c.value])
-  );
+const cookies = (): Promise<Record<string, string>> => session.cookies(ORIGIN);
 
 try {
   await page.goto(url, { timeout: 90_000, waitUntil: 'domcontentloaded' });
@@ -216,13 +137,5 @@ try {
     await cleanup(0);
   }
 } catch (e) {
-  // A 429 is not a failed solve and retrying cannot help, so report it as its
-  // own outcome with its own exit code.
-  if (e instanceof RateLimitError) {
-    reportRateLimit(e);
-    await cleanup(RATE_LIMIT_EXIT_CODE);
-  } else {
-    log(`ERROR: Solver failed: ${(e as Error).message}`);
-    await cleanup(1);
-  }
+  await reportRunError(session, e);
 }

@@ -18,6 +18,7 @@ import {
 } from '#src/credentials.js';
 import { RATE_LIMIT_EXIT_CODE } from '#src/rate-limit.js';
 import { BANNED_EXIT_CODE } from '#src/datadome/ban.js';
+import { readFlag as readFlagOf } from '#src/util.js';
 
 const args = process.argv.slice(2);
 
@@ -28,11 +29,7 @@ if (args.includes('--help') || args.includes('-h')) {
   process.exit(0);
 }
 
-function readFlag(name: string): string {
-  const prefix = `${name}=`;
-  const arg = args.find((a) => a.startsWith(prefix));
-  return arg ? arg.slice(prefix.length) : '';
-}
+const readFlag = (name: string): string => readFlagOf(name, args) ?? '';
 
 const ITERATIONS = parseInt(readFlag('--iterations') || '100', 10);
 const CONCURRENCY = parseInt(readFlag('--concurrency') || '1', 10);

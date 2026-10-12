@@ -27,7 +27,8 @@
  * flip from `"none"` to `"datadome"`, and `status` flip from `403` to `200`
  * without this script sending a second request of its own.
  */
-import { callTool, connect, log, MCP_URL } from '#src/mcp/client.js';
+import { callTool, connect, MCP_URL } from '#src/mcp/client.js';
+import { log, readFlag } from '#src/util.js';
 
 type WebFetchResult = {
   contentType?: string;
@@ -42,9 +43,6 @@ type WebFetchResult = {
   unblocked: 'datadome' | 'none';
   url: string;
 };
-
-const readFlag = (name: string): string | undefined =>
-  process.argv.find((arg) => arg.startsWith(`${name}=`))?.split('=')[1];
 
 const targetUrl = readFlag('--url') ?? 'https://example.com/';
 const apiKey = process.env['api_key'];

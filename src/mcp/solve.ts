@@ -57,9 +57,10 @@ import { fetch, ProxyAgent } from 'undici';
 
 import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
 import { navigationHeaders } from '#src/datadome/http-utils.js';
-import { callTool, connect, log, MCP_URL } from '#src/mcp/client.js';
+import { callTool, connect, MCP_URL } from '#src/mcp/client.js';
 import { PROFILE } from '#src/profile.js';
 import { pinSession } from '#src/proxy.js';
+import { log, readFlag } from '#src/util.js';
 
 type Ledger = {
   complete: boolean;
@@ -73,9 +74,6 @@ type Ledger = {
     resolvedUrl: string;
   }[];
 };
-
-const readFlag = (name: string): string | undefined =>
-  process.argv.find((arg) => arg.startsWith(`${name}=`))?.split('=')[1];
 
 const targetUrl = readFlag('--url');
 if (!targetUrl) {

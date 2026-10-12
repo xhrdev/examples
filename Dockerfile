@@ -15,4 +15,4 @@ COPY src/ src/
 
 ENV CHROME_PATH=/usr/bin/chromium
 
-CMD ["node", "src/loadtest.ts", "--script=src/akamai/comcast", "--headless", "--iterations=10"]
+CMD ["node", "src/loadtest.ts", "--script=src/akamai/sensor/comcast", "--headless", "--iterations=10"]

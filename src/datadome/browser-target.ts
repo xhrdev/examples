@@ -45,6 +45,7 @@ import {
   RateLimitError,
   reportRateLimit,
 } from '#src/rate-limit.js';
+import { log } from '#src/util.js';
 
 export type BrowserTargetOptions = {
   /** Slug used to name screenshots. Usually the script's own basename. */
@@ -56,9 +57,6 @@ export type BrowserTargetOptions = {
 /** How long the browser stays open after a run, to inspect what it landed on. */
 const BROWSER_HOLD_MS = 30_000;
 const SCREENSHOT_DIR = 'target/screenshots';
-
-const log = (msg: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
 
 /**
  * Solve DataDome on `url` in a real Chrome and report the outcome.

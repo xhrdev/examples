@@ -25,6 +25,7 @@ import {
   RateLimitError,
   reportRateLimit,
 } from '#src/rate-limit.js';
+import { log, readFlag } from '#src/util.js';
 
 const DEFAULT_URL = 'https://www.grainger.com/';
 
@@ -73,8 +74,8 @@ export type PreparedSubmission = {
   url: string;
 };
 
-export const log = (message: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${message}`, ...extra);
+/** Re-exported for the HTTP-client examples, which import their helpers from here. */
+export { log };
 
 export const navigationHeaders = (): Record<string, string> => ({
   accept:
@@ -257,13 +258,6 @@ export const readClearanceCookie = (responseBody: string): string => {
 
 export const pageTitle = (html: string): string | undefined =>
   /<title>([^<]*)/.exec(html)?.[1]?.trim();
-
-const readFlag = (name: string): string | undefined =>
-  process.argv
-    .find((arg) => arg.startsWith(`${name}=`))
-    ?.split('=')
-    .slice(1)
-    .join('=');
 
 /**
  * Residential pools hand out the occasional dead exit node, which surfaces as

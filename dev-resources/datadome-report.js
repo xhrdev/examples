@@ -29,8 +29,9 @@ const SITES = [
 ];
 
 const flag = (name, fallback) =>
-  process.argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1] ??
-  fallback;
+  process.argv
+    .find((a) => a.startsWith(`--${name}=`))
+    ?.slice(name.length + 3) ?? fallback;
 
 const ITERATIONS = Number(flag('iterations', 3));
 const CONCURRENCY = Number(flag('concurrency', 7));

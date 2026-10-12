@@ -30,12 +30,10 @@ import { BANNED_EXIT_CODE } from '#src/datadome/ban.js';
 import { RATE_LIMIT_EXIT_CODE } from '#src/rate-limit.js';
 import { ACCESS_DENIED_EXIT_CODE } from '#src/access-denied.js';
 import { launchWithExtension } from '#src/playwright-with-extension/extension.js';
+import { log } from '#src/util.js';
 
 const URL_TO_SOLVE = 'https://www.grainger.com/';
 const SCREENSHOT_DIR = 'target/screenshots';
-
-const log = (msg: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
 
 const solverHost = process.env['host'];
 const solverApiKey = process.env['api_key'];

@@ -46,9 +46,6 @@ target/build:
 test: | build target/test
 target/test:
 ifeq ($(is_ci), true)
-	@if ls test/*.test.ts >/dev/null 2>&1; then \
-		node --test --experimental-test-coverage --test-reporter=spec --test-reporter=lcov --test-reporter-destination=stdout --test-reporter-destination=target/lcov.info test/*.test.ts; \
-	fi
 	npm run test:unit
 else
 	npm test

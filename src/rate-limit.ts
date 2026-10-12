@@ -1,3 +1,4 @@
+import { log } from '#src/util.js';
 /**
  * This is a helper library, not a script. It holds the one thing every
  * example in this repo needs to agree on: what to do when the solver says
@@ -21,9 +22,6 @@
  * can tell "slow down" apart from "this did not work".
  */
 export const RATE_LIMIT_EXIT_CODE = 3;
-
-const log = (message: string): void =>
-  console.log(`[${new Date().toISOString()}] ${message}`);
 
 /** Thrown when the solver answers 429. Not retryable — see the file header. */
 export class RateLimitError extends Error {

@@ -1,6 +1,6 @@
 /**
- * This is a helper library, not a script. It exposes `pinSession`,
- * `toLaunchProxy` and `toUrl`, which every example uses to turn a proxy
+ * This is a helper library, not a script. It exposes `pinSession`
+ * and `toLaunchProxy`, which every example uses to turn a proxy
  * string into the shape it needs.
  *
  * Proxy string handling, in one place.
@@ -115,6 +115,3 @@ export const toLaunchProxy = (
     ...(username ? { username } : {}),
   };
 };
-
-/** A canonical proxy URL, credentials included — what the solver API takes. */
-export const toUrl = (raw: string): string => serialise(parse(raw));

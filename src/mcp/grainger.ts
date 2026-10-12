@@ -34,10 +34,8 @@ import {
   submissionHeaders,
 } from '#src/datadome/http-utils.js';
 import { pinSession } from '#src/proxy.js';
-import { callTool, connect, log, MCP_URL } from '#src/mcp/client.js';
-
-const readFlag = (name: string): string | undefined =>
-  process.argv.find((arg) => arg.startsWith(`${name}=`))?.split('=')[1];
+import { callTool, connect, MCP_URL } from '#src/mcp/client.js';
+import { log, readFlag } from '#src/util.js';
 
 const targetUrl = readFlag('--url') ?? 'https://www.grainger.com/';
 const configuredProxy = process.env['proxy'];

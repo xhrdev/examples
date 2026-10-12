@@ -15,9 +15,6 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 export const MCP_URL: string =
   process.env['mcp_url'] ?? 'https://mcp.xhr.dev/mcp';
 
-export const log = (message: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${message}`, ...extra);
-
 export type ToolResult = {
   content: { text: string; type: string }[];
   isError?: boolean;

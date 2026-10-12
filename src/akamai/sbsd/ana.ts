@@ -1,24 +1,12 @@
-import fs from 'node:fs';
-import { chromium, type Locator } from 'playwright-core';
+import { type Locator } from 'playwright-core';
 
-import { applyIdentity, USER_AGENT, VIEWPORT } from '#src/akamai/identity.js';
+import { openAkamaiSession, reportRunError } from '#src/akamai/session.js';
 import { attach } from '#src/akamai/sbsd/solver.js';
-import { PROFILE } from '#src/profile.js';
-import { toLaunchProxy } from '#src/proxy.js';
-import {
-  RATE_LIMIT_EXIT_CODE,
-  RateLimitError,
-  reportRateLimit,
-} from '#src/rate-limit.js';
+import { log, sleep } from '#src/util.js';
 
 const ORIGIN = 'https://www.ana.co.jp';
 const ORIGIN_HOST = new URL(ORIGIN).host;
 const url = `${ORIGIN}/`;
-const solverHost = process.env['host'];
-const proxy = process.env['proxy'];
-const solverApiKey = process.env['api_key'];
-let closing = false;
-
 const LANDING_ROUNDS = 3;
 
 const ARRIVAL = 'OSA';
@@ -29,40 +17,18 @@ const SEARCH_API = /\/aswbe-search\/api\/v\d+\/roundtrip/u;
 
 const RESULTS_URL = /\/webapps\/reservation\/[a-z-]*flight-availability/u;
 
-const log = (msg: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
-
-if (!solverHost) throw new Error('set host= in .env');
-
-const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-const CHROME_PATH = process.env['CHROME_PATH'] || '';
-const launchOpts: Record<string, unknown> = {
-  args: [
-    '--disable-blink-features=AutomationControlled',
-    '--no-first-run',
-    '--no-default-browser-check',
-
-    '--disable-updater-scheduler',
-  ],
-  headless: process.argv.includes('--headless'),
-  ...(proxy ? { proxy: toLaunchProxy(proxy) } : {}),
-};
-// eslint-disable-next-line security/detect-non-literal-fs-filename
-if (CHROME_PATH && fs.existsSync(CHROME_PATH))
-  launchOpts['executablePath'] = CHROME_PATH;
-else launchOpts['channel'] = 'chrome';
-
-const browser = await chromium.launch(launchOpts);
-const context = await browser.newContext({
+const session = await openAkamaiSession({
+  args: ['--disable-updater-scheduler'],
   locale: 'ja-JP',
   serviceWorkers: 'block',
-  timezoneId: PROFILE.timezone,
-  userAgent: USER_AGENT,
-  viewport: VIEWPORT,
 });
-const page = await context.newPage();
+const {
+  apiKey: solverApiKey,
+  context,
+  exit: cleanup,
+  host: solverHost,
+  page,
+} = session;
 
 let lastDocumentAt = Date.now();
 page.on('response', (response) => {
@@ -74,40 +40,6 @@ page.on('response', (response) => {
   )
     lastDocumentAt = Date.now();
 });
-
-async function cleanup(exitCode = 0): Promise<void> {
-  if (closing) return;
-  closing = true;
-  const forceKill = setTimeout(() => {
-    process.exit(exitCode);
-  }, 5000);
-  forceKill.unref();
-  try {
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
-    await browser.close();
-  } catch {
-    // ignore
-  }
-  process.exit(exitCode);
-}
-process.on('SIGINT', () => {
-  log('Caught SIGINT');
-  void cleanup(0);
-});
-process.on('SIGTERM', () => {
-  log('Caught SIGTERM');
-  void cleanup(0);
-});
-process.on('uncaughtException', (err) => {
-  log(`Uncaught exception: ${err.message}`);
-  void cleanup(1);
-});
-process.on('unhandledRejection', (reason) => {
-  log(`Unhandled rejection: ${String(reason)}`);
-  void cleanup(1);
-});
-
-await applyIdentity(await context.newCDPSession(page));
 
 const solverOff = process.argv.includes('--no-solver');
 if (solverOff) log('CONTROL RUN: no solver attached');
@@ -304,14 +236,5 @@ try {
     await cleanup(2);
   }
 } catch (e) {
-  if (e instanceof RateLimitError) {
-    reportRateLimit(e);
-    await cleanup(RATE_LIMIT_EXIT_CODE);
-  } else if (/access denied/iu.test(await page.content().catch(() => ''))) {
-    log('RESULT: FAIL - Access Denied');
-    await cleanup(2);
-  } else {
-    log(`ERROR: Solver failed: ${(e as Error).message}`);
-    await cleanup(1);
-  }
+  await reportRunError(session, e, { checkDenied: true });
 }
