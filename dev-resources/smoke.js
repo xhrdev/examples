@@ -59,7 +59,10 @@ const SCRIPTS = [
   // login/SBSD). Advisory until each has a verification run, same policy as
   // github-signup/oakley above.
   { advisory: true, headless: true, script: 'src/datadome/saks' },
-  { advisory: true, headless: true, script: 'src/datadome/anthropologie' },
+  // anthropologie — gating since 2026-10-12: passed the last six smoke runs
+  // from a runner (2026-10-10 x3, 2026-10-12 x3), ~124s each. Its one failure
+  // on record is 2026-09-30.
+  { headless: true, script: 'src/datadome/anthropologie' },
   // Advisory since 2026-10-12: two of three back-to-back dispatches on that
   // date failed in under 10s with "The challenge document recurred in the same
   // round", an intermittent solver error that also hits github-signup and
@@ -97,7 +100,11 @@ const SCRIPTS = [
   // network paths for this target; promoting off proxied evidence alone was
   // the mistake. Needs a green run through the *actual* no-proxy CI path
   // before promoting again.
-  { advisory: true, headless: true, script: 'src/akamai/sensor/ca-edd' },
+  //
+  // It has those now: gating since 2026-10-12, after passing every smoke run
+  // from a runner with no proxy on record since 2026-09-30, seven of seven
+  // (2026-09-30, 2026-10-10 x3, 2026-10-12 x3), 13-15s each.
+  { headless: true, script: 'src/akamai/sensor/ca-edd' },
   // The SBSD channel, and all three run headless as of 2026-09-08. hilton was
   // the last headed entry — it used to refuse a headless Chrome outright — and
   // three headless runs now land `_abck` on round 5 and reach the results
@@ -132,7 +139,12 @@ const SCRIPTS = [
   // a one-shot thing) rather than a code regression, but one clean run
   // doesn't outweigh it. Needs a genuine green streak, not a single pass,
   // before promoting again.
-  { advisory: true, headless: true, script: 'src/akamai/sbsd/aa' },
+  //
+  // aa has one: gating since 2026-10-12, after six straight passes from a
+  // runner (2026-10-10 x3, 2026-10-12 x3). aircanada stays advisory. It
+  // failed 2026-10-10 on a stale landmark, fixed in c67bc71, and has passed
+  // all three runs since, which is a good day, not a streak yet.
+  { headless: true, script: 'src/akamai/sbsd/aa' },
   { advisory: true, headless: true, script: 'src/akamai/sbsd/aircanada' },
   // chewy.com, verified working (commit 5de75f4) and now has a green CI-shaped
   // run too: 19.1s against trial.xhr.dev through the shared proxy, 2026-09-26.
