@@ -43,6 +43,20 @@ export const connect = async (
   return client;
 };
 
+/**
+ * Your own key and solver, from `api_key=` and `host=` in .env, as the
+ * headers the hosted server reads. Empty when neither is set, which is the
+ * shared trial box — what a new user gets.
+ */
+export const ownSolverHeaders = (): Record<string, string> => {
+  const apiKey = process.env['api_key'];
+  const solverHost = process.env['host'];
+  return {
+    ...(apiKey ? { 'x-api-key': apiKey } : {}),
+    ...(solverHost ? { 'x-solver-host': solverHost } : {}),
+  };
+};
+
 /** Calls a tool and fails loudly, rather than returning an error as content. */
 export const callTool = async (
   client: Client,

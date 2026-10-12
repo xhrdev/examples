@@ -36,10 +36,21 @@
 import type { BrowserContext, Frame, Page, Route } from 'playwright-core';
 import { fetch, WebSocket } from 'undici';
 
+import {
+  abckStatus,
+  AKAMAI_PIXEL_PATH,
+  cookieJar,
+  type Fetched,
+  fetchForRoute,
+  type FetchResponse,
+  fulfillDecoded,
+  sendFromFrame,
+} from '#src/akamai/route-fetch.js';
 import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
 import { applySetCookie } from '#src/akamai/set-cookie.js';
 import { PROFILE, PROFILE_ID } from '#src/profile.js';
 import { checkRateLimit, RateLimitError } from '#src/rate-limit.js';
+import { apiKeyHeader } from '#src/solver-url.js';
 import { log } from '#src/util.js';
 
 export type SolveOptions = {
@@ -51,15 +62,7 @@ export type SolveOptions = {
    * come from the same address the browser uses, or the telemetry will be
    * scored against the wrong client.
    */
-  fetchResponse?: (
-    // eslint-disable-next-line no-unused-vars -- function-type parameters
-    request: {
-      body?: string;
-      headers: Record<string, string>;
-      method: string;
-      url: string;
-    }
-  ) => Promise<Fetched>;
+  fetchResponse?: FetchResponse;
   /**
    * How long a frame gets to reach `domcontentloaded` after it navigates,
    * before we give up on reading the sensor script out of it. Default 15s.
@@ -85,14 +88,6 @@ export type SolveOptions = {
 
 type CookieRecord = Record<string, string>;
 
-/** A response, however it was fetched. */
-type Fetched = {
-  body: string;
-  headers: Record<string, string>;
-  /** Each `set-cookie` separately; a joined string cannot be parsed back. */
-  setCookie?: string[];
-  status: number;
-};
 type SolverMessage = {
   accepted?: boolean;
   body?: string;
@@ -109,30 +104,15 @@ type SolverMessage = {
   url?: string;
 };
 
-const cookiesToRecord = (
-  cookies: Array<{ name: string; value: string }>
-): CookieRecord => {
-  const r: CookieRecord = {};
-  for (const c of cookies) r[c.name] = c.value;
-  return r;
-};
-
-/**
- * Akamai's runtime-injected tracking pixel — `/akam/13/25477803` and similar
- * `/akam/<digits>/...` beacons. It is a 1x1 pixel, not the sensor script, but
- * its URL matches the `/akam` keyword and it can load before the sensor, so
- * without this exclusion a session starts against the pixel's body and the
- * solve hangs silently (the solver can model telemetry only from the sensor).
- */
-const AKAM_PIXEL_PATH_RE = /^\/akam\/\d+\//iu;
-
 /**
  * Whether a script URL is worth handing to the solver as the sensor script.
  * Two things are not: the SBSD bundle (posting to it answers 200 with no body
- * and `_abck` never leaves `~-1~`) and the runtime-injected tracking pixel.
+ * and `_abck` never leaves `~-1~`) and Akamai's pixel collector, which a
+ * session started against hangs silently — the solver can model telemetry
+ * only from the sensor.
  */
 const isSensorScriptUrl = (url: URL): boolean =>
-  !isSbsdBundle(url) && !AKAM_PIXEL_PATH_RE.test(url.pathname);
+  !isSbsdBundle(url) && !AKAMAI_PIXEL_PATH.test(url.pathname);
 
 const extractAkamaiScriptUrl = (
   html: string,
@@ -181,9 +161,6 @@ const isLikelyAkamaiScriptUrl = (url: string): boolean => {
   // eslint-disable-next-line security/detect-unsafe-regex
   return /^(\/[a-zA-Z0-9\-_]+){5,}$/.test(p) || /\/(?:akam|_abck|bm-)/.test(p);
 };
-
-const getAbckStatus = (value: string | undefined): null | string =>
-  value ? (value.split('~')[1] ?? null) : null;
 
 // eslint-disable-next-line security/detect-unsafe-regex
 const STRIP_SCRIPTS_RE = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gim;
@@ -268,7 +245,7 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
       }
 
       const ws = new WebSocket(solverUrl, {
-        ...(solverApiKey ? { headers: { 'x-api-key': solverApiKey } } : {}),
+        headers: apiKeyHeader(solverApiKey),
       });
       sessions.set(origin, { frame, ws });
       // A refused upgrade never reaches 'open'. See classifyUpgradeFailure.
@@ -299,7 +276,7 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
         switch (msg.type) {
           case 'cookie_update': {
             const { accepted, cookies: ck, round, rval } = msg;
-            const status = getAbckStatus(ck?.['_abck']);
+            const status = abckStatus(ck?.['_abck']) ?? null;
             log(
               `[${origin}] Cookie update: round=${round} rval=${rval} accepted=${accepted} _abck=~${status}~`
             );
@@ -325,51 +302,29 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
             break;
 
           case 'submission': {
-            const { body, headers: hdrs, id, method, url: subUrl } = msg;
+            const { id } = msg;
+            const request = {
+              body: msg.body ?? '',
+              headers: { ...msg.headers },
+              method: msg.method ?? 'POST',
+              url: msg.url ?? '',
+            };
             const cookieUrl = data.url;
-            const scriptOrigin = new URL(data.url).origin;
             log(
-              `[${origin}] Submission ${id}: ${method} ${subUrl} (${typeof body === 'string' ? body.length : 0} bytes)`
+              `[${origin}] Submission ${id}: ${request.method} ${request.url} (${request.body.length} bytes)`
             );
-            const xhrHeaders: Record<string, string> = {};
-            if (hdrs && typeof hdrs === 'object')
-              Object.assign(xhrHeaders, hdrs);
+            // Off-frame, the submission has to say where it came from itself.
+            const offFrameHeaders = {
+              ...request.headers,
+              Origin: new URL(data.url).origin,
+              Referer: data.url,
+            };
             try {
               let resultStatus: number;
               let resultBody: string;
               if (frame !== null) {
-                const result = await frame.evaluate(
-                  ({
-                    body,
-                    headers,
-                    method,
-                    url,
-                  }: {
-                    body: string;
-                    headers: Record<string, string>;
-                    method: string;
-                    url: string;
-                  }) =>
-                    new Promise<{ body: string; status: number }>((resolve) => {
-                      const xhr = new XMLHttpRequest();
-                      xhr.open(method, url, true);
-                      xhr.withCredentials = true;
-                      if (headers)
-                        for (const [n, v] of Object.entries(headers))
-                          xhr.setRequestHeader(n, v);
-                      xhr.onload = () =>
-                        resolve({ body: xhr.responseText, status: xhr.status });
-                      xhr.send(body);
-                    }),
-                  {
-                    body: body ?? '',
-                    headers: xhrHeaders,
-                    method: method ?? 'POST',
-                    url: subUrl ?? '',
-                  }
-                );
-                resultStatus = result.status;
-                resultBody = result.body;
+                ({ body: resultBody, status: resultStatus } =
+                  await sendFromFrame(frame, request));
               } else if (fetchResponse) {
                 // No frame for this origin, but we have a fetcher that shares
                 // the browser's address. Prefer it over context.request:
@@ -378,36 +333,22 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
                 // proxy — telemetry posted from a different IP than the page
                 // is scored as a different visitor and never accepted.
                 const resp = await fetchResponse({
-                  body: body ?? '',
-                  headers: {
-                    ...xhrHeaders,
-                    Origin: scriptOrigin,
-                    Referer: data.url,
-                  },
-                  method: method ?? 'POST',
-                  url: subUrl ?? '',
+                  ...request,
+                  headers: offFrameHeaders,
                 });
-                await applyCookies(subUrl ?? '', resp.setCookie);
+                await applyCookies(request.url, resp.setCookie);
                 resultStatus = resp.status;
                 resultBody = resp.body;
               } else {
-                const submitUrl = subUrl ?? '';
-                const submitMethod = method ?? 'POST';
-                const resp = await context.request.fetch(submitUrl, {
-                  data: body ?? '',
-                  headers: {
-                    ...xhrHeaders,
-                    Origin: scriptOrigin,
-                    Referer: data.url,
-                  },
-                  method: submitMethod,
+                const resp = await context.request.fetch(request.url, {
+                  data: request.body,
+                  headers: offFrameHeaders,
+                  method: request.method,
                 });
                 resultStatus = resp.status();
                 resultBody = await resp.text();
               }
-              const postCookies = cookiesToRecord(
-                await context.cookies(cookieUrl)
-              );
+              const postCookies = await cookieJar(context, cookieUrl);
               log(
                 `[${origin}] Submission ${id}: response ${resultStatus} (${resultBody.length} bytes)`
               );
@@ -490,7 +431,7 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
       html: string,
       frame: Frame | null
     ): Promise<void> => {
-      const cookies = cookiesToRecord(await context.cookies(cookieUrl));
+      const cookies = await cookieJar(context, cookieUrl);
       const sanitizedHtml = stripScripts(html);
       log(
         `[${origin}] Captured: script=${script.length}b html=${sanitizedHtml.length}b cookies=[${Object.keys(cookies).sort().join(',')}]`
@@ -520,28 +461,7 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
       let lastErr: unknown;
       for (let i = 0; i < attempts; i++) {
         try {
-          if (fetchResponse) {
-            const req = route.request();
-            const postData = req.postData();
-            const response = await fetchResponse({
-              ...(postData === null ? {} : { body: postData }),
-              headers: await req.allHeaders(),
-              method: req.method(),
-              url: req.url(),
-            });
-            return {
-              body: response.body,
-              headers: response.headers,
-              ...(response.setCookie ? { setCookie: response.setCookie } : {}),
-              status: response.status,
-            };
-          }
-          const resp = await route.fetch({ maxRedirects: 0 });
-          return {
-            body: await resp.text(),
-            headers: resp.headers(),
-            status: resp.status(),
-          };
+          return await fetchForRoute(route, fetchResponse, { maxRedirects: 0 });
         } catch (e) {
           lastErr = e;
         }
@@ -561,21 +481,6 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
       setCookie: string[] | undefined
     ): Promise<void> => applySetCookie(context, url, setCookie);
 
-    /** Pass a fetched response back to the page, framing headers stripped. */
-    const fulfillFetched = (
-      route: Route,
-      fetched: Fetched,
-      body = fetched.body
-    ): Promise<void> => {
-      const headers = { ...fetched.headers };
-      // The body we hold is decoded, so the original framing would be a lie,
-      // and the cookies went into the jar through applyCookies instead.
-      delete headers['content-encoding'];
-      delete headers['content-length'];
-      delete headers['set-cookie'];
-      return route.fulfill({ body, headers, status: fetched.status });
-    };
-
     const routeHandler = async (route: Route) => {
       const req = route.request();
       if (req.resourceType() === 'document') {
@@ -591,7 +496,7 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
           // Release the route before touching the cookie jar: while a request
           // is paused, `addCookies` waits behind it on Lightpanda and the
           // navigation never completes.
-          await fulfillFetched(route, resp);
+          await fulfillDecoded(route, resp.body, resp);
           return await applyCookies(req.url(), resp.setCookie);
         } catch (e) {
           log(
@@ -628,7 +533,7 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
               );
             return;
           }
-          await fulfillFetched(route, resp, body);
+          await fulfillDecoded(route, body, resp);
           return await applyCookies(req.url(), resp.setCookie);
         } catch (e) {
           log(`Script fetch failed for ${req.url()}: ${(e as Error).message}`);
@@ -755,7 +660,7 @@ async function classifyUpgradeFailure(
   const probeUrl = solverUrl.replace(/^ws/, 'http');
   try {
     const probe = await fetch(probeUrl, {
-      ...(solverApiKey ? { headers: { 'x-api-key': solverApiKey } } : {}),
+      headers: apiKeyHeader(solverApiKey),
       signal: AbortSignal.timeout(10000),
     });
     // Throws RateLimitError on 429; anything else falls through.

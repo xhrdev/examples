@@ -25,6 +25,7 @@
 import { fetch, ProxyAgent } from 'undici';
 
 import { PROFILE, PROFILE_ID, SEC_CH_UA } from '#src/profile.js';
+import { log } from '#src/util.js';
 import { solverBaseUrl } from '#src/solver-url.js';
 import { pinSession } from '#src/proxy.js';
 import { ACCESS_DENIED_EXIT_CODE } from '#src/access-denied.js';
@@ -39,9 +40,6 @@ const url = 'https://business.comcast.com/account/';
 const solverHost = process.env['host'];
 const configuredProxy = process.env['proxy'];
 const solverApiKey = process.env['api_key'];
-
-const log = (msg: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
 
 if (!solverHost) throw new Error('set host= in .env');
 if (!configuredProxy) {

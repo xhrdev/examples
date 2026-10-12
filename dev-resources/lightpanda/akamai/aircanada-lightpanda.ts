@@ -57,7 +57,7 @@
  * rather than caused by it. This file checks the server-rendered `<title>`
  * instead, which does not depend on either.
  */
-import { PROFILE, SEC_CH_UA } from '#src/profile.js';
+import { log, sleep } from '#src/util.js';
 import { attach } from '#src/akamai/sbsd/solver.js';
 import { outerHtml, start } from '#src/lightpanda.js';
 import {
@@ -74,24 +74,9 @@ const solverApiKey = process.env['api_key'];
 
 if (!solverHost) throw new Error('set host= in .env');
 
-const log = (msg: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
-
-const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-/** The identity the SBSD solver was told about — see solver.ts's PROFILE_ID. */
-const IDENTITY = {
-  'sec-ch-ua': SEC_CH_UA,
-  'sec-ch-ua-mobile': '?0',
-  'sec-ch-ua-platform': '"macOS"',
-  'user-agent': PROFILE.userAgent,
-};
-
 // proxy= is optional here, same as every other Lightpanda example — with
 // none set, start() and the browser both just go out from this machine.
 const session = await start({
-  identity: IDENTITY,
   log,
   ...(proxy ? { proxy } : {}),
 });

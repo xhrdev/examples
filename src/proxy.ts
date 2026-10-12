@@ -20,6 +20,8 @@
  */
 import { randomInt } from 'node:crypto';
 
+import { hasScheme } from '#src/util.js';
+
 /**
  * Session tokens, as the major providers spell them:
  *
@@ -42,7 +44,10 @@ const PROVIDERS = [
 ] as const;
 
 const parse = (raw: string): URL =>
-  new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `http://${raw}`);
+  new URL(hasScheme(raw) ? raw : `http://${raw}`);
+
+/** The proxy as a full URL, scheme defaulted to `http://`, for a solver API. */
+export const proxyUrl = (raw: string): string => parse(raw).href;
 
 /** Re-serialise without the trailing path `href` would add. */
 const serialise = (url: URL): string => {

@@ -34,13 +34,16 @@ import {
   submissionHeaders,
 } from '#src/datadome/http-utils.js';
 import { pinSession } from '#src/proxy.js';
-import { callTool, connect, MCP_URL } from '#src/mcp/client.js';
+import {
+  callTool,
+  connect,
+  MCP_URL,
+  ownSolverHeaders,
+} from '#src/mcp/client.js';
 import { log, readFlag } from '#src/util.js';
 
 const targetUrl = readFlag('--url') ?? 'https://www.grainger.com/';
 const configuredProxy = process.env['proxy'];
-const apiKey = process.env['api_key'];
-const solverHost = process.env['host'];
 
 const proxy = configuredProxy ? pinSession(configuredProxy).url : undefined;
 const via = proxy ? { dispatcher: new ProxyAgent(proxy) } : {};
@@ -50,10 +53,7 @@ log(proxy ? 'egress: PROXY (session pinned)' : 'egress: DIRECT (this machine)');
 
 // Bring your own key and solver when .env has them; otherwise this runs
 // anonymously against the trial box, which is what a new user gets.
-const client = await connect({
-  ...(apiKey ? { 'x-api-key': apiKey } : {}),
-  ...(solverHost ? { 'x-solver-host': solverHost } : {}),
-});
+const client = await connect(ownSolverHeaders());
 
 // 1. Trip the challenge.
 log(`GET ${targetUrl}`);

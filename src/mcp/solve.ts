@@ -57,7 +57,12 @@ import { fetch, ProxyAgent } from 'undici';
 
 import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
 import { navigationHeaders } from '#src/datadome/http-utils.js';
-import { callTool, connect, MCP_URL } from '#src/mcp/client.js';
+import {
+  callTool,
+  connect,
+  MCP_URL,
+  ownSolverHeaders,
+} from '#src/mcp/client.js';
 import { PROFILE } from '#src/profile.js';
 import { pinSession } from '#src/proxy.js';
 import { log, readFlag } from '#src/util.js';
@@ -81,8 +86,6 @@ if (!targetUrl) {
 }
 const origin = new URL(targetUrl).origin;
 const configuredProxy = process.env['proxy'];
-const apiKey = process.env['api_key'];
-const solverHost = process.env['host'];
 
 const proxy = configuredProxy ? pinSession(configuredProxy).url : undefined;
 const via = proxy ? { dispatcher: new ProxyAgent(proxy) } : {};
@@ -108,10 +111,7 @@ const cookieHeader = (): string =>
 log(`MCP ${MCP_URL}`);
 log(proxy ? 'egress: PROXY (session pinned)' : 'egress: DIRECT (this machine)');
 
-const client = await connect({
-  ...(apiKey ? { 'x-api-key': apiKey } : {}),
-  ...(solverHost ? { 'x-solver-host': solverHost } : {}),
-});
+const client = await connect(ownSolverHeaders());
 
 // 1. Get the document. This is the request the whole thing is bound to.
 log(`GET ${targetUrl}`);

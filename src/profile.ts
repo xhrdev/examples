@@ -15,10 +15,11 @@
  * it, so the Akamai scripts carried their own literals and drifted a full two
  * major versions behind. Everything now derives from here:
  *
- *   src/datadome/profile.ts      re-exports it with the DataDome endpoints
+ *   src/datadome/profile.ts      the profile sent with every `/dd/solve`
  *   src/akamai/sensor/solver.ts  the telemetry sent over the session socket
- *   src/akamai/sbsd/solver.ts    the profile overrides sent with the ledger
- *   src/akamai/identity.ts       the CDP overrides installed on the real browser
+ *   src/akamai/sbsd/solver.ts    the profile id sent with the ledger
+ *   src/identity.ts              the CDP overrides installed on the real browser
+ *   src/mitm.ts                  the headers the proxy claims upstream
  *   xhrdev/mcp                   what the hosted MCP tools declare on every solve
  *   py-src/profile.json          generated from here; see `npm run emit:profile`
  *
@@ -98,6 +99,8 @@ export const SEC_CH_UA: string = PROFILE.brands
   .map(({ brand, version }) => `"${brand}";v="${version}"`)
   .join(', ');
 
+type Brand = { brand: string; version: string };
+
 /**
  * The full-version brand list for CDP's `userAgentMetadata`.
  *
@@ -105,10 +108,65 @@ export const SEC_CH_UA: string = PROFILE.brands
  * The GREASE entry keeps its own version padded to four parts, which is what
  * branded Chrome sends.
  */
-export const FULL_VERSION_LIST: { brand: string; version: string }[] =
-  PROFILE.brands.map(({ brand, version }) => ({
+export const FULL_VERSION_LIST: Brand[] = PROFILE.brands.map(
+  ({ brand, version }) => ({
     brand,
     version: brand.includes('Brand')
       ? `${version}.0.0.0`
       : PROFILE.chromeFullVersion,
-  }));
+  })
+);
+
+/**
+ * The headers that name the browser, for anything that puts requests on the
+ * wire without a browser to write them: the MITM proxy and the HTTP clients.
+ * In the order Chrome sends them.
+ */
+export const IDENTITY_HEADERS: Readonly<Record<string, string>> = {
+  'sec-ch-ua': SEC_CH_UA,
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"macOS"',
+  'user-agent': PROFILE.userAgent,
+};
+
+/**
+ * `Emulation.setUserAgentOverride` params that make a real Chrome present as
+ * PROFILE, whatever build is actually running. Both vendors install it on the
+ * page and DataDome also on every challenge iframe, so a browser one major
+ * version ahead of the profile still matches the telemetry the solver sends.
+ */
+export const USER_AGENT_OVERRIDE: {
+  acceptLanguage: string;
+  platform: string;
+  userAgent: string;
+  userAgentMetadata: {
+    architecture: string;
+    bitness: string;
+    brands: Brand[];
+    formFactors: string[];
+    fullVersion: string;
+    fullVersionList: Brand[];
+    mobile: boolean;
+    model: string;
+    platform: string;
+    platformVersion: string;
+    wow64: boolean;
+  };
+} = {
+  acceptLanguage: PROFILE.languages,
+  platform: 'MacIntel',
+  userAgent: PROFILE.userAgent,
+  userAgentMetadata: {
+    architecture: 'arm',
+    bitness: '64',
+    brands: PROFILE.brands.map(({ brand, version }) => ({ brand, version })),
+    formFactors: ['Desktop'],
+    fullVersion: PROFILE.chromeFullVersion,
+    fullVersionList: FULL_VERSION_LIST,
+    mobile: false,
+    model: '',
+    platform: 'macOS',
+    platformVersion: PROFILE.platformVersion,
+    wow64: false,
+  },
+};

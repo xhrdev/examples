@@ -27,7 +27,12 @@
  * flip from `"none"` to `"datadome"`, and `status` flip from `403` to `200`
  * without this script sending a second request of its own.
  */
-import { callTool, connect, MCP_URL } from '#src/mcp/client.js';
+import {
+  callTool,
+  connect,
+  MCP_URL,
+  ownSolverHeaders,
+} from '#src/mcp/client.js';
 import { log, readFlag } from '#src/util.js';
 
 type WebFetchResult = {
@@ -45,18 +50,13 @@ type WebFetchResult = {
 };
 
 const targetUrl = readFlag('--url') ?? 'https://example.com/';
-const apiKey = process.env['api_key'];
-const solverHost = process.env['host'];
 
 log(`MCP ${MCP_URL}`);
 log(`web_fetch ${targetUrl}`);
 
 // Bring your own key and solver when .env has them; otherwise this runs
 // anonymously against the trial box, which is what a new user gets.
-const client = await connect({
-  ...(apiKey ? { 'x-api-key': apiKey } : {}),
-  ...(solverHost ? { 'x-solver-host': solverHost } : {}),
-});
+const client = await connect(ownSolverHeaders());
 
 const started = Date.now();
 const result = (await callTool(client, 'web_fetch', {

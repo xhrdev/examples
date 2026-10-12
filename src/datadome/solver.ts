@@ -60,8 +60,8 @@ import type {
 import {
   GEO_HOST,
   GEO_ORIGIN,
-  PROFILE,
-  PROFILE_ID,
+  JS_PROFILE,
+  SOLVER_PROFILE,
 } from '#src/datadome/profile.js';
 import { BannedError } from '#src/datadome/ban.js';
 import {
@@ -77,8 +77,17 @@ import {
   extractExternalScriptUrls,
 } from '#src/datadome/external-scripts.js';
 import { collectStylesheetAssets } from '#src/datadome/stylesheets.js';
+import { pinWindowToProfile } from '#src/identity.js';
+import {
+  FULL_VERSION_LIST,
+  PROFILE,
+  SEC_CH_UA,
+  USER_AGENT_OVERRIDE,
+} from '#src/profile.js';
+import { proxyUrl } from '#src/proxy.js';
 import { checkRateLimit } from '#src/rate-limit.js';
-import { log } from '#src/util.js';
+import { apiKeyHeader } from '#src/solver-url.js';
+import { log, sleep } from '#src/util.js';
 
 type CaptchaRelayContext = {
   headers: Readonly<Record<string, string | undefined>>;
@@ -127,6 +136,7 @@ type RawField = {
 };
 
 const CAPTCHA_SENSOR_FIELDS = new Set(['ddCaptchaEncodedPayload', 'plv3']);
+const INTERSTITIAL_SENSOR_FIELDS = new Set(['payload', 'plv3']);
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=UTF-8';
 const CAPTCHA_CHECK_URL = `${GEO_ORIGIN}/captcha/check`;
 const INTERSTITIAL_URL = `${GEO_ORIGIN}/interstitial/`;
@@ -224,23 +234,8 @@ type SubmitResult = {
   expectedNavigationUrl?: string;
 };
 
-type WindowGeometry = {
-  availHeight: number;
-  availLeft: number;
-  availTop: number;
-  availWidth: number;
-  colorDepth: number;
-  devicePixelRatio: number;
-  height: number;
-  innerHeight: number;
-  innerWidth: number;
-  outerHeight: number;
-  outerWidth: number;
-  pixelDepth: number;
-  screenX: number;
-  screenY: number;
-  width: number;
-};
+/** The window and screen readings, field for field as PROFILE.screen. */
+type WindowGeometry = Record<keyof typeof PROFILE.screen, number>;
 
 function appendChallengeType(
   sequence: ChallengeSequence,
@@ -257,10 +252,10 @@ function appendChallengeType(
 
 /** Replace only the two sensor fields in Chrome's native captcha XHR URL. */
 function buildCaptchaRelayUrl(context: CaptchaRelayContext): string {
-  if (requestHeader(context.headers, 'referer') !== context.solved.referer) {
+  if (header(context.headers, 'referer') !== context.solved.referer) {
     throw new Error('The native and sandbox captcha Referer did not match');
   }
-  if (requestHeader(context.headers, 'content-type') !== FORM_CONTENT_TYPE) {
+  if (header(context.headers, 'content-type') !== FORM_CONTENT_TYPE) {
     throw new Error(
       'The native captcha carrier used an unexpected Content-Type'
     );
@@ -306,8 +301,18 @@ function buildInterstitialRelayBody(
   nativeBody: string,
   solvedBody: string
 ): string {
-  const nativeFields = parseRawSubmitForm(nativeBody);
-  const solvedFields = parseRawSubmitForm(solvedBody);
+  const nativeFields = parseRawFields(
+    nativeBody,
+    INTERSTITIAL_SENSOR_FIELDS,
+    'native interstitial form',
+    true
+  );
+  const solvedFields = parseRawFields(
+    solvedBody,
+    INTERSTITIAL_SENSOR_FIELDS,
+    'sandbox interstitial form',
+    true
+  );
   const nativeByName = new Map(
     nativeFields.map((field) => [field.decodedName, field])
   );
@@ -322,7 +327,7 @@ function buildInterstitialRelayBody(
   }
   return nativeFields
     .map((field) =>
-      field.decodedName === 'payload' || field.decodedName === 'plv3'
+      INTERSTITIAL_SENSOR_FIELDS.has(field.decodedName)
         ? solvedByName.get(field.decodedName)?.rawSegment
         : field.rawSegment
     )
@@ -384,56 +389,12 @@ function parseCaptchaCarrierUrl(
     throw new Error(`The ${source} captcha carrier used an unexpected URL`);
   }
 
-  const fields: RawField[] = [];
-  const names = new Set<string>();
-  for (const rawSegment of rawQuery.split('&')) {
-    const separator = rawSegment.indexOf('=');
-    if (separator <= 0) {
-      throw new Error(`The ${source} captcha carrier query was malformed`);
-    }
-    const rawName = rawSegment.slice(0, separator);
-    const rawValue = rawSegment.slice(separator + 1);
-    let decodedName: string;
-    let decodedValue: string;
-    try {
-      decodedName = decodeURIComponent(rawName.split('+').join(' '));
-      decodedValue = decodeURIComponent(rawValue.split('+').join(' '));
-    } catch {
-      throw new Error(`The ${source} captcha carrier query was malformed`);
-    }
-    if (CAPTCHA_SENSOR_FIELDS.has(decodedName) && rawName !== decodedName) {
-      throw new Error(
-        `The ${source} captcha sensor field name was percent encoded`
-      );
-    }
-    if (names.has(decodedName)) {
-      throw new Error(`The ${source} captcha carrier duplicated a field`);
-    }
-    if (
-      source === 'sandbox' &&
-      CAPTCHA_SENSOR_FIELDS.has(decodedName) &&
-      rawValue.length === 0
-    ) {
-      throw new Error(
-        `The ${source} captcha carrier contained an empty sensor field`
-      );
-    }
-    names.add(decodedName);
-    fields.push({
-      decodedName,
-      decodedValue,
-      rawName,
-      rawSegment,
-      rawValue,
-    });
-  }
-  if (source === 'sandbox') {
-    for (const sensorName of CAPTCHA_SENSOR_FIELDS) {
-      if (!names.has(sensorName)) {
-        throw new Error(`The ${source} captcha carrier omitted a sensor field`);
-      }
-    }
-  }
+  const fields = parseRawFields(
+    rawQuery,
+    CAPTCHA_SENSOR_FIELDS,
+    `${source} captcha carrier`,
+    source === 'sandbox'
+  );
   return { baseUrl, fields };
 }
 
@@ -445,16 +406,7 @@ function parseChallenge(input: string): DataDomeChallenge | null {
   } catch {
     return null;
   }
-  if (
-    url.protocol !== 'https:' ||
-    url.hostname !== GEO_HOST ||
-    url.port !== '' ||
-    url.username !== '' ||
-    url.password !== '' ||
-    url.hash !== ''
-  ) {
-    return null;
-  }
+  if (!isCanonicalGeoUrl(url)) return null;
 
   const rt =
     url.pathname === '/captcha/'
@@ -489,14 +441,24 @@ function parseChallenge(input: string): DataDomeChallenge | null {
   };
 }
 
-function parseRawSubmitForm(body: string): RawField[] {
-  if (body.length === 0) throw new Error('A DataDome submit form was empty');
+/**
+ * Split a form-encoded string into fields, keeping every raw segment intact so
+ * a relay can swap the sensor fields and leave the rest byte-for-byte as
+ * Chrome wrote it. Strict on purpose: a duplicated or re-encoded field means
+ * the protocol moved, and a silently wrong payload is much harder to debug.
+ */
+function parseRawFields(
+  raw: string,
+  sensors: ReadonlySet<string>,
+  what: string,
+  requireSensors: boolean
+): RawField[] {
+  if (raw.length === 0) throw new Error(`The ${what} was empty`);
   const fields: RawField[] = [];
   const names = new Set<string>();
-  const sensors = new Set(['payload', 'plv3']);
-  for (const rawSegment of body.split('&')) {
+  for (const rawSegment of raw.split('&')) {
     const separator = rawSegment.indexOf('=');
-    if (separator <= 0) throw new Error('A DataDome submit form was malformed');
+    if (separator <= 0) throw new Error(`The ${what} was malformed`);
     const rawName = rawSegment.slice(0, separator);
     const rawValue = rawSegment.slice(separator + 1);
     let decodedName: string;
@@ -505,42 +467,24 @@ function parseRawSubmitForm(body: string): RawField[] {
       decodedName = decodeURIComponent(rawName.split('+').join(' '));
       decodedValue = decodeURIComponent(rawValue.split('+').join(' '));
     } catch {
-      throw new Error('A DataDome submit field was malformed');
+      throw new Error(`The ${what} was malformed`);
     }
     if (sensors.has(decodedName) && rawName !== decodedName) {
-      throw new Error('A DataDome sensor field name was percent encoded');
+      throw new Error(`The ${what} percent encoded a sensor field name`);
     }
     if (names.has(decodedName)) {
-      throw new Error('A DataDome submit field name was duplicated');
+      throw new Error(`The ${what} duplicated a field`);
     }
-    if (sensors.has(rawName) && rawValue.length === 0) {
-      throw new Error('A DataDome sensor field was empty');
+    if (requireSensors && sensors.has(decodedName) && rawValue.length === 0) {
+      throw new Error(`The ${what} contained an empty sensor field`);
     }
     names.add(decodedName);
-    fields.push({
-      decodedName,
-      decodedValue,
-      rawName,
-      rawSegment,
-      rawValue,
-    });
+    fields.push({ decodedName, decodedValue, rawName, rawSegment, rawValue });
   }
-  for (const sensor of sensors) {
-    if (!names.has(sensor))
-      throw new Error('A DataDome sensor field was missing');
+  if (requireSensors && [...sensors].some((sensor) => !names.has(sensor))) {
+    throw new Error(`The ${what} omitted a sensor field`);
   }
   return fields;
-}
-
-function requestHeader(
-  headers: Readonly<Record<string, string | undefined>>,
-  name: string
-): string | undefined {
-  const expected = name.toLowerCase();
-  for (const [headerName, value] of Object.entries(headers)) {
-    if (headerName.toLowerCase() === expected) return value;
-  }
-  return undefined;
 }
 
 /** Select the cookie identity appropriate to the live challenge document. */
@@ -557,15 +501,7 @@ function solverCookieForChallengeDocument(
   } catch {
     throw new Error('The captcha document URL was malformed');
   }
-  if (
-    url.protocol !== 'https:' ||
-    url.hostname !== GEO_HOST ||
-    url.port !== '' ||
-    url.username !== '' ||
-    url.password !== '' ||
-    url.pathname !== '/captcha/' ||
-    url.hash !== ''
-  ) {
+  if (!isCanonicalGeoUrl(url) || url.pathname !== '/captcha/') {
     throw new Error('The captcha document did not use the canonical URL');
   }
 
@@ -643,31 +579,6 @@ const CHALLENGE_ROUTE = 'https://geo.captcha-delivery.com/**';
 const DD_TAGS_ROUTE = '*://dd.*/**/tags.js*';
 const QUIET_WINDOW_MS = 5000;
 const TIMEOUT = 120000;
-
-const UA_OVERRIDE = {
-  acceptLanguage: 'en-US,en',
-  platform: 'MacIntel',
-  userAgent: PROFILE.userAgent,
-  userAgentMetadata: {
-    architecture: 'arm',
-    bitness: '64',
-    brands: PROFILE.brands.map(({ brand, version }) => ({ brand, version })),
-    formFactors: ['Desktop'],
-    fullVersion: PROFILE.chromeFullVersion,
-    fullVersionList: PROFILE.brands.map(({ brand, version }) => ({
-      brand,
-      version:
-        brand === 'Google Chrome' || brand === 'Chromium'
-          ? PROFILE.chromeFullVersion
-          : `${version}.0.0.0`,
-    })),
-    mobile: false,
-    model: '',
-    platform: 'macOS',
-    platformVersion: PROFILE.platformVersion,
-    wow64: false,
-  },
-};
 
 /** Solve a DataDome interstitial, captcha, or interstitial-to-captcha flow. */
 export async function solve(
@@ -1090,7 +1001,6 @@ export async function solve(
   page.on('response', onScriptResponse);
   page.on('requestfailed', onRequestFailed);
 
-  let browserSession: CDPSession | undefined;
   let closeIdentityBridge: (() => void) | undefined;
   let pageSession: CDPSession | undefined;
   let routeInstalled = false;
@@ -1100,14 +1010,20 @@ export async function solve(
     routeInstalled = true;
     await context.route(DD_TAGS_ROUTE, blockDdTags);
     tagsRouteInstalled = true;
-    browserSession = await browser.newBrowserCDPSession();
     pageSession = await context.newCDPSession(page);
-    await pageSession.send('Emulation.setUserAgentOverride', UA_OVERRIDE);
+    await pageSession.send(
+      'Emulation.setUserAgentOverride',
+      USER_AGENT_OVERRIDE
+    );
     const { targetInfo } = await pageSession.send('Target.getTargetInfo');
     if (!targetInfo.browserContextId) {
       throw new Error('Could not identify the Chrome browser context');
     }
-    await setWindowGeometry(browserSession, pageSession, targetInfo.targetId);
+    await pinWindowToProfile(pageSession);
+    await pageSession.send('Emulation.setVisibleSize', {
+      height: PROFILE.screen.innerHeight,
+      width: PROFILE.screen.innerWidth,
+    });
     closeIdentityBridge = await installIdentityBridge(
       pageSession,
       targetInfo.browserContextId,
@@ -1200,7 +1116,7 @@ export async function solve(
     await raceFatal(initialNavigation, fatal.promise);
     const roundsBeforeQuietWindow = sequence.length;
     await waitFor(
-      delay(QUIET_WINDOW_MS),
+      sleep(QUIET_WINDOW_MS),
       'acceptance window',
       QUIET_WINDOW_MS + 1000,
       fatal.promise
@@ -1239,7 +1155,6 @@ export async function solve(
     }
     closeIdentityBridge?.();
     if (pageSession) await pageSession.detach().catch(() => undefined);
-    if (browserSession) await browserSession.detach().catch(() => undefined);
   }
 }
 
@@ -1252,9 +1167,6 @@ async function assertInterstitialCarrier(
   solved: InterstitialSolverResult
 ): Promise<void> {
   const headers = await request.allHeaders();
-  const expectedBrands = PROFILE.brands
-    .map(({ brand, version }) => `"${brand}";v="${version}"`)
-    .join(', ');
   // Named individually for the same reason `sampleChallengeFrame` names its
   // fields: "did not match" alone covers ten conditions, and which one tripped
   // decides whether the fix is in the launch, the override or the solver.
@@ -1266,7 +1178,7 @@ async function assertInterstitialCarrier(
     ['origin', header(headers, 'origin'), solved.origin],
     ['referer', header(headers, 'referer'), solved.referer],
     ['content-type', header(headers, 'content-type'), FORM_CONTENT_TYPE],
-    ['sec-ch-ua', header(headers, 'sec-ch-ua'), expectedBrands],
+    ['sec-ch-ua', header(headers, 'sec-ch-ua'), SEC_CH_UA],
     ['sec-ch-ua-mobile', header(headers, 'sec-ch-ua-mobile'), '?0'],
     ['sec-ch-ua-platform', header(headers, 'sec-ch-ua-platform'), '"macOS"'],
   ];
@@ -1362,11 +1274,7 @@ async function callSolver(
           url: document.url,
         },
         js_profile: {
-          brands: PROFILE.brands,
-          chromeFullVersion: PROFILE.chromeFullVersion,
-          chromeVersion: PROFILE.chromeVersion,
-          deviceMemory: PROFILE.deviceMemory,
-          hardwareConcurrency: PROFILE.hardwareConcurrency,
+          ...JS_PROFILE,
           languages: document.surfaces.languages.join(',') || PROFILE.languages,
           ...(connection
             ? {
@@ -1376,31 +1284,17 @@ async function callSolver(
                 networkSaveData: connection.saveData,
               }
             : {}),
-          os: PROFILE.os,
           perf: { nextHopProtocol: document.surfaces.nextHopProtocol },
-          platformVersion: PROFILE.platformVersion,
           screen: document.surfaces.screen,
-          timezone: PROFILE.timezone,
-          timezoneOffsetMinutes: PROFILE.timezoneOffsetMinutes,
-          vendor: PROFILE.vendor,
         },
-        profile: {
-          chromeFullVersion: PROFILE.chromeFullVersion,
-          httpHeaderTemplates: { form: [], iframe: [], image: [], xhr: [] },
-          id: PROFILE_ID,
-          os: PROFILE.os,
-          timezone: PROFILE.timezone,
-          timezoneOffsetMinutes: PROFILE.timezoneOffsetMinutes,
-          tlsClientHello: '',
-          userAgent: PROFILE.userAgent,
-        },
-        ...(proxy ? { proxy: normalizeProxy(proxy) } : {}),
+        profile: SOLVER_PROFILE,
+        ...(proxy ? { proxy: proxyUrl(proxy) } : {}),
         timeout,
         url: challenge.pageUrl,
       }),
       headers: {
         'content-type': 'application/json',
-        ...(solverApiKey ? { 'x-api-key': solverApiKey } : {}),
+        ...apiKeyHeader(solverApiKey),
       },
       method: 'POST',
     },
@@ -1475,7 +1369,7 @@ async function checkHealth(
 ): Promise<void> {
   await fetchJson(
     new URL('/hc', baseUrl),
-    solverApiKey ? { headers: { 'x-api-key': solverApiKey } } : undefined,
+    { headers: apiKeyHeader(solverApiKey) },
     timeout
   );
 }
@@ -1523,10 +1417,6 @@ function deferred<T>(): Deferred<T> {
       return settled;
     },
   };
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function fetchJson(
@@ -1635,7 +1525,11 @@ async function installIdentityBridge(
     };
     channels.set(channel.id, channel);
     void (async () => {
-      await send(channel, 'Emulation.setUserAgentOverride', UA_OVERRIDE);
+      await send(
+        channel,
+        'Emulation.setUserAgentOverride',
+        USER_AGENT_OVERRIDE
+      );
       await send(channel, 'Target.setAutoAttach', autoAttachParams());
       await send(channel, 'Runtime.runIfWaitingForDebugger');
     })().catch(fail);
@@ -1678,6 +1572,18 @@ async function installIdentityBridge(
     }
     pending.clear();
   };
+}
+
+/** On DataDome's challenge host, with no port, credentials or fragment. */
+function isCanonicalGeoUrl(url: URL): boolean {
+  return (
+    url.protocol === 'https:' &&
+    url.hostname === GEO_HOST &&
+    url.port === '' &&
+    url.username === '' &&
+    url.password === '' &&
+    url.hash === ''
+  );
 }
 
 function isCaptchaCheck(method: string, value: string): boolean {
@@ -1743,13 +1649,6 @@ async function measureCaptchaLayout(
   } catch {
     return undefined;
   }
-}
-
-function normalizeProxy(raw: string): string {
-  return httpUrl(
-    /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `http://${raw}`,
-    'proxy'
-  ).href;
 }
 
 async function raceFatal<T>(
@@ -1837,7 +1736,7 @@ async function sampleChallengeFrame(
   ]);
   const expectedIdentity = {
     brands: PROFILE.brands,
-    fullVersionList: UA_OVERRIDE.userAgentMetadata.fullVersionList,
+    fullVersionList: FULL_VERSION_LIST,
     platform: 'macOS',
     userAgent: PROFILE.userAgent,
     webdriver: false,
@@ -1894,29 +1793,6 @@ function selectTargetCookie(
         (expectedValue === undefined || cookie.value === expectedValue)
     )
     .sort((left, right) => right.path.length - left.path.length)[0];
-}
-
-async function setWindowGeometry(
-  browserSession: CDPSession,
-  pageSession: CDPSession,
-  targetId: string
-): Promise<void> {
-  const { windowId } = await browserSession.send('Browser.getWindowForTarget', {
-    targetId,
-  });
-  await browserSession.send('Browser.setWindowBounds', {
-    bounds: {
-      height: PROFILE.screen.outerHeight,
-      left: PROFILE.screen.screenX,
-      top: PROFILE.screen.screenY,
-      width: PROFILE.screen.outerWidth,
-    },
-    windowId,
-  });
-  await pageSession.send('Emulation.setVisibleSize', {
-    height: PROFILE.screen.innerHeight,
-    width: PROFILE.screen.innerWidth,
-  });
 }
 
 function solverResponseErrorDetail(text: string): string {
@@ -2033,7 +1909,7 @@ async function waitForCookieRotation(
         cookie.value !== challenge.cookie.value
     );
     if (rotated) return rotated;
-    await raceFatal(delay(50), fatal);
+    await raceFatal(sleep(50), fatal);
   }
   throw new Error('The target datadome cookie did not rotate');
 }

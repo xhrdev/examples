@@ -22,13 +22,11 @@
  *      supplies the identity — Lightpanda's user agent cannot be changed from
  *      inside the browser, and `context.newCDPSession()`, which is how
  *      `comcast.ts` overrides it, crashes Playwright here.
- *   2. **The identity must be the one the Akamai solver models**
- *      (`chrome-154-macos`). Telemetry under headers that name a different
- *      Chrome is scored as a mismatch, and `_abck` sits at `~-1~` for as many
- *      rounds as you care to give it. Both solvers now sit on 154, so the
- *      proxy's DataDome default happens to agree — pin it anyway, because
- *      the two registries are bumped independently and the agreement is a
- *      coincidence of this moment, not a guarantee.
+ *   2. **The identity must be the one the Akamai solver models**. Telemetry
+ *      under headers that name a different Chrome is scored as a mismatch,
+ *      and `_abck` sits at `~-1~` for as many rounds as you care to give it.
+ *      The proxy's default is `IDENTITY_HEADERS` from `src/profile.ts`, the
+ *      same profile the solver is told about, so it agrees by construction.
  *   3. **`fetchResponse`**, because Playwright's `route.fetch` never returns
  *      against Lightpanda: it runs in Playwright's request context, which
  *      syncs cookies with the browser, and once that stops answering every
@@ -47,7 +45,7 @@
  * (one 1MB analytics bundle silently drops the connection), and the solver's
  * 30s/15s navigation defaults, which a page this heavy overruns.
  */
-import { PROFILE, SEC_CH_UA } from '#src/profile.js';
+import { log } from '#src/util.js';
 import { solve } from '#src/akamai/sensor/solver.js';
 import { solverWsUrl } from '#src/solver-url.js';
 import { outerHtml, start } from '#src/lightpanda.js';
@@ -67,26 +65,7 @@ if (!solverHost) throw new Error('set host= in .env');
 const solverUrl = solverWsUrl(solverHost, '/akamai/session');
 const timeout = Number(process.env['AKAMAI_TIMEOUT_MS'] ?? 120_000);
 
-const log = (msg: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
-
-/**
- * What the MITM proxy claims upstream. This has to be the browser the *Akamai*
- * solver models — `profileId: 'chrome-154-macos'`, the same identity
- * `comcast.ts` installs with `Emulation.setUserAgentOverride`. Let the proxy
- * fall back to its own default and you are trusting two registries to stay in
- * step; when they drift, the telemetry names one Chrome while the headers name
- * another, and `_abck` sits at `~-1~` however many rounds you give it.
- */
-const IDENTITY = {
-  'sec-ch-ua': SEC_CH_UA,
-  'sec-ch-ua-mobile': '?0',
-  'sec-ch-ua-platform': '"macOS"',
-  'user-agent': PROFILE.userAgent,
-};
-
 const session = await start({
-  identity: IDENTITY,
   log,
   ...(proxy ? { proxy } : {}),
 });
@@ -150,7 +129,7 @@ try {
     // from here and have nothing to do with each other.
     log(
       'If the rounds ran but never reached ~0~, check the `cookies=[...]` ' +
-        'line for `_abck` and the identity above against the solver profile. ' +
+        'line for `_abck` and the proxy identity headers against the solver profile. ' +
         'If no session opened at all, the sensor script was never captured — ' +
         'look for a fetch that did not return.'
     );

@@ -87,7 +87,7 @@ import { promisify } from 'node:util';
 
 import { Agent, ProxyAgent, fetch as undiciFetch } from 'undici';
 
-import { PROFILE } from '#src/datadome/profile.js';
+import { IDENTITY_HEADERS } from '#src/profile.js';
 import {
   type HeaderPairs,
   type Impersonator,
@@ -195,21 +195,6 @@ const HOP_BY_HOP = new Set([
   'transfer-encoding',
   'upgrade',
 ]);
-
-/**
- * The identity we claim upstream, whatever the browser had to say about it.
- * Defaults to the DataDome profile; the Akamai example overrides it, because
- * that solver models a different Chrome and the two have to agree — the
- * telemetry claims one browser and the headers must not claim another.
- */
-const DEFAULT_IDENTITY: Record<string, string> = {
-  'sec-ch-ua': PROFILE.brands
-    .map(({ brand, version }) => `"${brand}";v="${version}"`)
-    .join(', '),
-  'sec-ch-ua-mobile': '?0',
-  'sec-ch-ua-platform': '"macOS"',
-  'user-agent': PROFILE.userAgent,
-};
 
 /**
  * Chrome's header order, which is part of the fingerprint. Anything the
@@ -357,8 +342,9 @@ export type MitmOptions = {
    */
   debug?: boolean;
   /**
-   * The `user-agent` and `sec-ch-ua*` headers to claim upstream. Must match
-   * whatever profile the solver you are using was told about.
+   * The `user-agent` and `sec-ch-ua*` headers to claim upstream. Defaults
+   * to `IDENTITY_HEADERS`, the profile every solver here is told about; only
+   * override it to claim a browser the solver was told about some other way.
    */
   identity?: Record<string, string>;
   // eslint-disable-next-line no-unused-vars -- function-type parameter
@@ -511,7 +497,7 @@ const viaUndici = async (
 export const start = async (options: MitmOptions = {}): Promise<Mitm> => {
   const {
     debug = false,
-    identity = DEFAULT_IDENTITY,
+    identity = IDENTITY_HEADERS,
     log = console.log,
     onResponse,
     proxy,

@@ -6,9 +6,11 @@ import { fileURLToPath } from 'node:url';
 
 import {
   FULL_VERSION_LIST,
+  IDENTITY_HEADERS,
   PROFILE,
   PROFILE_ID,
   SEC_CH_UA,
+  USER_AGENT_OVERRIDE,
 } from '#src/profile.js';
 
 const emitted: Record<string, unknown> = JSON.parse(
@@ -72,4 +74,22 @@ test('the declared window fits inside the declared screen', () => {
   assert.ok(screen.outerHeight <= screen.height);
   assert.ok(screen.availHeight <= screen.height);
   assert.ok(screen.innerWidth <= screen.width);
+});
+
+/**
+ * The CDP override and the wire headers are the profile restated for two
+ * other audiences. Both used to be written out per vendor, and a copy that
+ * kept the old brands would present one Chrome while the solver modelled
+ * another.
+ */
+test('the CDP override and the identity headers restate the profile', () => {
+  const { userAgentMetadata } = USER_AGENT_OVERRIDE;
+  assert.equal(USER_AGENT_OVERRIDE.userAgent, PROFILE.userAgent);
+  assert.equal(USER_AGENT_OVERRIDE.acceptLanguage, PROFILE.languages);
+  assert.deepEqual(userAgentMetadata.brands, PROFILE.brands);
+  assert.deepEqual(userAgentMetadata.fullVersionList, FULL_VERSION_LIST);
+  assert.equal(userAgentMetadata.fullVersion, PROFILE.chromeFullVersion);
+  assert.equal(userAgentMetadata.platformVersion, PROFILE.platformVersion);
+  assert.equal(IDENTITY_HEADERS['sec-ch-ua'], SEC_CH_UA);
+  assert.equal(IDENTITY_HEADERS['user-agent'], PROFILE.userAgent);
 });

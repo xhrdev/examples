@@ -50,7 +50,6 @@
  *   solveAbck()       the WebSocket lane, relayed through the page's own XHR
  */
 import type {
-  APIResponse,
   BrowserContext,
   CDPSession,
   Frame,
@@ -60,23 +59,30 @@ import type {
 } from 'playwright-core';
 import { WebSocket } from 'undici';
 
+import {
+  abckStatus,
+  AKAMAI_PIXEL_PATH,
+  cookieJar,
+  type Fetched,
+  fetchForRoute,
+  type FetchResponse,
+  fulfillDecoded,
+  sendFromFrame,
+} from '#src/akamai/route-fetch.js';
 import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
 import { applySetCookie } from '#src/akamai/set-cookie.js';
 import { PROFILE_ID } from '#src/profile.js';
 import { checkRateLimit, RateLimitError } from '#src/rate-limit.js';
-import { solverBaseUrl, solverWsUrl } from '#src/solver-url.js';
+import { apiKeyHeader, solverBaseUrl, solverWsUrl } from '#src/solver-url.js';
+import { log } from '#src/util.js';
 
-/**
- * Akamai's own URL convention for its third channel.
- *
- * `/akam/<n>/<hex>` serves a 26 KB script that POSTs a 23-field device
- * signature — a canvas hash, the window geometry, the timezone, a
- * `navigator` dump including `webdriver`, and an automation-scanner verdict —
- * to `/akam/<n>/pixel_<hex>`. It is under the sensor's size floor and carries
- * no `bmak`, so no content test finds it. This is a product convention rather
- * than a per-build stem: the hex rotates per session, `/akam/<n>/` does not.
+/*
+ * `AKAMAI_PIXEL_PATH` is Akamai's third channel: `/akam/<n>/<hex>` serves a
+ * 26 KB script that POSTs a 23-field device signature — a canvas hash, the
+ * window geometry, the timezone, a `navigator` dump including `webdriver`,
+ * and an automation-scanner verdict — to `/akam/<n>/pixel_<hex>`. It is under
+ * the sensor's size floor and carries no `bmak`, so no content test finds it.
  */
-const AKAMAI_PIXEL_PREFIX = /^\/akam\/\d+\//u;
 
 /**
  * Wrap a route handler so that nothing it throws can leave the handler.
@@ -315,15 +321,7 @@ export type AttachOptions = {
    * bundle fetched from somewhere else is scored as a different visitor, and
    * the SBSD lane never opens.
    */
-  fetchResponse?: (
-    // eslint-disable-next-line no-unused-vars -- function-type parameters
-    request: {
-      body?: string;
-      headers: Record<string, string>;
-      method: string;
-      url: string;
-    }
-  ) => Promise<Fetched>;
+  fetchResponse?: FetchResponse;
   /**
    * `host=` from .env, in either form `src/solver-url.ts` accepts. Both the
    * ledger POST and the session socket are derived from it, so a TLS solver
@@ -439,7 +437,7 @@ export type EgressStats = {
   /**
    * Pixel collector POSTs the solver authored and let through.
    *
-   * Akamai's third channel (`AKAMAI_PIXEL_PREFIX`). Counted apart from
+   * Akamai's third channel (`AKAMAI_PIXEL_PATH`). Counted apart from
    * `solverBodiesIssued` because that pair is conserved against the SBSD
    * ledger's rows, and a pixel body comes from a different route with no
    * ledger behind it.
@@ -476,18 +474,6 @@ export type EgressStats = {
    * is how an unmodelled fourth channel announces itself.
    */
   unmodelledOriginPosts: number;
-};
-
-/**
- * A response, however it was fetched — `route.fetch()` or `fetchResponse`.
- * Matching the sensor solver's shape, because `src/mitm.ts` satisfies both.
- */
-export type Fetched = {
-  body: string;
-  headers: Record<string, string>;
-  /** Each `set-cookie` separately; a joined string cannot be parsed back. */
-  setCookie?: string[];
-  status: number;
 };
 
 /** Per-call options for {@link AkamaiHandle.solveAbck}. */
@@ -612,8 +598,6 @@ type HostState = {
   sbsdPath: null | string;
   /** The raw `src` attribute, `?v=` included: it seeds the bundle's codec. */
   sbsdSrc: null | string;
-  /** The document as served on this host, read off the response. */
-  servedHtml: string;
   /** Bodies the solver authored for this host. */
   solverBodiesIssued: number;
 };
@@ -643,83 +627,6 @@ type SolverMessage = {
   url?: string;
 };
 
-const log = (msg: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
-
-/**
- * The page-side globals `readRealm` reads.
- *
- * Declared rather than taken from the DOM lib for one boring reason: this is a
- * Node project, and ESLint's node-builtins rule flags a bare `navigator` or
- * `sessionStorage` as an experimental Node global. Reading them off one
- * explicitly-typed handle keeps the identifiers out of module scope and makes
- * the list of things the snapshot touches readable in one place.
- */
-/* eslint-disable no-unused-vars -- function-type parameters */
-type BrowserRealm = {
-  crypto: {
-    subtle: {
-      digest: (algorithm: string, data: Uint8Array) => Promise<ArrayBuffer>;
-    };
-  };
-  document: Document;
-  history: { length: number };
-  navigator: {
-    /**
-     * Optional: the Network Information API is Chromium's, and Lightpanda
-     * ships no `navigator.connection`. See `readRealm`.
-     */
-    connection?: {
-      downlink: number;
-      effectiveType: string;
-      rtt: number;
-      saveData: boolean;
-    };
-    deviceMemory?: number;
-    hardwareConcurrency: number;
-    languages: readonly string[];
-  };
-  performance: {
-    /**
-     * Optional for the same reason as `navigator.connection`:
-     * `performance.memory` is a Chrome extension to the standard and
-     * Lightpanda does not implement it. See `readRealm`.
-     */
-    memory?: {
-      jsHeapSizeLimit: number;
-      totalJSHeapSize: number;
-      usedJSHeapSize: number;
-    };
-  } & Performance;
-  screen: {
-    availHeight: number;
-    availLeft: number;
-    availTop: number;
-    availWidth: number;
-    colorDepth: number;
-    height: number;
-    pixelDepth: number;
-    width: number;
-  };
-  sessionStorage: { getItem: (key: string) => null | string };
-  /**
-   * Optional, because Lightpanda has no Web Speech API at all — see the note
-   * on `waitForRealmReadings`. Chrome always has one.
-   */
-  speechSynthesis?: { getVoices: () => Array<{ localService: boolean }> };
-  window: {
-    devicePixelRatio: number;
-    innerHeight: number;
-    innerWidth: number;
-    outerHeight: number;
-    outerWidth: number;
-    screenX: number;
-    screenY: number;
-  };
-};
-/* eslint-enable no-unused-vars */
-
-/** What only the live page can answer. The identity is *not* in here. */
 /**
  * Collapse a `document.cookie` string that names the same cookie twice.
  *
@@ -765,232 +672,36 @@ export const dedupeCookieHeader = (header: string): string => {
   return order.map((name) => `${name}=${chosen.get(name) ?? ''}`).join('; ');
 };
 
-type RealmSnapshot = {
-  /**
-   * Readings this realm could not supply, by the name they would have had in
-   * `runtime`. Empty on Chrome. See `readRealm` for why they are reported
-   * rather than invented.
-   */
-  absentReadings: string[];
-  documentCookie: string;
-  resourceEntries: unknown[];
-  runtime: Record<string, unknown>;
-  timeOriginMs: number;
-};
-
 /**
- * Wait for the realm's asynchronous readings before snapshotting.
+ * The two readings a ledger request needs from the live document: its
+ * JavaScript-visible jar and the tab id the bundle keeps in sessionStorage.
  *
- * Two of them are not there the instant the document is:
- *
- *   ak_bm_tab_id  the bundle writes it shortly after it loads, and the server
- *                 refuses a snapshot without one — a document that has not got
- *                 one could not have emitted a carrier. Holding the first
- *                 carrier is usually enough time on its own; usually is not
- *                 always, and on a fast machine the request can leave ~2s in.
- *   voices        `speechSynthesis.getVoices()` is empty for the first few
- *                 hundred milliseconds of any page, on every platform. A macOS
- *                 Chrome reports 180 local voices half a second after load and
- *                 none at all before that, and a snapshot claiming a macOS
- *                 Chrome with no voices describes a browser that cannot exist
- *                 — the same class of mismatch as the screen metrics.
- *
- * Both waits are bounded and neither is fatal: the server's refusal names the
- * reason better than a guess made here would. Note what this deliberately does
- * not do — a machine with no speech engine installed genuinely has no voices,
- * and no amount of waiting invents them. The answer there is to install one,
- * not to send a number the page cannot back up.
+ * Everything else a snapshot could describe — voices, heap, connection,
+ * resource timings — the server defaults from the profile, so none of it is
+ * read here. The tab id is the one reading no default can stand in for (the
+ * server would mint a fresh one per request, and a session's carriers would
+ * each describe a different tab), and it is not there the instant the
+ * document is: the bundle writes it shortly after it loads, and the server
+ * refuses a snapshot without one. So it is waited for, bounded and not fatal;
+ * the refusal names the problem better than a guess made here would.
  */
-const waitForRealmReadings = async (page: Frame | Page): Promise<void> => {
-  const settle = async (
-    predicate: () => boolean,
-    timeout: number
-  ): Promise<void> => {
-    try {
-      await page.waitForFunction(predicate, { polling: 100, timeout });
-    } catch {
-      // Bounded wait elapsed. Send it and let it be judged on its merits.
-    }
-  };
-
-  await settle(() => {
-    /* eslint-disable n/no-unsupported-features/node-builtins */
-    /* eslint-disable no-unused-vars -- function-type parameters */
-    const session = (
-      globalThis as unknown as {
-        sessionStorage: { getItem: (key: string) => null | string };
-      }
-    ).sessionStorage;
-    /* eslint-enable no-unused-vars */
-    /* eslint-enable n/no-unsupported-features/node-builtins */
-    return typeof session.getItem('ak_bm_tab_id') === 'string';
-  }, 10_000);
-
-  await settle(
-    () => {
-      const speech = (
-        globalThis as unknown as {
-          speechSynthesis?: { getVoices: () => unknown[] };
-        }
-      ).speechSynthesis;
-      // A browser with no Web Speech API at all — Lightpanda — will never
-      // grow voices, so waiting the full ten seconds on every document buys
-      // nothing. Stop immediately and let the snapshot say zero.
-      if (!speech) return true;
-      return speech.getVoices().length > 0;
-    },
-    // Ten seconds, not three: on a machine where a speech daemon has to be
-    // spawned on first use the list can take several seconds to arrive, and
-    // the cost of waiting is paid once per document.
-    10_000
-  );
+const readLedgerInputs = async (
+  frame: Frame
+): Promise<{ akBmTabId: null | string; cookie: string }> => {
+  await frame
+    .waitForFunction(
+      // eslint-disable-next-line n/no-unsupported-features/node-builtins -- the page's, not Node's
+      () => typeof sessionStorage.getItem('ak_bm_tab_id') === 'string',
+      undefined,
+      { polling: 100, timeout: 10_000 }
+    )
+    .catch(() => undefined);
+  return frame.evaluate(() => ({
+    // eslint-disable-next-line n/no-unsupported-features/node-builtins -- the page's, not Node's
+    akBmTabId: sessionStorage.getItem('ak_bm_tab_id'),
+    cookie: document.cookie,
+  }));
 };
-
-/**
- * Everything the ledger request needs that only the page can answer.
- *
- * Runs as one `page.evaluate` because it has to be one instant: the resource
- * timings, the heap readings and the DOM inventory are compared against each
- * other, and reading them across three round-trips describes a page that never
- * existed.
- *
- * ## a reading the realm does not have is omitted, not invented
- *
- * Chrome has every API read here. Lightpanda does not: it ships no
- * `speechSynthesis`, no `navigator.connection` and no `performance.memory`,
- * and until this was written each of those was an uncaught `TypeError` inside
- * the evaluate that took the whole snapshot with it. That surfaced as
- * `No ledger for <host>: TypeError: Cannot read properties of undefined
- * (reading 'downlink')` — one missing browser API, reported as the ledger
- * failing, and the next one only visible after the first was fixed.
- *
- * So each is read through `?.` and left out of `runtime` when it is absent,
- * with its name in `absentReadings` so the caller can say so once. Omitted
- * rather than filled in with a plausible number: everything in this snapshot
- * is cross-checked against everything else, a `downlink` the page cannot back
- * up is the same class of mismatch as a screen reading that does not match
- * the profile, and a refusal naming the missing reading is worth more than a
- * forgery that gets further.
- */
-const readRealm = (page: Frame | Page): Promise<RealmSnapshot> =>
-  page.evaluate(async () => {
-    const realm = globalThis as unknown as BrowserRealm;
-    const { crypto, document, history, performance, speechSynthesis } = realm;
-    // This body runs in the browser, not in Node, so the node-builtins rule
-    // is reading these two as Node's own experimental globals of the same
-    // name. They are the DOM's, and they have been there for twenty years.
-    /* eslint-disable n/no-unsupported-features/node-builtins */
-    const nav = realm.navigator;
-    const session = realm.sessionStorage;
-    /* eslint-enable n/no-unsupported-features/node-builtins */
-    const { memory } = performance;
-    const { connection } = nav;
-    const descriptor = Object.getOwnPropertyDescriptor(
-      Function.prototype,
-      'toString'
-    ) as { value: () => string } & PropertyDescriptor;
-    const toString = descriptor.value;
-
-    // Read Function.prototype.toString's source through a pristine realm, so a
-    // wrapper on this page cannot describe itself as native. A child iframe
-    // gets its own copy of the intrinsics; asking it to stringify *our*
-    // toString is the one reading a patched page cannot forge.
-    const probe = document.createElement('iframe');
-    probe.setAttribute('sandbox', 'allow-same-origin');
-    probe.style.display = 'none';
-    document.body.appendChild(probe);
-    const source = (
-      probe.contentWindow as typeof globalThis & Window
-    ).Function.prototype.toString.call(toString);
-    probe.remove();
-
-    const digest = await crypto.subtle.digest(
-      'SHA-256',
-      new TextEncoder().encode(source)
-    );
-    // See the header: a realm without these reports that it is without them.
-    const voices = speechSynthesis?.getVoices();
-    const absentReadings: string[] = [];
-    if (!connection) absentReadings.push('connectionInfo');
-    if (!memory) absentReadings.push('memoryInfo');
-    if (!voices) absentReadings.push('speechSynthesisVoices');
-
-    return {
-      absentReadings,
-      documentCookie: document.cookie,
-      resourceEntries: performance.getEntriesByType('resource').map((e) => ({
-        duration: e.duration,
-        initiatorType: (e as PerformanceResourceTiming).initiatorType,
-        name: e.name,
-        startTime: e.startTime,
-      })),
-      runtime: {
-        ...(connection
-          ? {
-              connectionInfo: {
-                downlink: connection.downlink,
-                effectiveType: connection.effectiveType,
-                rtt: connection.rtt,
-                saveData: connection.saveData,
-              },
-            }
-          : {}),
-        domResourceInventory: {
-          capturedAtPerformanceMs: performance.now(),
-          imgSrc: [...document.querySelectorAll('img[src]')].map((e) =>
-            e.getAttribute('src')
-          ),
-          linkHref: [...document.querySelectorAll('link[href]')].map((e) =>
-            e.getAttribute('href')
-          ),
-          scriptSrc: [...document.querySelectorAll('script[src]')].map((e) =>
-            e.getAttribute('src')
-          ),
-        },
-        functionToString: {
-          descriptor: {
-            configurable: descriptor.configurable === true,
-            enumerable: descriptor.enumerable === true,
-            writable: descriptor.writable === true,
-          },
-          length: toString.length,
-          name: toString.name,
-          prototypeKind:
-            (toString as { prototype?: unknown }).prototype === undefined
-              ? 'undefined'
-              : 'defined',
-          sourceClass: /^function\s+.*\(\)\s*\{\s*\[native code\]\s*\}$/u.test(
-            source.replace(/\s+/gu, ' ').trim()
-          )
-            ? 'native'
-            : 'wrapped',
-          sourceSha256: [...new Uint8Array(digest)]
-            .map((b) => b.toString(16).padStart(2, '0'))
-            .join(''),
-        },
-        historyLength: history.length,
-        ...(memory
-          ? {
-              memoryInfo: {
-                jsHeapSizeLimit: memory.jsHeapSizeLimit,
-                totalJSHeapSize: memory.totalJSHeapSize,
-                usedJSHeapSize: memory.usedJSHeapSize,
-              },
-            }
-          : {}),
-        sessionStorage: { akBmTabId: session.getItem('ak_bm_tab_id') },
-        ...(voices
-          ? {
-              speechSynthesisVoices: {
-                localCount: voices.filter((v) => v.localService).length,
-                totalCount: voices.length,
-              },
-            }
-          : {}),
-      },
-      timeOriginMs: performance.timeOrigin,
-    };
-  }) as Promise<RealmSnapshot>;
 
 export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
   const {
@@ -1032,7 +743,6 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
       sbsdBody: null,
       sbsdPath: null,
       sbsdSrc: null,
-      servedHtml: '',
       solverBodiesIssued: 0,
     };
     sites.set(siteHost, created);
@@ -1141,14 +851,6 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     unmodelledOriginPosts: 0,
   };
 
-  /**
-   * Record an endpoint as Akamai's, and with it the directory it sits in.
-   *
-   * The directory is the load-bearing half. `/akam/13/<hex>` and the
-   * `/akam/13/pixel_<hex>` it POSTs to are different paths that rotate
-   * together; so are a bundle and the carrier beside it. One `Set` of
-   * prefixes covers both without knowing either name.
-   */
   /** Bring a host into discovery scope. Watching is not condemning. */
   const markProtected = (host: string): void => {
     if (protectedHosts.has(host)) return;
@@ -1191,6 +893,14 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     return true;
   };
 
+  /**
+   * Record an endpoint as Akamai's, and with it the directory it sits in.
+   *
+   * The directory is the load-bearing half. `/akam/13/<hex>` and the
+   * `/akam/13/pixel_<hex>` it POSTs to are different paths that rotate
+   * together; so are a bundle and the carrier beside it. One `Set` of
+   * prefixes covers both without knowing either name.
+   */
   const markAkamai = (url: URL): void => {
     markProtected(url.host);
     const paths = setFor(akamaiPaths, url.host);
@@ -1218,7 +928,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
    */
   const isAkamai = (url: URL): boolean => {
     if (!protectedHosts.has(url.host)) return false;
-    if (AKAMAI_PIXEL_PREFIX.test(url.pathname)) return true;
+    if (AKAMAI_PIXEL_PATH.test(url.pathname)) return true;
     if (akamaiPaths.get(url.host)?.has(url.pathname)) return true;
     for (const prefix of akamaiPrefixes.get(url.host) ?? [])
       if (url.pathname.startsWith(prefix)) return true;
@@ -1330,24 +1040,18 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
    * with the document host's cookies describes a visitor that does not exist:
    * the peer's own `_abck` is the cookie the solver is trying to move.
    */
-  const cookies = async (
+  const cookies = (
     siteHost: string = originHost
   ): Promise<Record<string, string>> =>
-    Object.fromEntries(
-      (await context.cookies(`https://${siteHost}`)).map((c) => [
-        c.name,
-        c.value,
-      ])
-    );
+    cookieJar(context, `https://${siteHost}`);
 
   /**
-   * The document is READ, never re-fetched.
+   * A new document retires what was bound to the last one.
    *
-   * `route.fetch()` replays a request from Playwright's own context, whose TLS
-   * fingerprint is not the browser's. Akamai answers a replayed *navigation*
-   * with a 403 "Page Reference Code" page, which carries none of the bundles
-   * the rest of this depends on. Scripts survive that replay; navigations do
-   * not — so the HTML is taken from the response the browser itself received.
+   * Navigations are never refetched through `route.fetch()`: its TLS
+   * fingerprint is not the browser's, and Akamai answers a replayed navigation
+   * with a 403 "Page Reference Code" page. So this watches the responses the
+   * browser itself received instead.
    */
   page.on('response', (response) => {
     const request = response.request();
@@ -1378,14 +1082,6 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     // it would let a second lane open against the same jar.
     if (!lanesRunning.has(documentHost) && !site.accepted)
       lanes.delete(documentHost);
-    void response.text().then(
-      (text) => {
-        site.servedHtml = text;
-      },
-      () => {
-        /* a redirect or an aborted navigation has no body to read */
-      }
-    );
   });
 
   /**
@@ -1403,24 +1099,10 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         `no live frame on ${site.host} to snapshot for its SBSD ledger — a ` +
           `ledger is bound to one document and there is no document here`
       );
-    await waitForRealmReadings(frame);
-    const realm = await readRealm(frame);
-    // Said once, before the POST, so a refusal that follows has its most
-    // likely cause already on the screen rather than being guessed at after.
-    if (realm.absentReadings.length > 0)
-      log(
-        `[sbsd] ${site.host}: this realm has no ${realm.absentReadings.join(', ')} ` +
-          '— those readings are omitted rather than invented. Chrome has all ' +
-          'of them and Lightpanda has none of them, so a profile claiming a ' +
-          'desktop Chrome is describing a browser this snapshot cannot fully ' +
-          'back up. If the ledger is refused, look here first.'
-      );
+    const inputs = await readLedgerInputs(frame);
     // `readHtml` when the caller gave one: `frame.content()` never returns on
     // Lightpanda. See `src/lightpanda.ts`.
     const liveHtml = await (readHtml ? readHtml() : frame.content());
-    /* PROBE: is the sensor's own <script src> in the bytes the server sent, or
-     * did the bootstrap inject it? That decides whether a caller holding only
-     * the response document can satisfy `document.currentScript` at all. */
     const response = await fetch(ledgerUrl, {
       body: JSON.stringify({
         /* THE REDUCED SHAPE. Everything omitted here the server now derives,
@@ -1437,20 +1119,11 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         document: {
           // Deduped: Lightpanda's jar can present one cookie twice, and the
           // ledger endpoint refuses a repeated name rather than choose.
-          cookieHeader: dedupeCookieHeader(realm.documentCookie),
-          /* LIVE DOM, not the served bytes. `runtime.domResourceInventory` is
-           * read off this same live DOM, so reconciliation compares a document
-           * against its own inventory and resolves to the identity case its
-           * own doc comment describes -- no LCS, nothing moved. The served
-           * response is no longer what reaches the sandbox either way:
-           * reconciliation ends in `dom.serialize()`, so byte fidelity to the
-           * response was already gone. */
+          cookieHeader: dedupeCookieHeader(inputs.cookie),
+          // The live DOM, not the served bytes: the injected third-party
+          // tags are in it, and the sandbox serializes its own copy anyway.
           html: liveHtml,
-          /* ⚠ THE ONE READING A DEFAULT CANNOT STAND IN FOR. The server mints a
-           * fresh `akBmTabId` per request, so a session's carriers would each
-           * describe a different tab -- measured, 17 ledgers with 17 ids. The
-           * page holds one for its lifetime. */
-          runtime: { sessionStorage: realm.runtime['sessionStorage'] },
+          runtime: { sessionStorage: { akBmTabId: inputs.akBmTabId } },
           url: page.url(),
         },
         profile: { id: PROFILE_ID },
@@ -1458,7 +1131,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
       headers: {
         accept: 'application/json',
         'content-type': 'application/json',
-        ...(solverApiKey ? { 'x-api-key': solverApiKey } : {}),
+        ...apiKeyHeader(solverApiKey),
       },
       method: 'POST',
     });
@@ -1466,13 +1139,6 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     checkRateLimit(response.status, response.headers);
     const ledger = (await response.json()) as LedgerResponse;
     if (!ledger.complete) {
-      // The refusal itself says almost nothing: `error.message` is one generic
-      // sentence for every code and `receipt` is null on this path. So the
-      // readings most likely to be at fault are reported from here instead —
-      // they are the ones that differ between a desktop and a CI runner, and
-      // without them a refusal in CI is unactionable.
-      const voices = realm.runtime['speechSynthesisVoices'];
-      const session = realm.runtime['sessionStorage'];
       // The receipt is the useful half of a refusal: `error.message` is the
       // same sentence for every code, while the receipt names the input that
       // could not be reconciled. Without it a CI failure is unactionable.
@@ -1481,14 +1147,8 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
           `${ledger.error?.code ?? 'unknown'} — ` +
           `${ledger.error?.message ?? ''} ` +
           `receipt=${JSON.stringify(ledger.receipt ?? null).slice(0, 400)} ` +
-          `voices=${JSON.stringify(voices)} ` +
-          `session=${JSON.stringify(session)} ` +
-          `resourceEntries=${realm.resourceEntries.length} ` +
-          // The refusal names the field but never the value, and on a page
-          // that wraps Function.prototype.toString this is the field that
-          // fails. Without it the 400 is unactionable.
-          `functionToString=${JSON.stringify(realm.runtime['functionToString'])} ` +
-          `html=${site.servedHtml.length}b cookie=${realm.documentCookie.length}b`
+          `akBmTabId=${JSON.stringify(inputs.akBmTabId)} ` +
+          `html=${liveHtml.length}b cookie=${inputs.cookie.length}b`
       );
     }
     log(
@@ -1499,37 +1159,23 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
   }
 
   /**
-   * Give the page a body we have already decoded.
+   * Give the page a body we have already decoded, then store its cookies.
    *
-   * Two headers have to go. `content-encoding` still says `br`, and handing
-   * that back with decoded text makes the browser brotli-decode plain UTF-8 —
-   * the response dies and the site renders its own error page. `set-cookie`
-   * goes because `fulfill` takes ONE header map: a response setting four
-   * cookies would keep one and silently lose three, and `route.fetch` has
-   * already put them all in the jar itself.
+   * AFTER the fulfill, never before. `route.fulfill` carries one header map
+   * and Akamai sets several cookies at once, so on the `fetchResponse` path
+   * they have to be placed by hand — but `context.addCookies` while a
+   * `Fetch.requestPaused` request is still open waits on the browser, and the
+   * browser is waiting on this very fulfill. That deadlock is what
+   * `aircanada-lightpanda.ts`'s header records. A cookie the jar refuses must
+   * not take the request down with it either, now that the page already has
+   * its bytes.
    */
   const handBack = async (
     route: Route,
     body: string,
     response?: Fetched
   ): Promise<void> => {
-    const headers: Record<string, string> = response
-      ? { ...response.headers }
-      : { 'content-type': 'application/javascript' };
-    delete headers['content-encoding'];
-    delete headers['content-length'];
-    delete headers['set-cookie'];
-    await route.fulfill({ body, headers, status: response?.status ?? 200 });
-    // AFTER the fulfill, never before. `route.fulfill` carries one header map
-    // and Akamai sets several cookies at once, so on the `fetchResponse` path
-    // they have to be placed by hand — but `context.addCookies` while a
-    // `Fetch.requestPaused` request is still open waits on the browser, and
-    // the browser is waiting on this very fulfill. That deadlock is what
-    // `aircanada-lightpanda.ts`'s header records; releasing the route first is
-    // the fix, and it is the same order `src/akamai/sensor/solver.ts` uses.
-    //
-    // A cookie the jar refuses must not take the request down with it either,
-    // now that this runs after the page already has its bytes.
+    await fulfillDecoded(route, body, response);
     try {
       await applySetCookie(context, route.request().url(), response?.setCookie);
     } catch (error) {
@@ -1537,35 +1183,6 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         `[egress] could not store cookies from ${route.request().url()}: ${(error as Error).message}`
       );
     }
-  };
-
-  /**
-   * Fetch what a route asked for, with whichever client the caller chose.
-   *
-   * `route.fetch()` puts the response's cookies in the jar itself;
-   * `fetchResponse` cannot, so `handBack` places them after the fulfill. See
-   * `src/akamai/set-cookie.ts` for why one header map is not enough, and the
-   * note in `handBack` for why the order is not negotiable.
-   */
-  const fetchForRoute = async (route: Route): Promise<Fetched> => {
-    if (!fetchResponse) {
-      const response: APIResponse = await route.fetch();
-      return {
-        body: await response.text(),
-        headers: response.headers(),
-        status: response.status(),
-      };
-    }
-    const request = route.request();
-    const postData = request.postData();
-    // The cookies this response sets are placed by `handBack`, once the route
-    // has been released — see the note there.
-    return await fetchResponse({
-      ...(postData === null ? {} : { body: postData }),
-      headers: await request.allHeaders(),
-      method: request.method(),
-      url: request.url(),
-    });
   };
 
   /**
@@ -1699,16 +1316,6 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
   };
 
   /**
-   * Serve a script. From memory when we already hold that path's bytes.
-   *
-   * Serving from memory is not an optimisation, it is the policy: a
-   * `<script src>`, a `<link>`, an `importScripts` or a CSS `url()` aimed at a
-   * challenge endpoint carries its payload in the query string, and
-   * `route.fetch()` would faithfully replay that query — from Playwright's own
-   * Node process, on a connection that is not even the browser's. Answering
-   * out of the cache puts nothing on the wire.
-   */
-  /**
    * The collector script that POSTs to a given pixel endpoint.
    *
    * Akamai's convention is `/akam/<n>/<hex>` for the script and
@@ -1799,7 +1406,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         headers: {
           accept: 'application/json',
           'content-type': 'application/json',
-          ...(solverApiKey ? { 'x-api-key': solverApiKey } : {}),
+          ...apiKeyHeader(solverApiKey),
         },
         method: 'POST',
       });
@@ -1855,6 +1462,16 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     }
   };
 
+  /**
+   * Serve a script. From memory when we already hold that path's bytes.
+   *
+   * Serving from memory is not an optimisation, it is the policy: a
+   * `<script src>`, a `<link>`, an `importScripts` or a CSS `url()` aimed at a
+   * challenge endpoint carries its payload in the query string, and
+   * `route.fetch()` would faithfully replay that query — from Playwright's own
+   * Node process, on a connection that is not even the browser's. Answering
+   * out of the cache puts nothing on the wire.
+   */
   const serveScript = async (route: Route, url: URL): Promise<void> => {
     const key = pathKey(url);
     const cached = scripts.get(key);
@@ -1878,7 +1495,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
         : handBack(route, cached.body);
     }
 
-    const response = await fetchForRoute(route);
+    const response = await fetchForRoute(route, fetchResponse);
     const body = response.body;
     remember(url, body);
 
@@ -2067,8 +1684,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
        * See `answerPixel` for why a denial here hangs the page rather than
        * merely scoring it down, which is the whole reason this arm exists.
        */
-      if (AKAMAI_PIXEL_PREFIX.test(url.pathname))
-        return answerPixel(route, url);
+      if (AKAMAI_PIXEL_PATH.test(url.pathname)) return answerPixel(route, url);
 
       stats.deniedPosts++;
       log(
@@ -2337,12 +1953,8 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
   });
 
   /**
-   * Send one sensor submission from inside the page.
-   *
-   * Playwright's own request context is not usable here: the submission has to
-   * travel on the browser's connection, with its TLS fingerprint and its
-   * cookie jar, or it is scored as a different visitor than the one the
-   * telemetry describes.
+   * Send one sensor submission from inside the page, on the browser's own
+   * connection and jar (see `sendFromFrame`).
    *
    * A navigation mid-session destroys the execution context this runs in.
    * Retrying cannot help — the session belongs to a document that no longer
@@ -2352,33 +1964,14 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
    */
   const sendFromPage = async (
     frame: Frame,
-    args: {
+    request: {
       body: string;
       headers: Record<string, string> | undefined;
       url: string;
     }
   ): Promise<{ body: string; status: number }> => {
     try {
-      return await frame.evaluate(
-        ({ body, headers, url }: typeof args) =>
-          new Promise<{ body: string; status: number }>((done) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', url, true);
-            xhr.withCredentials = true;
-            for (const [name, value] of Object.entries(headers ?? {})) {
-              try {
-                xhr.setRequestHeader(name, value);
-              } catch {
-                // Forbidden header names are the browser's to set.
-              }
-            }
-            xhr.onload = () =>
-              done({ body: xhr.responseText, status: xhr.status });
-            xhr.onerror = () => done({ body: '', status: 0 });
-            xhr.send(body);
-          }),
-        args
-      );
+      return await sendFromFrame(frame, { ...request, method: 'POST' });
     } catch (error) {
       if (/Execution context was destroyed/u.test((error as Error).message)) {
         log(
@@ -2509,10 +2102,10 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     const captured = site.bmMain;
     log(
       `[abck] Opening session against ${captured.url} ` +
-        `(_abck=${(await cookies(site.host))['_abck']?.split('~')[1] ?? 'absent'})`
+        `(_abck=${abckStatus((await cookies(site.host))['_abck']) ?? 'absent'})`
     );
     const socket = new WebSocket(sessionUrl, {
-      ...(solverApiKey ? { headers: { 'x-api-key': solverApiKey } } : {}),
+      headers: apiKeyHeader(solverApiKey),
     });
     await new Promise((resolve) =>
       socket.addEventListener('open', resolve, { once: true })
@@ -2575,7 +2168,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
           () => {
             void (async () => {
               const rval =
-                (await cookies(site.host))['_abck']?.split('~')[1] ?? 'absent';
+                abckStatus((await cookies(site.host))['_abck']) ?? 'absent';
               log(
                 `[abck] ${site.host} lane ended on the idle timer after ` +
                   `${answeredSubmissions} round(s), _abck=~${rval}~` +

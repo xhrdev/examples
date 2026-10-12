@@ -12,8 +12,8 @@
  *      the identity — Lightpanda's user agent cannot be set from inside the
  *      browser, and `ca-edd.ts` installs its own with a CDP session, which
  *      crashes Playwright here.
- *   2. the identity is pinned to the profile the solver models, rather than
- *      left to the proxy's own default.
+ *   2. the identity is the profile the solver models, which is the proxy's
+ *      default (`IDENTITY_HEADERS` in `src/profile.ts`).
  *   3. `fetchResponse: session.mitm.fetch`, because Playwright's `route.fetch`
  *      never returns against Lightpanda.
  *   4. cookies applied by hand on that path, which `solver.ts` already does.
@@ -60,7 +60,7 @@
  * in would exercise CA EDD's auth rather than the solver, and risks the
  * account for no extra signal.
  */
-import { PROFILE, SEC_CH_UA } from '#src/profile.js';
+import { log } from '#src/util.js';
 import { solve } from '#src/akamai/sensor/solver.js';
 import { solverWsUrl } from '#src/solver-url.js';
 import { outerHtml, start } from '#src/lightpanda.js';
@@ -80,25 +80,7 @@ if (!solverHost) throw new Error('set host= in .env');
 const solverUrl = solverWsUrl(solverHost, '/akamai/session');
 const timeout = Number(process.env['AKAMAI_TIMEOUT_MS'] ?? 120_000);
 
-const log = (msg: string, ...extra: unknown[]): void =>
-  console.log(`[${new Date().toISOString()}] ${msg}`, ...extra);
-
-/**
- * What the MITM proxy claims upstream — the browser the Akamai solver models,
- * the same identity `ca-edd.ts` installs with `applyIdentity`. Letting the
- * proxy fall back to its own default trusts two registries to stay in step;
- * when they drift the telemetry names one Chrome and the headers name another,
- * and `_abck` sits at `~-1~` for as many rounds as you give it.
- */
-const IDENTITY = {
-  'sec-ch-ua': SEC_CH_UA,
-  'sec-ch-ua-mobile': '?0',
-  'sec-ch-ua-platform': '"macOS"',
-  'user-agent': PROFILE.userAgent,
-};
-
 const session = await start({
-  identity: IDENTITY,
   log,
   ...(proxy ? { proxy } : {}),
 });
@@ -157,7 +139,7 @@ try {
     log(`RESULT: FAIL - ${(error as Error).message}`);
     log(
       'If the rounds ran but never reached ~0~, check the `cookies=[...]` ' +
-        'line for `_abck` and the identity above against the solver profile. ' +
+        'line for `_abck` and the proxy identity headers against the solver profile. ' +
         'If no session opened at all, the sensor script was never captured — ' +
         'look for a fetch that did not return. If the run never got that far, ' +
         'check the exit IP: this origin refuses datacentre ranges outright.'

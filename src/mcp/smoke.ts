@@ -10,7 +10,12 @@
  * caller headers that carry the whole configuration survive the trip through
  * CloudFront. Run it before blaming a solve for something the transport did.
  */
-import { callTool, connect, MCP_URL } from '#src/mcp/client.js';
+import {
+  callTool,
+  connect,
+  MCP_URL,
+  ownSolverHeaders,
+} from '#src/mcp/client.js';
 import { log } from '#src/util.js';
 
 const solverHost = process.env['host'];
@@ -58,10 +63,7 @@ await anonymous.close();
 //     CloudFront to get there. If an origin request policy ever stops
 //     forwarding them, every caller silently falls back to the trial box.
 if (solverHost || apiKey) {
-  const configured = await connect({
-    ...(apiKey ? { 'x-api-key': apiKey } : {}),
-    ...(solverHost ? { 'x-solver-host': solverHost } : {}),
-  });
+  const configured = await connect(ownSolverHeaders());
 
   const mine = (await callTool(configured, 'solver_info')) as {
     mode: string;

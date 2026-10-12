@@ -14,7 +14,13 @@
  * that matches what you already use; see src/datadome/README.md for the
  * flow.
  */
-import { GEO_ORIGIN, PROFILE, PROFILE_ID } from '#src/datadome/profile.js';
+import {
+  GEO_ORIGIN,
+  JS_PROFILE,
+  PROFILE,
+  SOLVER_PROFILE,
+} from '#src/datadome/profile.js';
+import { SEC_CH_UA } from '#src/profile.js';
 import { ACCESS_DENIED_EXIT_CODE, isAccessDenied } from '#src/access-denied.js';
 import { pinSession } from '#src/proxy.js';
 import type { ExternalScript } from '#src/datadome/external-scripts.js';
@@ -30,13 +36,6 @@ import { log, readFlag } from '#src/util.js';
 const DEFAULT_URL = 'https://www.grainger.com/';
 
 export const TIMEOUT_MS = 120_000;
-
-/**
- * A coherent Chrome-on-macOS identity. Every field the solver receives has to
- * agree with the headers you actually send — DataDome cross-checks them, so
- * changing the user agent here without changing `navigationHeaders` is the
- * most common way to get a solve rejected.
- */
 
 /** Everything an attempt needs, already resolved from the environment. */
 export type Context = {
@@ -81,9 +80,7 @@ export const navigationHeaders = (): Record<string, string> => ({
   accept:
     'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
   'accept-language': 'en-US,en;q=0.9',
-  'sec-ch-ua': PROFILE.brands
-    .map(({ brand, version }) => `"${brand}";v="${version}"`)
-    .join(', '),
+  'sec-ch-ua': SEC_CH_UA,
   'sec-ch-ua-mobile': '?0',
   'sec-ch-ua-platform': '"macOS"',
   'sec-fetch-dest': 'document',
@@ -201,30 +198,8 @@ export const solveRequestBody = ({
     ...(stylesheetAssets?.length ? { stylesheetAssets } : {}),
     url: documentUrl,
   },
-  js_profile: {
-    brands: PROFILE.brands,
-    chromeFullVersion: PROFILE.chromeFullVersion,
-    chromeVersion: PROFILE.chromeVersion,
-    deviceMemory: PROFILE.deviceMemory,
-    hardwareConcurrency: PROFILE.hardwareConcurrency,
-    languages: PROFILE.languages,
-    os: PROFILE.os,
-    platformVersion: PROFILE.platformVersion,
-    screen: PROFILE.screen,
-    timezone: PROFILE.timezone,
-    timezoneOffsetMinutes: PROFILE.timezoneOffsetMinutes,
-    vendor: PROFILE.vendor,
-  },
-  profile: {
-    chromeFullVersion: PROFILE.chromeFullVersion,
-    httpHeaderTemplates: { form: [], iframe: [], image: [], xhr: [] },
-    id: PROFILE_ID,
-    os: PROFILE.os,
-    timezone: PROFILE.timezone,
-    timezoneOffsetMinutes: PROFILE.timezoneOffsetMinutes,
-    tlsClientHello: '',
-    userAgent: PROFILE.userAgent,
-  },
+  js_profile: JS_PROFILE,
+  profile: SOLVER_PROFILE,
   // Omit the field entirely when going direct — the solver reads its
   // presence, not its emptiness.
   ...(proxy ? { proxy } : {}),

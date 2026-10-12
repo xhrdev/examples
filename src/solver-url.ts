@@ -16,10 +16,9 @@
  * you are pointing at anything across the public internet, give it a scheme.
  */
 
-const SOLVER_PORT = 3000;
+import { hasScheme } from '#src/util.js';
 
-/** Matches a URL that already carries its own scheme, e.g. `https://…`. */
-const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+const SOLVER_PORT = 3000;
 
 /**
  * Base URL for the solver's HTTP API, e.g. `https://trial.xhr.dev`.
@@ -28,9 +27,7 @@ const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
  * without doubling up.
  */
 export const solverBaseUrl = (host: string): string =>
-  HAS_SCHEME.test(host)
-    ? host.replace(/\/+$/, '')
-    : `http://${host}:${SOLVER_PORT}`;
+  hasScheme(host) ? host.replace(/\/+$/, '') : `http://${host}:${SOLVER_PORT}`;
 
 /**
  * WebSocket URL for the Akamai streaming session.
@@ -41,3 +38,11 @@ export const solverBaseUrl = (host: string): string =>
  */
 export const solverWsUrl = (host: string, path: string): string =>
   `${solverBaseUrl(host).replace(/^http/, 'ws')}${path}`;
+
+/**
+ * The solver's auth header, or nothing. Only a gated solver (the hosted trial
+ * box) needs a key; spread this into any request or upgrade that goes to it.
+ */
+export const apiKeyHeader = (
+  apiKey: string | undefined
+): Record<string, string> => (apiKey ? { 'x-api-key': apiKey } : {});

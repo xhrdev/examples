@@ -1,10 +1,12 @@
+/**
+ * The CDP overrides that make a real Chrome present as `PROFILE`, whatever
+ * build and display it is actually running on. Shared by both vendors: a
+ * window or a client hint that disagrees with the profile the solver was told
+ * about is the same mismatch to DataDome as it is to Akamai.
+ */
 import type { CDPSession } from 'playwright-core';
 
-import { FULL_VERSION_LIST, PROFILE } from '#src/profile.js';
-
-export const USER_AGENT: string = PROFILE.userAgent;
-
-export const VIEWPORT: null = null;
+import { PROFILE, USER_AGENT_OVERRIDE } from '#src/profile.js';
 
 const SCREEN_FIELDS = [
   'availHeight',
@@ -80,7 +82,8 @@ const matchScreenToProfile = async (cdp: CDPSession): Promise<void> => {
   if (drift.length > 0) console.warn(`[identity] ${refuse(drift)}`);
 };
 
-const pinWindowToProfile = async (cdp: CDPSession): Promise<void> => {
+/** Size and place the window the way the profile's readings say it is. */
+export const pinWindowToProfile = async (cdp: CDPSession): Promise<void> => {
   const { windowId } = await cdp.send('Browser.getWindowForTarget');
   await cdp.send('Browser.setWindowBounds', {
     bounds: {
@@ -95,21 +98,7 @@ const pinWindowToProfile = async (cdp: CDPSession): Promise<void> => {
 };
 
 export const applyIdentity = async (cdp: CDPSession): Promise<void> => {
-  await cdp.send('Emulation.setUserAgentOverride', {
-    acceptLanguage: PROFILE.languages,
-    userAgent: PROFILE.userAgent,
-    userAgentMetadata: {
-      architecture: 'arm',
-      bitness: '64',
-      brands: [...PROFILE.brands],
-      fullVersion: PROFILE.chromeFullVersion,
-      fullVersionList: FULL_VERSION_LIST,
-      mobile: false,
-      model: '',
-      platform: 'macOS',
-      platformVersion: PROFILE.platformVersion,
-    },
-  });
+  await cdp.send('Emulation.setUserAgentOverride', USER_AGENT_OVERRIDE);
   await matchScreenToProfile(cdp);
   await pinWindowToProfile(cdp);
 };

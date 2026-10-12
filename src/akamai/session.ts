@@ -25,7 +25,7 @@ import {
   type Page,
 } from 'playwright-core';
 
-import { applyIdentity, USER_AGENT, VIEWPORT } from '#src/akamai/identity.js';
+import { applyIdentity } from '#src/identity.js';
 import { PROFILE } from '#src/profile.js';
 import { toLaunchProxy } from '#src/proxy.js';
 import {
@@ -110,8 +110,8 @@ export async function openAkamaiSession(
       ? { serviceWorkers: options.serviceWorkers }
       : {}),
     timezoneId: options.timezoneId ?? PROFILE.timezone,
-    userAgent: USER_AGENT,
-    viewport: VIEWPORT,
+    userAgent: PROFILE.userAgent,
+    viewport: null,
   });
   const page = await context.newPage();
 

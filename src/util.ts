@@ -1,6 +1,5 @@
 /**
- * The three helpers every script in this repo used to define for itself:
- * a timestamped logger, a sleep, and a `--name=value` flag reader.
+ * The small helpers every script in this repo used to define for itself.
  */
 
 export const log = (message: string, ...extra: unknown[]): void =>
@@ -23,3 +22,7 @@ export const readFlag = (
   const prefix = `${name}=`;
   return argv.find((arg) => arg.startsWith(prefix))?.slice(prefix.length);
 };
+
+/** Whether a URL-ish string already carries its own scheme, e.g. `https://`. */
+export const hasScheme = (raw: string): boolean =>
+  /^[a-z][a-z0-9+.-]*:\/\//i.test(raw);
