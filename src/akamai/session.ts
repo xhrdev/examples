@@ -15,19 +15,17 @@
  *   runAkamaiTarget     the same, plus the RESULT line, the exit code, and the
  *                       429 / error handling
  */
-import fs from 'node:fs';
 import {
   type Browser,
   type BrowserContext,
   type CDPSession,
   chromium,
-  type LaunchOptions,
   type Page,
 } from 'playwright-core';
 
 import { applyIdentity } from '#src/identity.js';
 import { PROFILE } from '#src/profile.js';
-import { toLaunchProxy } from '#src/proxy.js';
+import { chromeLaunchOptions } from '#src/chrome.js';
 import {
   RATE_LIMIT_EXIT_CODE,
   RateLimitError,
@@ -83,26 +81,9 @@ export async function openAkamaiSession(
   if (!host) throw new Error('set host= in .env');
   const proxy = process.env['proxy'];
   const apiKey = process.env['api_key'];
-  const chromePath = process.env['CHROME_PATH'] || '';
-
-  const launchOptions: LaunchOptions = {
-    args: [
-      '--disable-blink-features=AutomationControlled',
-      '--no-first-run',
-      '--no-default-browser-check',
-      ...(options.args ?? []),
-    ],
-    headless: process.argv.includes('--headless'),
-    ...(proxy ? { proxy: toLaunchProxy(proxy) } : {}),
-  };
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  if (chromePath && fs.existsSync(chromePath)) {
-    launchOptions.executablePath = chromePath;
-  } else {
-    launchOptions.channel = 'chrome';
-  }
-
-  const browser = await chromium.launch(launchOptions);
+  const browser = await chromium.launch(
+    chromeLaunchOptions({ args: options.args ?? [], proxy })
+  );
   const context = await browser.newContext({
     ...(options.ignoreHTTPSErrors ? { ignoreHTTPSErrors: true } : {}),
     locale: options.locale ?? 'en-US',

@@ -31,7 +31,8 @@ import path from 'node:path';
 
 import { chromium, type LaunchOptions, type Page } from 'playwright-core';
 
-import { pinSession, toLaunchProxy } from '#src/proxy.js';
+import { chromeLaunchOptions } from '#src/chrome.js';
+import { pinSession } from '#src/proxy.js';
 import { solverBaseUrl } from '#src/solver-url.js';
 import { ACCESS_DENIED_EXIT_CODE, isAccessDenied } from '#src/access-denied.js';
 import { solve } from '#src/datadome/solver.js';
@@ -73,7 +74,6 @@ export async function runBrowserTarget({
   const solverHost = process.env['host'];
   const configuredProxy = process.env['proxy'];
   const solverApiKey = process.env['api_key'];
-  const chromePath = process.env['CHROME_PATH'] || '';
 
   if (!solverHost) throw new Error('set host= in .env');
 
@@ -94,24 +94,12 @@ export async function runBrowserTarget({
     .filter(Boolean);
 
   const launchOptions: LaunchOptions = {
-    args: [
-      '--window-size=1200,904',
-      '--disable-blink-features=AutomationControlled',
-      '--no-first-run',
-      '--no-default-browser-check',
-      ...extraArgs,
-    ],
-    headless: process.argv.includes('--headless'),
+    ...chromeLaunchOptions({
+      args: ['--window-size=1200,904', ...extraArgs],
+      proxy,
+    }),
     ignoreDefaultArgs: ['--enable-automation', '--force-color-profile=srgb'],
-    ...(proxy ? { proxy: toLaunchProxy(proxy) } : {}),
   };
-
-  // eslint-disable-next-line security/detect-non-literal-fs-filename
-  if (chromePath && fs.existsSync(chromePath)) {
-    launchOptions.executablePath = chromePath;
-  } else {
-    launchOptions.channel = 'chrome';
-  }
 
   const browser = await chromium.launch(launchOptions);
   let closing = false;
