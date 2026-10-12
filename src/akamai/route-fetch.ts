@@ -4,12 +4,18 @@
  * `sensor/solver.ts` and `sbsd/solver.ts` intercept the page the same way:
  * fetch the request themselves (so they can read or replace the body), hand
  * the decoded body back to the page, and send the solver's submissions from
- * inside the page so they ride the browser's own connection and jar. Each
- * used to carry its own copy of all three, and the copies had drifted — the
- * sensor's in-page XHR had no `onerror`, so a network failure there hung the
- * session instead of reporting status 0.
+ * inside the page so they ride the browser's own connection and jar. Both
+ * also open the same session socket. Each used to carry its own copy of all
+ * of it, and the copies had drifted: the sensor's in-page XHR had no
+ * `onerror`, so a network failure hung the session instead of reporting
+ * status 0, and the SBSD lane waited forever on a socket whose upgrade had
+ * been refused.
  */
 import type { BrowserContext, Frame, Route } from 'playwright-core';
+import { fetch } from 'undici';
+
+import { apiKeyHeader } from '#src/solver-url.js';
+import { checkRateLimit, RateLimitError } from '#src/rate-limit.js';
 
 /**
  * A response, however it was fetched — `route.fetch()` or `fetchResponse`.
@@ -149,3 +155,47 @@ export const sendFromFrame = (
       }),
     request
   );
+
+/**
+ * Why this exists: undici reports a rejected WebSocket upgrade as a bare
+ * `TypeError` with close code 1006 and no HTTP status, so a rate-limited
+ * upgrade (429) looks exactly like the solver being down. One plain GET to the
+ * same URL with the same key goes through the same auth and rate-limit
+ * handlers and *does* carry a status, which is enough to tell them apart.
+ *
+ * Only ever called on a connection that already failed, so the extra request
+ * costs nothing in the normal case.
+ */
+export async function classifyUpgradeFailure(
+  solverUrl: string,
+  solverApiKey: string | undefined
+): Promise<Error> {
+  const probeUrl = solverUrl.replace(/^ws/, 'http');
+  try {
+    const probe = await fetch(probeUrl, {
+      headers: apiKeyHeader(solverApiKey),
+      signal: AbortSignal.timeout(10000),
+    });
+    // Throws RateLimitError on 429; anything else falls through.
+    checkRateLimit(probe.status, probe.headers);
+    if (probe.status === 401) {
+      return Object.assign(
+        new Error(`solver rejected the API key (HTTP 401) on ${probeUrl}`),
+        { authFailure: true }
+      );
+    }
+    return new Error(
+      `solver WebSocket upgrade failed (probe returned HTTP ${probe.status})`
+    );
+  } catch (error) {
+    if (error instanceof RateLimitError) return error;
+    return new Error(
+      `solver WebSocket upgrade failed and ${probeUrl} is unreachable: ${(error as Error).message}`
+    );
+  }
+}
+
+/** Whether classifyUpgradeFailure identified a rejected API key. */
+export function isAuthFailure(error: Error): boolean {
+  return (error as { authFailure?: boolean }).authFailure === true;
+}

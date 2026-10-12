@@ -34,22 +34,24 @@
  * own independent `_abck` to satisfy.
  */
 import type { BrowserContext, Frame, Page, Route } from 'playwright-core';
-import { fetch, WebSocket } from 'undici';
+import { WebSocket } from 'undici';
 
 import {
   abckStatus,
   AKAMAI_PIXEL_PATH,
+  classifyUpgradeFailure,
   cookieJar,
   type Fetched,
   fetchForRoute,
   type FetchResponse,
   fulfillDecoded,
+  isAuthFailure,
   sendFromFrame,
 } from '#src/akamai/route-fetch.js';
 import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
 import { applySetCookie } from '#src/akamai/set-cookie.js';
 import { PROFILE, PROFILE_ID } from '#src/profile.js';
-import { checkRateLimit, RateLimitError } from '#src/rate-limit.js';
+import { RateLimitError } from '#src/rate-limit.js';
 import { apiKeyHeader } from '#src/solver-url.js';
 import { log } from '#src/util.js';
 
@@ -641,48 +643,4 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
         reject(e);
       });
   });
-}
-
-/**
- * Why this exists: undici reports a rejected WebSocket upgrade as a bare
- * `TypeError` with close code 1006 and no HTTP status, so a rate-limited
- * upgrade (429) looks exactly like the solver being down. One plain GET to the
- * same URL with the same key goes through the same auth and rate-limit
- * handlers and *does* carry a status, which is enough to tell them apart.
- *
- * Only ever called on a connection that already failed, so the extra request
- * costs nothing in the normal case.
- */
-async function classifyUpgradeFailure(
-  solverUrl: string,
-  solverApiKey: string | undefined
-): Promise<Error> {
-  const probeUrl = solverUrl.replace(/^ws/, 'http');
-  try {
-    const probe = await fetch(probeUrl, {
-      headers: apiKeyHeader(solverApiKey),
-      signal: AbortSignal.timeout(10000),
-    });
-    // Throws RateLimitError on 429; anything else falls through.
-    checkRateLimit(probe.status, probe.headers);
-    if (probe.status === 401) {
-      return Object.assign(
-        new Error(`solver rejected the API key (HTTP 401) on ${probeUrl}`),
-        { authFailure: true }
-      );
-    }
-    return new Error(
-      `solver WebSocket upgrade failed (probe returned HTTP ${probe.status})`
-    );
-  } catch (error) {
-    if (error instanceof RateLimitError) return error;
-    return new Error(
-      `solver WebSocket upgrade failed and ${probeUrl} is unreachable: ${(error as Error).message}`
-    );
-  }
-}
-
-/** Whether classifyUpgradeFailure identified a rejected API key. */
-function isAuthFailure(error: Error): boolean {
-  return (error as { authFailure?: boolean }).authFailure === true;
 }

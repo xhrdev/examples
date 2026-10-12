@@ -62,6 +62,7 @@ import { WebSocket } from 'undici';
 import {
   abckStatus,
   AKAMAI_PIXEL_PATH,
+  classifyUpgradeFailure,
   cookieJar,
   type Fetched,
   fetchForRoute,
@@ -2107,9 +2108,28 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
     const socket = new WebSocket(sessionUrl, {
       headers: apiKeyHeader(solverApiKey),
     });
-    await new Promise((resolve) =>
-      socket.addEventListener('open', resolve, { once: true })
-    );
+    // A refused upgrade never reaches 'open' — it closes, with no status. The
+    // probe says whether that was a 429, a bad key or an unreachable solver,
+    // where waiting on 'open' alone used to hang the lane forever.
+    await new Promise<void>((resolve, reject) => {
+      let opened = false;
+      socket.addEventListener(
+        'open',
+        () => {
+          opened = true;
+          resolve();
+        },
+        { once: true }
+      );
+      socket.addEventListener(
+        'close',
+        () => {
+          if (!opened)
+            void classifyUpgradeFailure(sessionUrl, solverApiKey).then(reject);
+        },
+        { once: true }
+      );
+    });
     socket.send(
       JSON.stringify({
         cookies: await cookies(site.host),
