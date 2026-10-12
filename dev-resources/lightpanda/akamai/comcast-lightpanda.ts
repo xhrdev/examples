@@ -23,9 +23,9 @@
  *      inside the browser, and `context.newCDPSession()`, which is how
  *      `comcast.ts` overrides it, crashes Playwright here.
  *   2. **The identity must be the one the Akamai solver models**
- *      (`chrome-151-macos`). Telemetry under headers that name a different
+ *      (`chrome-154-macos`). Telemetry under headers that name a different
  *      Chrome is scored as a mismatch, and `_abck` sits at `~-1~` for as many
- *      rounds as you care to give it. Both solvers now sit on 151, so the
+ *      rounds as you care to give it. Both solvers now sit on 154, so the
  *      proxy's DataDome default happens to agree — pin it anyway, because
  *      the two registries are bumped independently and the agreement is a
  *      coincidence of this moment, not a guarantee.
@@ -72,7 +72,7 @@ const log = (msg: string, ...extra: unknown[]): void =>
 
 /**
  * What the MITM proxy claims upstream. This has to be the browser the *Akamai*
- * solver models — `profileId: 'chrome-151-macos'`, the same identity
+ * solver models — `profileId: 'chrome-154-macos'`, the same identity
  * `comcast.ts` installs with `Emulation.setUserAgentOverride`. Let the proxy
  * fall back to its own default and you are trusting two registries to stay in
  * step; when they drift, the telemetry names one Chrome while the headers name

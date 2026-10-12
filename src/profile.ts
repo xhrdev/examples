@@ -43,12 +43,12 @@
  */
 export const PROFILE = {
   brands: [
-    { brand: 'Not=A?Brand', version: '99' },
-    { brand: 'Google Chrome', version: '151' },
-    { brand: 'Chromium', version: '151' },
+    { brand: 'Chromium', version: '154' },
+    { brand: 'Google Chrome', version: '154' },
+    { brand: 'Not A(Brand', version: '99' },
   ],
-  chromeFullVersion: '151.0.7922.109',
-  chromeVersion: '151',
+  chromeFullVersion: '154.0.8037.58',
+  chromeVersion: '154',
   deviceMemory: 32,
   hardwareConcurrency: 10,
   languages: 'en-US,en',
@@ -74,7 +74,7 @@ export const PROFILE = {
   timezone: 'America/New_York',
   timezoneOffsetMinutes: 240,
   userAgent:
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
   vendor: 'Google Inc.',
 } as const;
 

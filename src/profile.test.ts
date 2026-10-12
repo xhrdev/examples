@@ -46,7 +46,7 @@ test('the profile id is derived from the version and os, never written out', () 
 test("sec-ch-ua carries every brand, in registry order, in Chrome's format", () => {
   assert.equal(
     SEC_CH_UA,
-    '"Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"'
+    '"Chromium";v="154", "Google Chrome";v="154", "Not A(Brand";v="99"'
   );
   for (const { brand } of PROFILE.brands) assert.ok(SEC_CH_UA.includes(brand));
 });
@@ -59,7 +59,7 @@ test('the full-version list pads GREASE and gives every real brand the full vers
   const byBrand = new Map(FULL_VERSION_LIST.map((b) => [b.brand, b.version]));
   assert.equal(byBrand.get('Google Chrome'), PROFILE.chromeFullVersion);
   assert.equal(byBrand.get('Chromium'), PROFILE.chromeFullVersion);
-  assert.equal(byBrand.get('Not=A?Brand'), '99.0.0.0');
+  assert.equal(byBrand.get('Not A(Brand'), '99.0.0.0');
 });
 
 /**
