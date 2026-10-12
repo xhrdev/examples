@@ -174,13 +174,15 @@ const SCRIPTS = [
   // canary, through an ISP proxy, signed in 55 of 57 times over 2026-10-10 to
   // 2026-10-12. If it goes red, check `_abck` acceptance on the runner first.
   { headless: true, script: 'src/akamai/sbsd/oakley' },
-  // alaska and tractorsupply — added 2026-10-12 after three CI-runner runs
-  // (no proxy) each: 3/3 on both. Both are real solves, not a target that
-  // happened not to challenge: alaska clears a DataDome interstitial-to-captcha
-  // flow in 16-20s, tractorsupply gets `_abck` to `~0~` and reaches the
-  // homepage in ~55s. Both also passed locally. Gating.
-  { headless: true, script: 'src/datadome/alaska' },
+  // tractorsupply — added 2026-10-12, 5/5 on CI-runner runs (no proxy). A real
+  // solve, not a target that happened not to challenge: it gets `_abck` to
+  // `~0~` and reaches the homepage in ~55s. Gating.
   { headless: true, script: 'src/akamai/sbsd/tractorsupply' },
+  // alaska — added 2026-10-12, advisory: 5/6 on CI-runner runs, 5/5 locally. A
+  // real solve (interstitial to captcha in 16-20s). The one failure was the
+  // captcha GET answered HTTP 403, DataDome declining the solve from that
+  // address.
+  { advisory: true, headless: true, script: 'src/datadome/alaska' },
   // book-secure — added 2026-10-12, advisory: 2/3 in CI, 5/5 locally. The one
   // failure was "The challenge document recurred in the same round" after 6s,
   // which is DataDome re-serving the challenge after a submission (see
