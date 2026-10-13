@@ -68,6 +68,7 @@ import {
   fetchForRoute,
   type FetchResponse,
   fulfillDecoded,
+  isSensorScript,
   sendFromFrame,
 } from '#src/akamai/route-fetch.js';
 import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
@@ -1506,10 +1507,7 @@ export function attach(page: Page, opts: AttachOptions): AkamaiHandle {
       // has to run: it is what emits the carrier POSTs this file rewrites.
       return handBack(route, body, response);
     }
-    if (
-      sensor === 'solver' &&
-      (sensorPaths.has(key) || (body.length > 50_000 && /\bbmak\b/u.test(body)))
-    ) {
+    if (sensor === 'solver' && (sensorPaths.has(key) || isSensorScript(body))) {
       adoptSensor(url, body);
       // The real sensor must not run, or it posts its own telemetry
       // alongside the solver's.

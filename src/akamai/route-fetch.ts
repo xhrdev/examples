@@ -53,6 +53,17 @@ export type FetchResponse = (
  */
 export const AKAMAI_PIXEL_PATH: RegExp = /^\/akam\/\d+\//u;
 
+/**
+ * Whether a script body is the `_abck` sensor itself.
+ *
+ * The URL cannot say: on finnair.com and uline.com a 104 KB Akamai script
+ * with no `bmak` in it sits on a path of exactly the sensor's shape, under
+ * the same prefix, and often loads first. A session opened against it never
+ * advances, and holds the origin so the real ~600 KB sensor is skipped.
+ */
+export const isSensorScript = (body: string): boolean =>
+  body.length > 50_000 && /\bbmak\b/u.test(body);
+
 /** The `rval` field of an `_abck` value: `-1` is "keep going", `0` accepted. */
 export const abckStatus = (value: string | undefined): string | undefined =>
   value?.split('~')[1];

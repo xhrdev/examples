@@ -46,6 +46,7 @@ import {
   type FetchResponse,
   fulfillDecoded,
   isAuthFailure,
+  isSensorScript,
   sendFromFrame,
 } from '#src/akamai/route-fetch.js';
 import { isSbsdBundle } from '#src/akamai/sbsd-bundle.js';
@@ -524,7 +525,7 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
             await applyCookies(req.url(), resp.setCookie);
             const scriptOrigin = new URL(req.url()).origin;
             const doc = capturedDocs.get(scriptOrigin);
-            if (doc && !sessions.has(scriptOrigin))
+            if (doc && !sessions.has(scriptOrigin) && isSensorScript(body))
               await prepAndStart(
                 scriptOrigin,
                 doc.url,
@@ -572,6 +573,14 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
             break;
           }
         }
+      }
+
+      if (scriptSource && !isSensorScript(scriptSource)) {
+        log(
+          `[${origin}] ${scriptUrl} has the sensor's path shape but not its ` +
+            `body (${scriptSource.length}b, no bmak), skipping`
+        );
+        return;
       }
 
       if (!scriptUrl || !scriptSource) {
