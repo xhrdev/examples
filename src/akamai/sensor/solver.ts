@@ -436,7 +436,7 @@ export async function solve(page: Page, opts: SolveOptions): Promise<void> {
       const cookies = await cookieJar(context, cookieUrl);
       const sanitizedHtml = stripScripts(html);
       log(
-        `[${origin}] Captured: script=${script.length}b html=${sanitizedHtml.length}b cookies=[${Object.keys(cookies).sort().join(',')}]`
+        `[${origin}] Captured: script=${script.length}b (${new URL(scriptUrl).pathname.slice(0, 40)}) html=${sanitizedHtml.length}b cookies=[${Object.keys(cookies).sort().join(',')}]`
       );
       startSession(
         origin,
