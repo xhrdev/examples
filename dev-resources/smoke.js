@@ -188,6 +188,12 @@ const SCRIPTS = [
   // which is DataDome re-serving the challenge after a submission (see
   // idealista above), not anything specific to this target.
   { advisory: true, headless: true, script: 'src/datadome/book-secure' },
+  // finnair, uline (sensor) and coupang (SBSD) — added 2026-10-13, advisory
+  // until CI-runner runs back them: locally 4/5, 3/3 and 3/3 headless, each a
+  // real solve with `_abck` accepted in three rounds.
+  { advisory: true, headless: true, script: 'src/akamai/sensor/finnair' },
+  { advisory: true, headless: true, script: 'src/akamai/sensor/uline' },
+  { advisory: true, headless: true, script: 'src/akamai/sbsd/coupang' },
   // Shape (formerly F5) has no example in this repo yet — add an entry here
   // once one exists rather than gating xhrdev's smoke suite on a target it
   // can't yet exercise.

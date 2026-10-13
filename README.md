@@ -87,8 +87,9 @@ RESULT: SUCCESS
 | [`src/akamai/sensor/comcast.ts`](src/akamai/sensor/comcast.ts) | Akamai Bot Manager | `_abck` sensor | yes |
 | [`src/akamai/sensor/ca-edd.ts`](src/akamai/sensor/ca-edd.ts) | Akamai Bot Manager | `_abck` sensor + login | yes |
 | [`src/akamai/sensor/lowes.ts`](src/akamai/sensor/lowes.ts) | Akamai Bot Manager | `_abck` sensor | yes |
+| [`src/akamai/sensor/{finnair,uline}.ts`](src/akamai/sensor/README.md) | Akamai Bot Manager | `_abck` sensor | yes |
 | [`src/akamai/sbsd/hilton.ts`](src/akamai/sbsd/hilton.ts) | Akamai Bot Manager | SBSD + `_abck` sensor | yes — headed only |
-| [`src/akamai/sbsd/{magazineluiza,tractorsupply}.ts`](src/akamai/sbsd/README.md) | Akamai Bot Manager | SBSD + `_abck` sensor | yes |
+| [`src/akamai/sbsd/{coupang,magazineluiza,tractorsupply}.ts`](src/akamai/sbsd/README.md) | Akamai Bot Manager | SBSD + `_abck` sensor | yes |
 | [`src/akamai/sbsd/oakley.ts`](src/akamai/sbsd/oakley.ts) | Akamai Bot Manager | SBSD + `_abck` sensor, then real sign-in | yes |
 
 Each vendor directory has its own README with the protocol details:
@@ -109,9 +110,11 @@ npm run etsy -- --screenshot  # ...and alaska, saks, anthropologie, yelp,
 npm run comcast               # Akamai, _abck sensor
 npm run ca-edd                # Akamai, _abck sensor, up to the real login page
 npm run lowes                 # Akamai, _abck sensor
+npm run finnair               # Akamai, _abck sensor (also: uline)
 npm run hilton                # Akamai, SBSD + _abck; headed only
 npm run magazineluiza         # Akamai, SBSD + _abck
 npm run tractorsupply         # Akamai, SBSD + _abck
+npm run coupang               # Akamai, SBSD + _abck
 npm run oakley                # Akamai, SBSD + _abck, then signs in (needs username=/password= in .env)
 
 # any script takes flags after --
