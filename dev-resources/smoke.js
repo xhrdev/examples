@@ -188,12 +188,18 @@ const SCRIPTS = [
   // which is DataDome re-serving the challenge after a submission (see
   // idealista above), not anything specific to this target.
   { advisory: true, headless: true, script: 'src/datadome/book-secure' },
-  // finnair, uline (sensor) and coupang (SBSD) — added 2026-10-13, advisory
-  // until CI-runner runs back them: locally 4/5, 3/3 and 3/3 headless, each a
-  // real solve with `_abck` accepted in three rounds.
+  // coupang — added 2026-10-13, 6/6 on CI-runner runs and 3/3 locally, each a
+  // real solve: SBSD carrier answered, then `_abck` to `~0~` in three rounds
+  // (~18s). Gating.
+  { headless: true, script: 'src/akamai/sbsd/coupang' },
+  // finnair and uline — added 2026-10-13, advisory. Locally both accept in
+  // three rounds every time (7/7). From CI runners, once the wrong-script bug
+  // was fixed, finnair went 0/3 and uline 2/3: the submissions are answered
+  // 201 but `_abck` stays `~-1~` for 11-12 rounds until the 120s timeout. That
+  // is the "sensor never accepted" failure, reproducible here, which is the
+  // reason to keep running them.
   { advisory: true, headless: true, script: 'src/akamai/sensor/finnair' },
   { advisory: true, headless: true, script: 'src/akamai/sensor/uline' },
-  { advisory: true, headless: true, script: 'src/akamai/sbsd/coupang' },
   // Shape (formerly F5) has no example in this repo yet — add an entry here
   // once one exists rather than gating xhrdev's smoke suite on a target it
   // can't yet exercise.
