@@ -58,6 +58,8 @@ export type BrowserTargetOptions = {
 /** How long the browser stays open after a run, to inspect what it landed on. */
 const BROWSER_HOLD_MS = 30_000;
 const SCREENSHOT_DIR = 'target/screenshots';
+const WINDOW_HEIGHT = 904;
+const WINDOW_WIDTH = 1200;
 
 /**
  * Solve DataDome on `url` in a real Chrome and report the outcome.
@@ -93,9 +95,22 @@ export async function runBrowserTarget({
     .split(/\s+/u)
     .filter(Boolean);
 
+  // Headless Chrome reports an 800x600 `screen` regardless of window size, so
+  // a 1200x904 window sits on a screen smaller than itself — a shape no real
+  // browser has. On saks that alone sent every headless run to a captcha whose
+  // cookie the target then refused (0/8); pinning the screen to the window
+  // took it to 6/8 on the interstitial alone. Headed reads the real display.
+  const headlessScreen = process.argv.includes('--headless')
+    ? [`--screen-info={${WINDOW_WIDTH}x${WINDOW_HEIGHT}}`]
+    : [];
+
   const launchOptions: LaunchOptions = {
     ...chromeLaunchOptions({
-      args: ['--window-size=1200,904', ...extraArgs],
+      args: [
+        `--window-size=${WINDOW_WIDTH},${WINDOW_HEIGHT}`,
+        ...headlessScreen,
+        ...extraArgs,
+      ],
       proxy,
     }),
     ignoreDefaultArgs: ['--enable-automation', '--force-color-profile=srgb'],
