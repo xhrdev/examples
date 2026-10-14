@@ -5,7 +5,7 @@
  *
  *   node --env-file=.env dev-resources/datadome-report.js [--iterations=N] [--only=a,b] [--concurrency=N] [--no-headless]
  *
- * Sites run concurrently (default 4); iterations of one site run one at a
+ * Sites run concurrently (default 3); iterations of one site run one at a
  * time, each with a fresh proxy session, so no single target sees a burst.
  */
 import { spawn } from 'node:child_process';
@@ -34,7 +34,7 @@ const flag = (name, fallback) =>
     ?.slice(name.length + 3) ?? fallback;
 
 const ITERATIONS = Number(flag('iterations', 3));
-const CONCURRENCY = Number(flag('concurrency', 7));
+const CONCURRENCY = Number(flag('concurrency', 3));
 const HEADLESS = !process.argv.includes('--no-headless');
 const only = flag('only', '');
 const sites = only ? only.split(',') : SITES;

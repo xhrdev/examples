@@ -48,6 +48,7 @@
     "etsy": "node --env-file=.env src/datadome/etsy.ts",
     "bestwestern": "node --env-file=.env src/datadome/bestwestern.ts",
     "viator": "node --env-file=.env src/datadome/viator.ts",
+    "datadome-report": "node --env-file=.env dev-resources/datadome-report.js",
     "lowes": "node --env-file=.env src/akamai/sensor/lowes.ts",
     "cvs": "node --env-file=.env src/akamai/sensor/cvs.ts",
     "finnair": "node --env-file=.env src/akamai/sensor/finnair.ts",
