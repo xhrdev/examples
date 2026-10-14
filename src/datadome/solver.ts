@@ -1668,6 +1668,21 @@ async function sampleChallengeFrame(
   parentFrame: Frame,
   frame: Frame
 ): Promise<FrameSurfaces> {
+  // Sampled as soon as the challenge document responds, which can be before
+  // its frame has been laid out: an escalated captcha (i -> c) measured
+  // innerWidth 0 in CI, which the solver rejects with a 400. Give it a moment
+  // to have a size; if it never does, the solver's error says so.
+  await frame
+    .waitForFunction(
+      () => window.innerWidth > 0 && window.innerHeight > 0,
+      undefined,
+      {
+        polling: 100,
+        timeout: 5000,
+      }
+    )
+    .then((handle) => handle.dispose())
+    .catch(() => undefined);
   const [parentScreen, frameScreen, sampled] = await Promise.all([
     parentFrame.evaluate(captureWindowGeometry),
     frame.evaluate(captureWindowGeometry),
