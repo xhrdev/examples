@@ -67,22 +67,11 @@ const SCRIPTS = [
   // from a runner (2026-10-10 x3, 2026-10-12 x3), ~124s each. Its one failure
   // on record is 2026-09-30.
   { headless: true, script: 'src/datadome/anthropologie' },
-  // Advisory since 2026-10-12: two of three back-to-back dispatches on that
-  // date failed in under 10s with "The challenge document recurred in the same
-  // round", an intermittent solver error that also hits github-signup and
-  // book-secure locally and is not specific to this target or exit IP. Make
-  // this gating again once that error is fixed.
-  //
-  // Previously not advisory — verified 2026-09-26 that its only failure mode was
-  // already covered by `NOT_A_REGRESSION` below. Two consecutive runs through
-  // the shared proxy both came back `BANNED` (exit=4): DataDome reports that
-  // exact exit IP banned for idealista.com specifically (grainger and every
-  // Akamai target passed through the same IP in the same session, so this is
-  // per-property, not a dead proxy). The previously-documented escalation-
-  // timer race is not what's happening now — this needs a fresh/rotating exit
-  // IP to re-verify the code path, not a round-model change. `BANNED` will
-  // keep reporting without failing the suite until that happens.
-  { advisory: true, headless: true, script: 'src/datadome/idealista' },
+  // idealista — gating again since 2026-10-13 (advisory from 2026-10-12): 13/13
+  // on solo CI runs. All four failures in the last 32 runs, "The challenge
+  // document recurred in the same round", came from three runs dispatched in
+  // the same minute, which a PR's single smoke run never does.
+  { headless: true, script: 'src/datadome/idealista' },
   // comcast — gating again since 2026-10-10, after one day advisory.
   //
   // The break was the target, not the solver or the address. `/account/`
