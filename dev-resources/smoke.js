@@ -58,6 +58,10 @@ const SCRIPTS = [
   // straightforward DataDome interstitials (same shape as grainger, no
   // login/SBSD). Advisory until each has a verification run, same policy as
   // github-signup/oakley above.
+  //
+  // saks solves locally since 28f47dd (7/7 headless; 0/8 before, every run a
+  // captcha whose cookie the target refused), but the runner's address is
+  // BANNED on saks (3/3, 2026-10-14), so CI has no verification to promote on.
   { advisory: true, headless: true, script: 'src/datadome/saks' },
   // anthropologie — gating since 2026-10-12: passed the last six smoke runs
   // from a runner (2026-10-10 x3, 2026-10-12 x3), ~124s each. Its one failure
@@ -178,11 +182,11 @@ const SCRIPTS = [
   // solve, not a target that happened not to challenge: it gets `_abck` to
   // `~0~` and reaches the homepage in ~55s. Gating.
   { headless: true, script: 'src/akamai/sbsd/tractorsupply' },
-  // alaska — added 2026-10-12, advisory: 5/6 on CI-runner runs, 5/5 locally. A
-  // real solve (interstitial to captcha in 16-20s). The one failure was the
-  // captcha GET answered HTTP 403, DataDome declining the solve from that
-  // address.
-  { advisory: true, headless: true, script: 'src/datadome/alaska' },
+  // alaska — gating since 2026-10-14: 8/9 on CI-runner runs (5/6 when added
+  // 2026-10-12, then 3/3 after 28f47dd pinned the headless screen to the
+  // window), 8/8 locally. A real solve in ~10s. Its one failure was a captcha
+  // GET answered HTTP 403, DataDome declining the solve from that address.
+  { headless: true, script: 'src/datadome/alaska' },
   // book-secure — added 2026-10-12, advisory: 2/3 in CI, 5/5 locally. The one
   // failure was "The challenge document recurred in the same round" after 6s,
   // which is DataDome re-serving the challenge after a submission (see
