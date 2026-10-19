@@ -76,6 +76,7 @@ import {
   externalScriptUrl,
   extractExternalScriptUrls,
 } from '#src/datadome/external-scripts.js';
+import { sameSite } from '#src/datadome/same-site.js';
 import { collectStylesheetAssets } from '#src/datadome/stylesheets.js';
 import { pinWindowToProfile } from '#src/identity.js';
 import {
@@ -782,7 +783,7 @@ export async function solve(
       request.frame() !== page.mainFrame() ||
       request.resourceType() !== 'document' ||
       !request.isNavigationRequest() ||
-      new URL(response.url()).hostname !== targetUrl.hostname
+      !sameSite(new URL(response.url()).hostname, targetUrl.hostname)
     ) {
       return;
     }
@@ -1124,7 +1125,7 @@ export async function solve(
     await responseQueue;
     if (
       sequence.length !== roundsBeforeQuietWindow ||
-      new URL(page.url()).hostname !== targetUrl.hostname ||
+      !sameSite(new URL(page.url()).hostname, targetUrl.hostname) ||
       accepted.navigation.status >= 400
     ) {
       throw new Error('DataDome acceptance could not be proven');

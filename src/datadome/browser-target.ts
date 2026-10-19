@@ -35,6 +35,7 @@ import { chromeLaunchOptions } from '#src/chrome.js';
 import { pinSession } from '#src/proxy.js';
 import { solverBaseUrl } from '#src/solver-url.js';
 import { ACCESS_DENIED_EXIT_CODE, isAccessDenied } from '#src/access-denied.js';
+import { sameSite } from '#src/datadome/same-site.js';
 import { solve } from '#src/datadome/solver.js';
 import {
   BANNED_EXIT_CODE,
@@ -239,7 +240,9 @@ async function servedDirectly(
     return false;
   }
   try {
-    if (new URL(page.url()).hostname !== new URL(url).hostname) return false;
+    if (!sameSite(new URL(page.url()).hostname, new URL(url).hostname)) {
+      return false;
+    }
     return (await page.locator('body').innerText()).trim().length > 0;
   } catch {
     return false;
