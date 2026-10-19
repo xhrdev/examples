@@ -46,6 +46,7 @@
     "anthropologie": "node --env-file=.env src/datadome/anthropologie.ts",
     "yelp": "node --env-file=.env src/datadome/yelp.ts",
     "etsy": "node --env-file=.env src/datadome/etsy.ts",
+    "tripadvisor": "node --env-file=.env src/datadome/tripadvisor.ts",
     "bestwestern": "node --env-file=.env src/datadome/bestwestern.ts",
     "viator": "node --env-file=.env src/datadome/viator.ts",
     "datadome-report": "node --env-file=.env dev-resources/datadome-report.js",

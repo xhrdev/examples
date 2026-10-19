@@ -144,6 +144,7 @@ site:
 | `yelp.ts` | `www.yelp.com/signup` | none | no server-side block from a good IP — DataDome is present only as the client-side tag, so a clean address gets no challenge and the run times out rather than failing |
 | `etsy.ts` | `www.etsy.com` | `i` | scores first (`x-datadome-riskscore` on the block) and is the least forgiving here |
 | `bestwestern.ts` | `www.bestwestern.com` | `c` / `fe` | a captcha from the first request, with no interstitial in front of it |
+| `tripadvisor.ts` | `www.tripadvisor.com` | `i` | an interstitial that clears in one round. 3/3 headless on 2026-10-19, real homepage in the screenshot |
 
 They are deliberately **not** in `npm test`. Each is a headed browser run with
 a 30s hold, and several are expected to fail some fraction of the time, so
