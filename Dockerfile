@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/node:26-slim
+FROM public.ecr.aws/docker/library/node:26.12.1-slim
 
 WORKDIR /app
 
