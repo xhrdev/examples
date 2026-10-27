@@ -74,20 +74,20 @@
   },
   "author": "XHR Software Inc",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "axios": "1.20.0",
     "axios-cookiejar-support": "7.0.0",
     "http-cookie-agent": "8.0.0",
     "https-proxy-agent": "9.1.0",
     "playwright-core": "1.64.1",
-    "tldts": "7.4.18",
+    "tldts": "7.4.19",
     "tough-cookie": "6.0.2",
-    "undici": "8.12.2"
+    "undici": "8.12.3"
   },
   "devDependencies": {
-    "@commitlint/cli": "21.2.3",
-    "@commitlint/config-angular": "21.2.3",
-    "@skilbjo/config-rc": "1.0.62",
+    "@commitlint/cli": "21.2.4",
+    "@commitlint/config-angular": "21.2.4",
+    "@skilbjo/config-rc": "1.0.63",
     "@tsconfig/node24": "24.0.5",
     "@types/node": "26.6.5",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
