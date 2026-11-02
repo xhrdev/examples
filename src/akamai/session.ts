@@ -63,10 +63,15 @@ export type AkamaiSessionOptions = {
 /** What a run reports: the process exit code and the text after `RESULT: `. */
 export type TargetResult = { code: number; result: string };
 
-/** Akamai's block page, which comes back as a normal 200 document. */
+/**
+ * A refusal page: Akamai's own, which comes back as a normal 200 document, or
+ * coupang.com's 403 "쿠팡!" page ("you do not have permission to view this
+ * page"), which says nothing about Access Denied and was read as success.
+ */
 export const looksDenied = (html: string): boolean =>
   /<H1>\s*Access Denied\s*<\/H1>/iu.test(html) ||
-  html.includes('Access Denied');
+  html.includes('Access Denied') ||
+  html.includes('요청하신 페이지의 사용권한이 없습니다');
 
 /**
  * Launch Chrome as the profile's identity and return it ready to navigate.
