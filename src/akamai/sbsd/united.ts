@@ -18,9 +18,11 @@
  *   signed in       -> the solver works (RESULT: SUCCESS, exit 0)
  *   no credentials  -> nothing was measured (RESULT: NOT CONFIGURED, exit 5)
  *
- * The account used here has MFA on, so a run ends at the one-time-code panel:
- * that is reported as its own outcome (exit 1), since the code goes to the
- * account holder's phone and every run sends one.
+ * The account used here has MFA on. When `/xapi/auth/signin` answers 202 the
+ * script waits up to 180s for the six-digit code in `target/united-otp` (or
+ * `united_otp_file=`), enters it, and continues to `/xapi/auth/validate-otp`.
+ * No code in time is its own outcome (exit 1). Every run sends the account
+ * holder a text, so do not loop it.
  *
  * Anything in between (the panel comes back with an error) is a credentials
  * problem, not an Akamai block, and is reported as its own outcome.
@@ -30,6 +32,7 @@
  * with credentials you are authorised to use.
  */
 
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { openAkamaiSession, reportRunError } from '#src/akamai/session.js';
 import { trackSettle } from '#src/akamai/sbsd/settle.js';
 import { attach } from '#src/akamai/sbsd/solver.js';
@@ -41,6 +44,11 @@ import { log, sleep } from '#src/util.js';
 
 const ORIGIN = 'https://www.united.com';
 const url = `${ORIGIN}/en/us`;
+/* The one-time code goes to the account holder's phone, so the script cannot
+ * produce it. It waits for a file instead: whatever can read the code (a
+ * person, or an agent watching the inbox the texts are forwarded to) writes the
+ * six digits there. */
+const otpFile = process.env['united_otp_file'] ?? 'target/united-otp';
 const credentials = resolveCredentials('united');
 if (!credentials) {
   log(
@@ -105,6 +113,31 @@ try {
     await cleanup(1);
   }
 
+  // 202 from /signin is the MFA challenge; answer it if a code arrives.
+  for (let i = 0; i < 30 && !authStatus['/xapi/auth/signin']; i++)
+    await sleep(500);
+  if (authStatus['/xapi/auth/signin'] === 202) {
+    log(`MFA challenge. Waiting up to 180s for the code in ${otpFile}...`);
+    rmSync(otpFile, { force: true });
+    let code = '';
+    for (let i = 0; i < 90 && !code; i++) {
+      await sleep(2000);
+      if (existsSync(otpFile))
+        code = /\d{6}/.exec(readFileSync(otpFile, 'utf8'))?.[0] ?? '';
+    }
+    if (code) {
+      rmSync(otpFile, { force: true });
+      // Six one-digit boxes that auto-advance; the first one has focus.
+      await page.keyboard.type(code, { delay: 120 });
+      await page
+        .locator('button[type="submit"]:has-text("Continue")')
+        .last()
+        .click();
+      log('Code entered');
+      authStatus['mfa'] = 1;
+    }
+  }
+
   // A signed-in header swaps the "Sign in" button for the member's name.
   await page
     .waitForFunction(
@@ -131,9 +164,11 @@ try {
    * wants a one-time code, and the "Sign in" button disappears behind the code
    * panel just as it does for a real sign-in. Neither the button nor the 200
    * from `validate-username` can tell the two apart; the 202 can. */
-  const mfaRequired = authStatus['/xapi/auth/signin'] === 202;
+  const mfaRequired =
+    authStatus['/xapi/auth/signin'] === 202 && !authStatus['mfa'];
   const signedIn =
-    authStatus['/xapi/auth/signin'] === 200 &&
+    (authStatus['/xapi/auth/signin'] === 200 ||
+      authStatus['/xapi/auth/validate-otp'] === 200) &&
     !(await page
       .locator('#loginButton')
       .filter({ hasText: /sign in/i })
