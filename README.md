@@ -91,6 +91,7 @@ RESULT: SUCCESS
 | [`src/akamai/sbsd/hilton.ts`](src/akamai/sbsd/hilton.ts) | Akamai Bot Manager | SBSD + `_abck` sensor | yes — headed only |
 | [`src/akamai/sbsd/{coupang,magazineluiza,tractorsupply}.ts`](src/akamai/sbsd/README.md) | Akamai Bot Manager | SBSD + `_abck` sensor | yes |
 | [`src/akamai/sbsd/oakley.ts`](src/akamai/sbsd/oakley.ts) | Akamai Bot Manager | SBSD + `_abck` sensor, then real sign-in | yes |
+| [`src/akamai/sbsd/united.ts`](src/akamai/sbsd/united.ts) | Akamai Bot Manager | SBSD + `_abck` sensor, then sign-in up to the MFA prompt | no |
 
 Each vendor directory has its own README with the protocol details:
 [**src/akamai**](src/akamai/README.md) · [**src/datadome**](src/datadome/README.md)
@@ -116,6 +117,7 @@ npm run magazineluiza         # Akamai, SBSD + _abck
 npm run tractorsupply         # Akamai, SBSD + _abck
 npm run coupang               # Akamai, SBSD + _abck
 npm run oakley                # Akamai, SBSD + _abck, then signs in (needs username=/password= in .env)
+npm run united                # Akamai, SBSD + _abck, signs in as far as MFA (needs united_username=/united_password= in .env)
 
 # any script takes flags after --
 node --env-file=.env src/datadome/idealista.ts --headless

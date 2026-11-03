@@ -69,6 +69,7 @@
     "coupang": "node --env-file=.env src/akamai/sbsd/coupang.ts",
     "magazineluiza": "node --env-file=.env src/akamai/sbsd/magazineluiza.ts",
     "tractorsupply": "node --env-file=.env src/akamai/sbsd/tractorsupply.ts",
+    "united": "node --env-file=.env src/akamai/sbsd/united.ts",
     "loadtest": "node --env-file=.env src/loadtest.ts",
     "prepare": "husky"
   },

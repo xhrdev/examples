@@ -155,6 +155,7 @@ you attach. If you only came for SBSD, say so.
 | `magazineluiza.ts` | both channels | solves end to end |
 | `tractorsupply.ts` | both channels | solves end to end |
 | `oakley.ts` | both channels, then a real **sign-in** with `username=`/`password=` from `.env` | solves end to end |
+| `united.ts` | both channels, then a two-step **sign-in** (`united_username=`/`united_password=`); stops at MFA | solves through to the MFA prompt |
 
 ```bash
 npm run hilton
@@ -163,6 +164,7 @@ npm run aircanada
 npm run magazineluiza
 npm run tractorsupply
 npm run oakley
+npm run united
 ```
 
 ### the two channels are scored separately, and it shows
