@@ -11,7 +11,6 @@
   "scripts": {
     "postinstall": "npx playwright install --with-deps chrome && npm run lightpanda:download",
     "lightpanda:download": "node dev-resources/lightpanda-download.js",
-    "depcheck": "depcheck",
     "eslint": "eslint .",
     "exec": "node",
     "repl": "node --env-file=.env dev-resources/repl.cjs",
@@ -71,7 +70,8 @@
     "tractorsupply": "node --env-file=.env src/akamai/sbsd/tractorsupply.ts",
     "united": "node --env-file=.env src/akamai/sbsd/united.ts",
     "loadtest": "node --env-file=.env src/loadtest.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "knip": "knip --dependencies"
   },
   "author": "XHR Software Inc",
   "dependencies": {
@@ -92,10 +92,10 @@
     "@tsconfig/node24": "24.0.5",
     "@types/node": "26.6.6",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "depcheck": "1.4.7",
     "eslint": "10.14.0",
     "eslint-import-resolver-typescript": "4.4.5",
     "husky": "9.1.7",
+    "knip": "6.44.1",
     "nodemon": "3.1.14",
     "playwright": "1.65.0"
   },
@@ -113,5 +113,11 @@
   },
   "engines": {
     "node": ">=26.12.1"
+  },
+  "overrides": {
+    "minimatch@^10": "11.0.5",
+    "eslint-plugin-import-x": {
+      "minimatch": "10.2.6"
+    }
   }
 }

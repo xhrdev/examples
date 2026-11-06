@@ -28,7 +28,7 @@ endif
 lint: | install target/lint
 target/lint:
 	npm run lint
-	npm run depcheck
+	npm run knip
 	source venv/bin/activate && ruff check
 	mkdir -p $(@D) && touch $@
 .PHONY: lint
