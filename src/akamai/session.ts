@@ -23,7 +23,7 @@ import {
   type Page,
 } from 'playwright-core';
 
-import { applyIdentity } from '#src/identity.js';
+import { applyIdentity, applyWorkerIdentity } from '#src/identity.js';
 import { PROFILE } from '#src/profile.js';
 import { chromeLaunchOptions } from '#src/chrome.js';
 import {
@@ -64,14 +64,17 @@ export type AkamaiSessionOptions = {
 export type TargetResult = { code: number; result: string };
 
 /**
- * A refusal page: Akamai's own, which comes back as a normal 200 document, or
+ * A refusal page: Akamai's own, which comes back as a normal 200 document,
  * coupang.com's 403 "쿠팡!" page ("you do not have permission to view this
- * page"), which says nothing about Access Denied and was read as success.
+ * page"), which says nothing about Access Denied and was read as success, or
+ * Akamai's challenge interstitial, a 200 document with no content that is
+ * still waiting on the challenge it carries.
  */
 export const looksDenied = (html: string): boolean =>
   /<H1>\s*Access Denied\s*<\/H1>/iu.test(html) ||
   html.includes('Access Denied') ||
-  html.includes('요청하신 페이지의 사용권한이 없습니다');
+  html.includes('요청하신 페이지의 사용권한이 없습니다') ||
+  html.includes('sec-if-cpt-container');
 
 /**
  * Launch Chrome as the profile's identity and return it ready to navigate.
@@ -87,7 +90,18 @@ export async function openAkamaiSession(
   const proxy = process.env['proxy'];
   const apiKey = process.env['api_key'];
   const browser = await chromium.launch(
-    chromeLaunchOptions({ args: options.args ?? [], proxy })
+    // The base user agent and languages too: a worker takes its
+    // `navigator.userAgent` and `navigator.languages` from the browser, not
+    // from the page's override, and would say the installed Chrome's version
+    // and the machine's languages rather than the profile's.
+    chromeLaunchOptions({
+      args: [
+        ...(options.args ?? []),
+        `--user-agent=${PROFILE.userAgent}`,
+        `--accept-lang=${PROFILE.languages}`,
+      ],
+      proxy,
+    })
   );
   const context = await browser.newContext({
     ...(options.ignoreHTTPSErrors ? { ignoreHTTPSErrors: true } : {}),
@@ -141,6 +155,7 @@ export async function openAkamaiSession(
   // The identity the solver was told to model, installed on the real browser.
   const cdp = await context.newCDPSession(page);
   await applyIdentity(cdp);
+  await applyWorkerIdentity(browser);
 
   return {
     apiKey,

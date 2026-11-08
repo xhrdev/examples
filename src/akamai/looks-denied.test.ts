@@ -25,3 +25,11 @@ test('a real page is not denied', () => {
     false
   );
 });
+
+test("akamai's unfinished challenge interstitial is denied, not a page", () => {
+  const html =
+    '<!DOCTYPE html><html><head></head><body>' +
+    '<div id="sec-if-cpt-container" role="main" style="display: none"></div>' +
+    '</body></html>';
+  assert.equal(looksDenied(html), true);
+});
