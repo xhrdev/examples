@@ -92,6 +92,7 @@ RESULT: SUCCESS
 | [`src/akamai/sbsd/{coupang,magazineluiza,tractorsupply}.ts`](src/akamai/sbsd/README.md) | Akamai Bot Manager | SBSD + `_abck` sensor | yes |
 | [`src/akamai/sbsd/oakley.ts`](src/akamai/sbsd/oakley.ts) | Akamai Bot Manager | SBSD + `_abck` sensor, then real sign-in | yes |
 | [`src/akamai/sbsd/united.ts`](src/akamai/sbsd/united.ts) | Akamai Bot Manager | SBSD + `_abck` sensor, then sign-in incl. SMS MFA (code via file) | no |
+| [`src/akamai/sbsd/login.ts`](src/akamai/sbsd/login.ts) | Akamai Bot Manager | oakley/united sign-in through a given proxy; emits cookies + user agent, proves them with curl | no |
 
 Each vendor directory has its own README with the protocol details:
 [**src/akamai**](src/akamai/README.md) · [**src/datadome**](src/datadome/README.md)
@@ -118,6 +119,10 @@ npm run tractorsupply         # Akamai, SBSD + _abck
 npm run coupang               # Akamai, SBSD + _abck
 npm run oakley                # Akamai, SBSD + _abck, then signs in (needs username=/password= in .env)
 npm run united                # Akamai, SBSD + _abck, signs in; MFA code read from target/united-otp (needs united_username=/united_password= in .env)
+npm run sbsd-login -- oakley --proxy=http://user:pass@host:port
+# signs in through that proxy and writes target/sbsd-login-<target>.json:
+# cookie header + user agent + exit IP, verified by replaying it with curl
+# through the same proxy. Same for united (MFA code via target/united-otp).
 
 # any script takes flags after --
 node --env-file=.env src/datadome/idealista.ts --headless

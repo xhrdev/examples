@@ -69,6 +69,7 @@
     "magazineluiza": "node --env-file=.env src/akamai/sbsd/magazineluiza.ts",
     "tractorsupply": "node --env-file=.env src/akamai/sbsd/tractorsupply.ts",
     "united": "node --env-file=.env src/akamai/sbsd/united.ts",
+    "sbsd-login": "node --env-file=.env src/akamai/sbsd/login.ts",
     "loadtest": "node --env-file=.env src/loadtest.ts",
     "prepare": "husky",
     "knip": "knip --dependencies"
