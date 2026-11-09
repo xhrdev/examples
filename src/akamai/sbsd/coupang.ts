@@ -32,6 +32,30 @@
  *   overrides the worker realms, so page, dedicated worker, shared worker and
  *   iframe agree. Search was still refused in 0 of 9 trials afterwards, so that
  *   was a real inconsistency but not the whole answer.
+ *
+ * Re-measured 2026-11-09 on the jsdom-31 solver, from a session that had just
+ * answered everything on the homepage (carrier rows, pixel body, `_abck`
+ * accepted to `~0~`): `/np/search` is refused at the navigation itself, and
+ * nothing about the answered channels changes it.
+ *
+ * - The refusal is a 3.4 KB 403 document on the FIRST request — no
+ *   `#sec-if-cpt-container` interstitial, which matches the 2026-11-03 note
+ *   saying the interstitial appears "on some requests": the interstitial is the
+ *   first-offence path, and a session already marked goes straight to the 403.
+ * - Every 403 response RESETS `_abck` to `~-1~`. Re-solving to acceptance on
+ *   the denied document and reloading does not clear it; four rounds of
+ *   solve-and-reload were refused identically.
+ * - Driving the search through the site's own form — typing into the header
+ *   search box, submitting, landing on `/np/search?component=&q=…&traceId=…
+ *   &channel=user` with the trace the page itself generated — is refused with
+ *   the same 403. The gate is not navigation-shape.
+ * - `sec_cpt` is never set on any of these paths.
+ *
+ * That places the gate outside the Akamai channels this repo answers: the
+ * remaining candidates are the sec-g device token (first-party, ~120 signals
+ * plus a behavioural trace) and whatever the CPT interstitial would have
+ * issued had it been shown. Answering either is a project of its own; the
+ * homepage remains what this example can reach.
  */
 import { looksDenied } from '#src/akamai/session.js';
 import { runSbsdHomepage } from '#src/akamai/sbsd/homepage.js';
