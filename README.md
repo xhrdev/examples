@@ -168,7 +168,7 @@ session, proxy and cookies as the challenge document
 document with an inline collector needs none.
 
 The browser identity sits apart in [`src/profile.ts`](src/profile.ts), which
-every example shares — both vendors, both languages, and the MCP server. There
+every example shares — both vendors and both languages. There
 is one answer in this repo to "which Chrome are we claiming to be", and that
 matters more than it looks: the identity is cross-checked against the headers
 actually sent, so a copy that drifts does not fail loudly, it fails as solves
@@ -185,104 +185,6 @@ requests carry real TLS fingerprints and a real cookie jar. This is
 Akamai examples.
 
 Start with plain HTTP. Reach for the browser bridge when the site forces you to.
-
-## mcp server
-
-Everything above is written the other way round from how an agent works: a
-human picks the target, and the challenge handling is written out ahead of time
-for that one site. An LLM agent doing its own browsing does not know which page
-will block it until the 403 arrives, so it cannot have the handling written in
-advance.
-
-The MCP server that closes that gap is **hosted**, at
-`https://mcp.xhr.dev/mcp` — there is nothing here to run:
-
-```bash
-claude mcp add --transport http xhrdev https://mcp.xhr.dev/mcp
-```
-
-It used to live in this repo as `src/mcp.ts`, a stdio server every user had to
-clone, install and point a client at. It is now
-[xhrdev/mcp](https://github.com/xhrdev/mcp), and the docs for it are
-[Via MCP](https://docs.xhr.dev/integrate-mcp).
-
-What remains here is what this repo is for — scripts that exercise it against
-real targets:
-
-```bash
-npm run mcp:smoke      # protocol, tool list, and the caller headers
-npm run mcp:grainger   # a full DataDome clearance flow through the tool
-npm run mcp:grainger -- --url=https://www.idealista.com/
-npm run mcp:solve -- --url=https://www.aircanada.com/ca/en/aco/home.html
-                        # a full Akamai SBSD flow through the tool, no browser
-```
-
-`mcp:smoke` needs no configuration: with no headers the hosted server uses the
-shared trial box, which is what a new user gets. With `host=` and `api_key=`
-in `.env` it also checks that those headers survive the trip through
-CloudFront and actually reach the origin — if an origin request policy ever
-stops forwarding them, every caller silently falls back to the trial box and
-nothing else would tell you.
-
-`mcp:grainger` is the flow of
-[`grainger_requests.py`](py-src/datadome/grainger_requests.py) with its middle
-requests replaced by one tool call. Comparing the two files is
-the clearest statement of what the MCP server actually does: you still make
-the blocked request and you still send the submission — because DataDome binds
-the clearance cookie to whoever sends it — and everything between is a tool
-call taking a URL and the 403 body you already have.
-
-The hosted server takes no proxy, and does not need one. A DataDome solve
-makes no outbound request — `iframeData` is required because the container
-cannot fetch the challenge document itself — and the one fetch the server does
-make on your behalf is that document, which is not what DataDome binds a
-cookie to. Your submission is, and this script sends it, through `proxy=`.
-
-`mcp:solve` is the Akamai [SBSD](src/akamai/sbsd/README.md) lane with **no
-browser anywhere in it**, against any SBSD-only URL you pass with `--url=`.
-The `sbsd/` examples drive the channel from Playwright, because the rows have
-to reach the page's own carrier POSTs; here this process fetches the document,
-the tool answers with the ledger, and this process sends the three rows
-itself. Same division of labour as `mcp:grainger` — we compute, you send —
-which is why SBSD is on the hosted server and the `_abck` sensor is not.
-
-Properties that also gate on `_abck` (hilton.com, aa.com) need a browser
-bridge the hosted server does not provide, so the document stays blocked
-there even if SBSD would have succeeded — pick a target that runs SBSD only.
-aircanada.com is one such target, which is why it's the example above.
-
-Its one catch is the transport, and it is not an SBSD catch: a protected
-property refuses a client whose TLS fingerprint is your HTTP library's, often
-with a `403` before any bundle is served. Headers move that line further than
-you would expect — `www.aircanada.com` answers a bare `fetch` with an Access
-Denied page and the same request carrying `navigationHeaders()` with a bundle —
-but where they are not enough, that is the problem to fix first, on any
-channel. The script reports a refused document as `skipped` rather than as a
-solve failure, because they are different problems.
-
-### the akamai `_abck` sensor is not on the hosted server
-
-There is no sensor solve among its tools, and that is a property of the channel
-rather than an unfinished port. The lane that works is a browser bridge
-(`WS /akamai/session`): a socket held across rounds, with Chrome relaying each
-sensor submission on its own connection, and what comes back is bound to the
-address that earned it. A stateless function in someone else's cloud satisfies
-none of that.
-
-The two browserless doors were both tried and both are shut. `POST
-/akamai/solve` with `submit: true` needs egress the solver box does not have —
-given a live ISP proxy it sat at `sensors_sent: 0` until the deadline, with and
-without `script` supplied. With `submit: false` it returns the sensor's first
-bootstrap `GET /_bm/get_params`, which is round one of a conversation with
-nowhere to go. And a fetch-driven session against the real socket ran 18 rounds
-with correctly sized payloads without `_abck` ever leaving `~-1~`, while a
-browser bridge reached `~0~` at round 5 on the same target and address minutes
-earlier. The blocker is who submits.
-
-So for the sensor lane, drive the bridge directly from the machine doing the
-browsing: [`src/akamai/sensor/comcast.ts`](src/akamai/sensor/comcast.ts) and
-the [walkthrough](src/akamai/sensor/README.md) beside it.
-
 
 ## proxies
 

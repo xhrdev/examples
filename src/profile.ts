@@ -20,7 +20,6 @@
  *   src/akamai/sbsd/solver.ts    the profile id sent with the ledger
  *   src/identity.ts              the CDP overrides installed on the real browser
  *   src/mitm.ts                  the headers the proxy claims upstream
- *   xhrdev/mcp                   what the hosted MCP tools declare on every solve
  *   py-src/profile.json          generated from here; see `npm run emit:profile`
  *
  * The Python clients cannot import TypeScript, so they read a generated JSON

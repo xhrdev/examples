@@ -115,7 +115,7 @@ HTTP flow is far cheaper.
 | `grainger.ts` | grainger.com through the browser bridge |
 | `idealista.ts` | an interstitial that escalates to a captcha |
 | `browser-target.ts` | the launch options, signal handling and screenshot capture every browser example shares |
-| `http-utils.ts` | the headers and block-page parsing the MCP examples share |
+| `http-utils.ts` | the headers and block-page parsing the HTTP examples share |
 | `profile.ts` | the browser identity and DataDome endpoints, shared with `solver.ts` |
 
 The HTTP flow, in Python, under `py-src/datadome/`:

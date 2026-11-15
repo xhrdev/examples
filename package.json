@@ -21,10 +21,6 @@
     "test": "npm run test:unit && npm run test:smoke",
     "test:smoke": "node --env-file=.env dev-resources/smoke.js",
     "test:unit": "node --test",
-    "mcp:smoke": "node --env-file=.env src/mcp/smoke.ts",
-    "mcp:grainger": "node --env-file=.env src/mcp/grainger.ts",
-    "mcp:solve": "node --env-file=.env src/mcp/solve.ts",
-    "mcp:webfetch": "node --env-file=.env src/mcp/webfetch.ts",
     "emit:profile": "node dev-resources/emit-profile.mjs",
     "fingerprint": "node --env-file=.env src/fingerprint.ts",
     "grainger:browser": "node --env-file=.env src/datadome/grainger.ts",
@@ -76,7 +72,6 @@
   },
   "author": "XHR Software Inc",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.2",
     "axios": "1.21.0",
     "axios-cookiejar-support": "7.0.0",
     "http-cookie-agent": "8.0.0",
