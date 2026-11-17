@@ -72,12 +72,12 @@
   },
   "author": "XHR Software Inc",
   "dependencies": {
-    "axios": "1.21.0",
+    "axios": "1.21.1",
     "axios-cookiejar-support": "7.0.0",
     "http-cookie-agent": "8.0.0",
     "https-proxy-agent": "9.1.0",
-    "playwright-core": "1.65.0",
-    "tldts": "7.4.19",
+    "playwright-core": "1.65.1",
+    "tldts": "7.5.2",
     "tough-cookie": "6.1.0",
     "undici": "8.12.4"
   },
@@ -85,15 +85,15 @@
     "@commitlint/cli": "21.2.4",
     "@commitlint/config-angular": "21.2.4",
     "@skilbjo/config-rc": "1.0.63",
-    "@tsconfig/node24": "24.0.5",
+    "@tsconfig/node24": "24.0.6",
     "@types/node": "26.6.6",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "eslint": "10.14.0",
+    "eslint": "10.15.0",
     "eslint-import-resolver-typescript": "4.4.5",
     "husky": "9.1.7",
-    "knip": "6.44.1",
+    "knip": "6.45.1",
     "nodemon": "3.1.14",
-    "playwright": "1.65.0"
+    "playwright": "1.65.1"
   },
   "imports": {
     "#src/*.js": {
