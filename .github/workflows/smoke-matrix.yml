@@ -3,7 +3,7 @@ name: smoke matrix
 
 # Runs dev-resources/smoke-matrix.js, the no-proxy / datacenter / ISP
 # exit-IP comparison, and posts all three summary tables to the step
-# summary. This is the repo's scheduled run (daily) and is also runnable on
+# summary. This is the repo's scheduled run (weekly) and is also runnable on
 # demand; it is NOT on push/PR — smoke.yml (no proxy, gating) covers those,
 # and DATACENTER_PROXY/ISP_PROXY are paid, reusable proxy credentials that
 # don't need exercising on every push.
@@ -14,7 +14,7 @@ name: smoke matrix
 # publishing either invites anti-bot vendors' OSINT to blocklist it faster.
 on:
   schedule:
-    - cron: '0 12 * * *' # daily, 12:00 UTC
+    - cron: '0 12 * * 1' # weekly, Monday 12:00 UTC
   workflow_dispatch:
     inputs:
       concurrency:
