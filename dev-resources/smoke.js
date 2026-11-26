@@ -188,7 +188,14 @@ const SCRIPTS = [
   // five of five, after the Chrome 154 profile (400eba0). Status's Lambda
   // canary, through an ISP proxy, signed in 55 of 57 times over 2026-10-10 to
   // 2026-10-12. If it goes red, check `_abck` acceptance on the runner first.
-  { headless: true, script: 'src/akamai/sbsd/oakley' },
+  // oakley is advisory again as of 2026-11-26: hard-failed the release runs of
+  // 2026-11-18 (81.3s) and 2026-11-26 (killed at the 150s ceiling, neither a
+  // pass nor an access denied) with a pass between them (63.4s on the earlier
+  // 2026-11-26 run) — the exit-address/_abck sensitivity its promotion note
+  // above warned about, not a lane regression: aa, chewy, tractorsupply and
+  // coupang all pass around it. Needs a green streak from a runner before
+  // promoting again, same bar as aa/aircanada.
+  { advisory: true, headless: true, script: 'src/akamai/sbsd/oakley' },
   // tractorsupply — added 2026-10-12, 5/5 on CI-runner runs (no proxy). A real
   // solve, not a target that happened not to challenge: it gets `_abck` to
   // `~0~` and reaches the homepage in ~55s. Gating.
