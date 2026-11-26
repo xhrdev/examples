@@ -39,7 +39,7 @@ curl http://$host:3000/hc
 
 `host=` takes either a bare host — `host=10.0.0.5`, meaning plain HTTP on port
 3000, the self-hosted default — or a full URL such as
-`host=https://trial.xhr.dev`. Use the URL form for anything you reach over the
+`host=https://trial.xhrdev.com`. Use the URL form for anything you reach over the
 public internet, so the API key and the clearance cookies come back over TLS
 rather than in the clear.
 

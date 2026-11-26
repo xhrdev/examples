@@ -31,7 +31,7 @@ TIMEOUT_S = 120
 # `host=` in .env accepts either a bare host or a full URL:
 #
 #   host=10.0.0.5              -> http://10.0.0.5:3000
-#   host=https://trial.xhr.dev -> https://trial.xhr.dev
+#   host=https://trial.xhrdev.com -> https://trial.xhrdev.com
 #
 # The bare form is a self-hosted container: plain HTTP on :3000 inside your
 # own network. The full-URL form is for anything reached across the public
@@ -41,7 +41,7 @@ _HAS_SCHEME = re.compile(r'^[a-z][a-z0-9+.-]*://', re.IGNORECASE)
 
 
 def solver_base_url(host):
-  """Turn `host=` into the solver's base URL, e.g. `https://trial.xhr.dev`."""
+  """Turn `host=` into the solver's base URL, e.g. `https://trial.xhrdev.com`."""
   if _HAS_SCHEME.match(host):
     return host.rstrip('/')
   return f'http://{host}:{SOLVER_PORT}'

@@ -10,7 +10,7 @@ name: smoke matrix
 #
 # The datacenter/ISP exit IPs are partially masked in the printed tables
 # (smoke-matrix.js's own doing) — the datacenter one is already public via
-# trial.xhr.dev's own DNS, but the ISP one is a private resource, and
+# trial.xhrdev.com's own DNS, but the ISP one is a private resource, and
 # publishing either invites anti-bot vendors' OSINT to blocklist it faster.
 on:
   schedule:

@@ -43,7 +43,7 @@ const LOADTEST_PATH = path.join(PROJECT_ROOT, 'src/loadtest.ts');
 // suite is green, and not part of `npm run build` either (dev-resources is
 // excluded from `tsconfig.build.json`), so none of it reaches customers.
 const SCRIPTS = [
-  // Verified 2026-09-26 against trial.xhr.dev through the shared residential
+  // Verified 2026-09-26 against trial.xhrdev.com through the shared residential
   // proxy: clean i -> c escalation, HTTP 200 in 52s (one transient timeout on
   // an earlier attempt through the same proxy, not reproduced on retry — not
   // treated as a pattern on a single occurrence). The 2026-09-23 "not cleared"
@@ -108,7 +108,7 @@ const SCRIPTS = [
   // three headless runs now land `_abck` on round 5 and reach the results
   // page. Nothing here needs a virtual display any more.
   //
-  // Verified 2026-09-26 against trial.xhr.dev through the shared proxy: clean
+  // Verified 2026-09-26 against trial.xhrdev.com through the shared proxy: clean
   // solve in 21.7s. hilton was historically the target most sensitive to a
   // reused exit address, but that hasn't reproduced here; promoted to
   // blocking. Revisit if the address-sensitivity pattern comes back.
@@ -134,7 +134,7 @@ const SCRIPTS = [
   // sensor before assuming the SBSD lane broke.
   //
   // Still advisory — mixed results the same day (2026-09-26) undercut an
-  // earlier promotion here. An isolated run against trial.xhr.dev through the
+  // earlier promotion here. An isolated run against trial.xhrdev.com through the
   // shared proxy passed clean (aa 19.4s, aircanada 28.1s), but a later run
   // through the same proxy — after several hours of heavier use against it —
   // failed both (aa in 14.5s, aircanada in 72.1s). That's consistent with the
@@ -154,7 +154,7 @@ const SCRIPTS = [
   { advisory: true, headless: true, script: 'src/akamai/sbsd/aa' },
   { headless: true, script: 'src/akamai/sbsd/aircanada' },
   // chewy.com, verified working (commit 5de75f4) and now has a green CI-shaped
-  // run too: 19.1s against trial.xhr.dev through the shared proxy, 2026-09-26.
+  // run too: 19.1s against trial.xhrdev.com through the shared proxy, 2026-09-26.
   // Promoted to blocking.
   { headless: true, script: 'src/akamai/sbsd/chewy' },
   // ana.co.jp — the multi-realm SBSD/abck example (#70), brought up to date in

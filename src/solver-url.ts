@@ -4,7 +4,7 @@
  * `host=` accepts two forms:
  *
  *   host=10.0.0.5            -> http://10.0.0.5:3000
- *   host=https://trial.xhr.dev -> https://trial.xhr.dev
+ *   host=https://trial.xhrdev.com -> https://trial.xhrdev.com
  *
  * The bare form is what a self-hosted container looks like: plain HTTP on
  * :3000 inside your own network, which is the deployment the README describes
@@ -21,7 +21,7 @@ import { hasScheme } from '#src/util.js';
 const SOLVER_PORT = 3000;
 
 /**
- * Base URL for the solver's HTTP API, e.g. `https://trial.xhr.dev`.
+ * Base URL for the solver's HTTP API, e.g. `https://trial.xhrdev.com`.
  *
  * Any trailing slash is stripped so callers can join paths with `new URL()`
  * without doubling up.
