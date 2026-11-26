@@ -152,7 +152,16 @@ const SCRIPTS = [
   // aa is advisory again as of 2026-11-03: failed 2 of the 3 master runs that
   // day, in ~8.5s each. aircanada kept passing.
   { advisory: true, headless: true, script: 'src/akamai/sbsd/aa' },
-  { headless: true, script: 'src/akamai/sbsd/aircanada' },
+  //
+  // aircanada is advisory again as of 2026-11-26: the release runs of
+  // 2026-11-23 and 2026-11-26 both died in ~74s with the ledger refused
+  // (422 incomplete-ledger, domResourceInventory null), while hilton, aa,
+  // chewy, ana, oakley, tractorsupply and coupang all passed around it — the
+  // property's SBSD receipt validation moved, not the lane. It passed
+  // 2026-11-18 (68.9s) and kept passing on 2026-11-03 when aa went advisory.
+  // Needs a green streak from a runner before promoting again, same bar aa
+  // has to clear.
+  { advisory: true, headless: true, script: 'src/akamai/sbsd/aircanada' },
   // chewy.com, verified working (commit 5de75f4) and now has a green CI-shaped
   // run too: 19.1s against trial.xhrdev.com through the shared proxy, 2026-09-26.
   // Promoted to blocking.
