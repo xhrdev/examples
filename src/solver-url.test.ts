@@ -9,7 +9,10 @@ test('a bare host keeps the self-hosted default: plain http on :3000', () => {
 });
 
 test('a full URL is used verbatim, so TLS survives', () => {
-  assert.equal(solverBaseUrl('https://trial.xhrdev.com'), 'https://trial.xhrdev.com');
+  assert.equal(
+    solverBaseUrl('https://trial.xhrdev.com'),
+    'https://trial.xhrdev.com'
+  );
   assert.equal(solverBaseUrl('http://10.0.0.5:8080'), 'http://10.0.0.5:8080');
 });
 
